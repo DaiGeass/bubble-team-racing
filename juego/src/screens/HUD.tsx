@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useI18n, ordinal } from "../i18n";
 import { useGame } from "../store";
 import { WEAPON_META, THEMES, mutateTheme, type WeaponId, type VehicleMode } from "../data";
+import { getActiveTrack } from "../trackCurve";
 import type { UseControlsReturn } from "../controls";
 import Minimap from "../ui/Minimap";
 
@@ -59,8 +60,9 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
   const toggleMuted = useGame((s) => s.toggleMuted);
   const themeId = useGame((s) => s.theme);
   const themeGlow = THEMES[themeId]?.glow ?? "#8be9ff";
-  // the palette of the current lap, so the mutation is readable and never a surprise
-  const lapTheme = mutateTheme(THEMES[themeId], telemetry.lap - 1);
+  // the palette of the current lap of the circuit being raced, so the mutation the
+  // player can see in the world is the one the HUD reports
+  const lapTheme = mutateTheme(THEMES[getActiveTrack().theme], telemetry.lap - 1);
   const [cdKey, setCdKey] = useState(0);
 
   useEffect(() => setCdKey((k) => k + 1), [telemetry.countdown]);

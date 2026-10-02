@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { trackCurve, getShortcuts } from "../trackCurve";
-import { raceSnapshot, THEMES, ZONES } from "../data";
+import { raceSnapshot, ZONES } from "../data";
 
 const SIZE = 168;
 const PAD = 14;
@@ -52,7 +52,7 @@ export default function Minimap() {
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      const theme = THEMES[raceSnapshot.theme] ?? THEMES.frutiger;
+      const theme = raceSnapshot.theme;
       const { minX, maxX, minZ, maxZ } = boundsRef.current;
       const w = maxX - minX || 1;
       const h = maxZ - minZ || 1;

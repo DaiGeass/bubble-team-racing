@@ -157,11 +157,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const characterId = useGame((s) => s.characterId);
   const partnerId = useGame((s) => s.partnerId);
   const vehicleCfg = useGame((s) => s.vehicle);
-  const themeId = useGame((s) => s.theme);
   const settings = useGame((s) => s.settings);
-  // the map mutates every lap: the palette, the props and the hazard patterns shift
+  // every circuit has the aesthetic it was designed for, and the map mutates on
+  // top of it: the palette, the vegetation and the hazard patterns shift each lap
   const aestheticLap = useGame((s) => s.telemetry.lap);
-  const theme = useMemo(() => mutateTheme(THEMES[themeId], aestheticLap - 1), [themeId, aestheticLap]);
+  const theme = useMemo(() => mutateTheme(THEMES[getActiveTrack().theme], aestheticLap - 1), [aestheticLap]);
   const mode = MODES[modeId];
 
   const shortcuts = useMemo(() => getShortcuts(), []);
@@ -347,7 +347,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const beamTo = useRef(new THREE.Vector3());
 
   useEffect(() => {
-    raceSnapshot.theme = themeId;
+    raceSnapshot.theme = theme;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme]);
+
+  useEffect(() => {
     useGame.getState().resetTelemetry();
     useGame.getState().setTelemetry({ totalLaps: mode.laps, totalRacers: racers.length, countdown: 3 });
     const timers: number[] = [];

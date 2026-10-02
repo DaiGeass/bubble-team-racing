@@ -439,6 +439,8 @@ export interface TrackDef {
   hazards: number;
   difficulty: 1 | 2 | 3;
   relief?: ReliefDef;
+  /** aesthetic this circuit is built around; the garage pick can still override it */
+  theme: ThemeId;
 }
 
 /** Vertical profile of a circuit, written as harmonics of the loop angle. */
@@ -493,7 +495,7 @@ const K = 1.75; // classic circuits are stretched to be much longer
 
 export const TRACKS: TrackDef[] = [
   {
-    id: "laguna", difficulty: 1, hazards: 3,
+    id: "laguna", difficulty: 1, hazards: 3, theme: "aqua",
     relief: { amp: 14, waves: [[1, 0.7, 0.6], [3, 0.35, 2.1]] },
     points: scaled([
       [0, 0, -46], [26, 0, -40], [46, 0, -18], [50, 0, 8], [34, 0, 32], [10, 0, 28],
@@ -505,7 +507,7 @@ export const TRACKS: TrackDef[] = [
     branches: [{ t0: 0.72, t1: 0.93, pull: -26 }],
   },
   {
-    id: "vortice", difficulty: 2, hazards: 5,
+    id: "vortice", difficulty: 2, hazards: 5, theme: "aero",
     relief: { amp: 20, waves: [[2, 0.75, 1.1], [5, 0.3, 0.2]] },
     points: scaled([
       [0, 0, -62], [30, 0, -58], [52, 0, -44], [40, 0, -22], [56, 0, -4], [64, 0, 20],
@@ -518,7 +520,7 @@ export const TRACKS: TrackDef[] = [
     branches: [{ t0: 0.1, t1: 0.26, pull: 30 }, { t0: 0.84, t1: 0.98, pull: -28 }],
   },
   {
-    id: "canon", difficulty: 3, hazards: 7,
+    id: "canon", difficulty: 3, hazards: 7, theme: "eco",
     relief: { amp: 26, waves: [[1, 0.8, 2.4], [4, 0.35, 1.4], [7, 0.15, 0.7]] },
     points: scaled([
       [0, 0, -70], [26, 0, -66], [34, 0, -46], [58, 0, -42], [72, 0, -18], [56, 0, 0],
@@ -532,7 +534,7 @@ export const TRACKS: TrackDef[] = [
     branches: [{ t0: 0.02, t1: 0.16, pull: -32 }, { t0: 0.56, t1: 0.72, pull: 30 }],
   },
   {
-    id: "celeste", difficulty: 2, hazards: 4,
+    id: "celeste", difficulty: 2, hazards: 4, theme: "aero",
     relief: { amp: 18, waves: [[3, 0.7, 0.3], [6, 0.3, 2.6]] },
     points: scaled([
       [0, 0, -58], [34, 0, -54], [62, 0, -32], [68, 0, 2], [52, 0, 30], [30, 0, 52],
@@ -545,7 +547,7 @@ export const TRACKS: TrackDef[] = [
     branches: [{ t0: 0.34, t1: 0.46, pull: 28 }],
   },
   {
-    id: "atlantis", difficulty: 3, hazards: 8,
+    id: "atlantis", difficulty: 3, hazards: 8, theme: "aqua",
     relief: { amp: 22, waves: [[1, 0.7, 1.9], [3, 0.4, 0.5]] },
     points: scaled([
       [0, 0, -74], [34, 0, -70], [56, 0, -56], [44, 0, -34], [70, 0, -22], [80, 0, 4],
@@ -559,7 +561,7 @@ export const TRACKS: TrackDef[] = [
     branches: [{ t0: 0.08, t1: 0.24, pull: 34 }, { t0: 0.44, t1: 0.56, pull: -30 }, { t0: 0.86, t1: 0.99, pull: 26 }],
   },
   {
-    id: "aether", difficulty: 3, hazards: 6,
+    id: "aether", difficulty: 3, hazards: 6, theme: "vapor",
     relief: { amp: 30, waves: [[2, 0.8, 0.8], [5, 0.35, 2.2]] },
     points: scaled([
       [0, 0, -68], [38, 0, -62], [66, 0, -40], [58, 0, -14], [84, 0, 2], [74, 0, 28],
@@ -573,7 +575,7 @@ export const TRACKS: TrackDef[] = [
     branches: [{ t0: 0.04, t1: 0.2, pull: -34 }, { t0: 0.6, t1: 0.76, pull: 32 }],
   },
   {
-    id: "neon", difficulty: 3, hazards: 7,
+    id: "neon", difficulty: 3, hazards: 7, theme: "techno",
     relief: { amp: 16, waves: [[4, 0.75, 1.7], [8, 0.25, 0.4]] },
     points: radial(30, 148, [[2, 0.14, 0.3], [3, 0.12, 1.2], [5, 0.09, 2.1]], 1.15, 0.9, { amp: 16, waves: [[4, 0.75, 1.7], [8, 0.25, 0.4]] }),
     zones: [{ t0: 0.22, t1: 0.3, type: "water" }, { t0: 0.62, t1: 0.78, type: "sky" }, { t0: 0.4, t1: 0.48, type: "sub" }],
@@ -582,7 +584,7 @@ export const TRACKS: TrackDef[] = [
     branches: [{ t0: 0.06, t1: 0.2, pull: 36 }, { t0: 0.34, t1: 0.44, pull: -30 }, { t0: 0.74, t1: 0.9, pull: 32 }],
   },
   {
-    id: "coral", difficulty: 2, hazards: 4,
+    id: "coral", difficulty: 2, hazards: 4, theme: "frutiger",
     relief: { amp: 13, waves: [[3, 0.7, 2.8], [6, 0.3, 1.1]] },
     points: radial(28, 131, [[3, 0.16, 0.8], [4, 0.1, 2.4], [6, 0.06, 0.4]], 1.0, 1.1, { amp: 13, waves: [[3, 0.7, 2.8], [6, 0.3, 1.1]] }),
     zones: [{ t0: 0.1, t1: 0.2, type: "water" }, { t0: 0.68, t1: 0.8, type: "sky" }, { t0: 0.3, t1: 0.42, type: "sub" }],
@@ -591,7 +593,7 @@ export const TRACKS: TrackDef[] = [
     branches: [{ t0: 0.02, t1: 0.16, pull: -38 }, { t0: 0.32, t1: 0.46, pull: 34 }, { t0: 0.56, t1: 0.7, pull: -32 }, { t0: 0.82, t1: 0.97, pull: 30 }],
   },
   {
-    id: "glacier", difficulty: 3, hazards: 6,
+    id: "glacier", difficulty: 3, hazards: 6, theme: "aqua",
     relief: { amp: 24, waves: [[1, 0.75, 0.2], [3, 0.35, 2.9]] },
     points: radial(34, 160, [[2, 0.2, 2], [4, 0.12, 0.6], [7, 0.07, 1.4]], 1.2, 0.95, { amp: 24, waves: [[1, 0.75, 0.2], [3, 0.35, 2.9]] }),
     zones: [{ t0: 0.36, t1: 0.44, type: "water" }, { t0: 0.6, t1: 0.72, type: "sky" }],
@@ -600,7 +602,7 @@ export const TRACKS: TrackDef[] = [
     branches: [{ t0: 0.14, t1: 0.3, pull: -28 }, { t0: 0.66, t1: 0.8, pull: 30 }],
   },
   {
-    id: "retro", difficulty: 2, hazards: 6,
+    id: "retro", difficulty: 2, hazards: 6, theme: "win98",
     relief: { amp: 12, waves: [[2, 0.7, 2.2], [5, 0.3, 0.9]] },
     points: radial(32, 140, [[4, 0.2, 0], [8, 0.06, 0.5]], 1, 1, { amp: 12, waves: [[2, 0.7, 2.2], [5, 0.3, 0.9]] }),
     zones: [{ t0: 0.2, t1: 0.28, type: "water" }, { t0: 0.58, t1: 0.7, type: "sky" }, { t0: 0.74, t1: 0.82, type: "sub" }],
@@ -612,7 +614,7 @@ export const TRACKS: TrackDef[] = [
 
 TRACKS.push(
   {
-    id: "prisma", difficulty: 3, hazards: 8,
+    id: "prisma", difficulty: 3, hazards: 8, theme: "liquid",
     relief: { amp: 28, waves: [[1, 0.8, 1.5], [4, 0.4, 0.3], [7, 0.2, 2.5]] },
     points: radial(36, 165, [[2, 0.18, 1.1], [3, 0.13, 2.6], [5, 0.08, 0.2], [8, 0.05, 1.8]], 1.1, 1.0, { amp: 28, waves: [[1, 0.8, 1.5], [4, 0.4, 0.3], [7, 0.2, 2.5]] }),
     zones: [{ t0: 0.16, t1: 0.24, type: "water" }, { t0: 0.52, t1: 0.66, type: "sky" }, { t0: 0.78, t1: 0.88, type: "sub" }],
@@ -621,7 +623,7 @@ TRACKS.push(
     branches: [{ t0: 0.08, t1: 0.24, pull: 32 }, { t0: 0.44, t1: 0.58, pull: -30 }, { t0: 0.78, t1: 0.94, pull: 28 }],
   },
   {
-    id: "nimbus", difficulty: 2, hazards: 5,
+    id: "nimbus", difficulty: 2, hazards: 5, theme: "sunset",
     relief: { amp: 32, waves: [[2, 0.8, 2.6], [5, 0.35, 1.2]] },
     points: radial(30, 150, [[3, 0.17, 1.9], [6, 0.09, 0.7]], 1.25, 0.88, { amp: 32, waves: [[2, 0.8, 2.6], [5, 0.35, 1.2]] }),
     zones: [{ t0: 0.26, t1: 0.34, type: "water" }, { t0: 0.5, t1: 0.74, type: "sky" }],
@@ -630,7 +632,7 @@ TRACKS.push(
     branches: [{ t0: 0.2, t1: 0.34, pull: -24 }, { t0: 0.62, t1: 0.78, pull: 26 }],
   },
   {
-    id: "abyss", difficulty: 3, hazards: 7,
+    id: "abyss", difficulty: 3, hazards: 7, theme: "techno",
     relief: { amp: 20, waves: [[3, 0.7, 0.9], [6, 0.3, 2.2]] },
     points: radial(34, 158, [[2, 0.22, 0.4], [5, 0.1, 2.2], [7, 0.06, 1.1]], 0.95, 1.2, { amp: 20, waves: [[3, 0.7, 0.9], [6, 0.3, 2.2]] }),
     zones: [{ t0: 0.12, t1: 0.3, type: "sub" }, { t0: 0.44, t1: 0.52, type: "water" }, { t0: 0.66, t1: 0.78, type: "sky" }],
@@ -639,7 +641,7 @@ TRACKS.push(
     branches: [{ t0: 0.06, t1: 0.22, pull: 34 }, { t0: 0.4, t1: 0.56, pull: -34 }, { t0: 0.72, t1: 0.88, pull: 30 }],
   },
   {
-    id: "garden", difficulty: 1, hazards: 4,
+    id: "garden", difficulty: 1, hazards: 4, theme: "eco",
     relief: { amp: 15, waves: [[1, 0.7, 2.9], [3, 0.3, 1.4]] },
     points: radial(28, 135, [[4, 0.15, 2.8], [2, 0.1, 0.9]], 1.05, 1.05, { amp: 15, waves: [[1, 0.7, 2.9], [3, 0.3, 1.4]] }),
     zones: [{ t0: 0.2, t1: 0.3, type: "water" }, { t0: 0.6, t1: 0.72, type: "sky" }],
@@ -778,5 +780,5 @@ export function zoneProgress(t: number, z: Zone) {
 export const raceSnapshot: {
   racers: { x: number; y: number; z: number; color: string; isPlayer: boolean; mode: VehicleMode }[];
   camAngle: number;
-  theme: ThemeId;
-} = { racers: [], camAngle: 0, theme: "frutiger" };
+  theme: ThemeDef;
+} = { racers: [], camAngle: 0, theme: THEMES.frutiger };
