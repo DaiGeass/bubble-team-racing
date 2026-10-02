@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useI18n, ordinal } from "../i18n";
-import { useGame, type Action, type TouchSlot } from "../store";
+import { useGame, DEFAULT_TOUCH, type Action, type TouchSlot } from "../store";
 import { WEAPON_META, THEMES, mutateTheme, type WeaponId, type VehicleMode } from "../data";
 import { getActiveTrack } from "../trackCurve";
 import type { UseControlsReturn } from "../controls";
@@ -77,9 +77,11 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
   // player can see in the world is the one the HUD reports
   const lapTheme = mutateTheme(THEMES[getActiveTrack().theme], telemetry.lap - 1);
   const [cdKey, setCdKey] = useState(0);
-  const layout = useGame((s) => ({ touchLayout: s.settings.touchLayout, handed: s.settings.handed }));
-  layout.touchLayout = useGame.getState().settings.touchLayout ?? {};
-  layout.handed = useGame.getState().settings.handed;
+  // select the primitives separately: a fresh object from the selector would
+  // re-render forever under zustand's Object.is comparison
+  const touchLayout = useGame((s) => s.settings.touchLayout);
+  const handed = useGame((s) => s.settings.handed);
+  const layout = { touchLayout: touchLayout ?? DEFAULT_TOUCH, handed };
 
   useEffect(() => setCdKey((k) => k + 1), [telemetry.countdown]);
 

@@ -1661,6 +1661,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       .setY(THREE.MathUtils.lerp(player.y, aheadY, 0.8) + 1.2)
       .addScaledVector(fwd, 7);
     camPos.current.lerp(desired, idle ? 0.05 : 0.11);
+    // the smoothed camera lags on a fast descent, so clamp again once it is
+    // settled: otherwise it dips through the road surface for a few frames
+    const camGround = surfaceYAt(nearestT(camPos.current, player.t));
+    if (camPos.current.y < camGround + 1.6) camPos.current.y = camGround + 1.6;
     camLook.current.lerp(look, idle ? 0.05 : 0.13);
 
     shakeState.trauma = Math.max(0, shakeState.trauma - dt * 1.7);
