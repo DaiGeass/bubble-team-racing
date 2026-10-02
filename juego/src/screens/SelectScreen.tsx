@@ -38,12 +38,13 @@ import Portrait from "../ui/Portrait";
 
 type Tab = "mode" | "track" | "racer" | "partner" | "garage" | "aesthetic" | "settings";
 
-const MODE_INFO: { id: "quick" | "trial" | "chaos" | "sprint" | "duel"; glyph: string; titleKey: string; descKey: string }[] = [
+const MODE_INFO: { id: "quick" | "trial" | "chaos" | "sprint" | "duel" | "endurance"; glyph: string; titleKey: string; descKey: string }[] = [
   { id: "quick", glyph: "⚑", titleKey: "quickRace", descKey: "quickRaceDesc" },
   { id: "sprint", glyph: "➤", titleKey: "sprintMode", descKey: "sprintDesc" },
   { id: "trial", glyph: "◷", titleKey: "timeTrial", descKey: "timeTrialDesc" },
   { id: "chaos", glyph: "✦", titleKey: "chaosMode", descKey: "chaosDesc" },
   { id: "duel", glyph: "⚔", titleKey: "duelMode", descKey: "duelDesc" },
+  { id: "endurance", glyph: "∞", titleKey: "enduranceMode", descKey: "enduranceDesc" },
 ];
 
 const SHAPE_GLYPH: Record<string, string> = {
@@ -435,7 +436,7 @@ export default function SelectScreen() {
           {tab === "mode" && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {MODE_INFO.map((m) => (
-                <button key={m.id} onClick={() => setMode(m.id)} className={`text-left transition hover:-translate-y-1 ${modeId === m.id ? "" : ""}`}>
+                <button key={m.id} onClick={() => setMode(m.id as any)} className={`text-left transition hover:-translate-y-1 ${modeId === m.id ? "" : ""}`}>
                   <Panel className={`h-full p-5 ${modeId === m.id ? "ring-4 ring-white" : ""}`}>
                     <div className="flex items-center gap-3">
                       <span className="font-display text-4xl font-extrabold" style={{ color: THEMES[theme].barrierA }}>

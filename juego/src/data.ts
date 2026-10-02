@@ -397,7 +397,7 @@ export const WEAPON_META: Record<WeaponId, { glyph: string; color: string; glow:
 // ---------------------------------------------------------------------------
 
 export interface GameMode {
-  id: "quick" | "trial" | "chaos" | "sprint" | "duel";
+  id: "quick" | "trial" | "chaos" | "sprint" | "duel" | "endurance";
   laps: number;
   aiCount: number;
   itemsEnabled: boolean;
@@ -411,6 +411,7 @@ export const MODES: Record<string, GameMode> = {
   chaos: { id: "chaos", laps: 4, aiCount: 7, itemsEnabled: true, itemFrequency: 1.7, rubberband: 1.35 },
   sprint: { id: "sprint", laps: 1, aiCount: 7, itemsEnabled: true, itemFrequency: 1.3, rubberband: 1.1 },
   duel: { id: "duel", laps: 5, aiCount: 1, itemsEnabled: true, itemFrequency: 1.2, rubberband: 1.5 },
+  endurance: { id: "endurance", laps: 8, aiCount: 8, itemsEnabled: true, itemFrequency: 1.5, rubberband: 1.25 },
 };
 
 // ---------------------------------------------------------------------------
