@@ -92,6 +92,8 @@ interface Racer {
   magnetTimer: number;
   ghostTimer: number;
   fuseShots: number;
+  explodeTimer: number;
+  exploding: boolean;
   driftCharge: number;
   isDrifting: boolean;
   mode: VehicleMode;
@@ -251,6 +253,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         magnetTimer: 0,
         ghostTimer: 0,
         fuseShots: 0,
+        explodeTimer: 0,
+        exploding: false,
         driftCharge: 0,
         isDrifting: false,
         mode: "land",
@@ -433,6 +437,14 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         }
       }
       return;
+    }
+    // heavy hit -> chance to explode for big destruction
+    if (!protectedNow(r) && !r.exploding && Math.random() < 0.15) {
+      r.exploding = true;
+      r.explodeTimer = 0.8;
+      emitParticles({ position: r.pos.clone().setY(r.y + 1.2), color: theme.glow, count: 60, speed: 8, spread: 2, size: 0.3, life: 0.9 });
+      emitParticles({ position: r.pos.clone().setY(r.y + 1.2), color: WEAPON_META.quake.glow, count: 40, speed: 10, spread: 2.2, size: 0.26, life: 0.7 });
+      if (r.isPlayer) { addShake(0.8); sfx.bump(); }
     }
     r.stunTimer = spinner ? 1.25 : 0.95;
     r.speed *= spinner ? 0.35 : 0.55;
