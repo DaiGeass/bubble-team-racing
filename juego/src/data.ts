@@ -440,6 +440,15 @@ export interface Branch {
   pull: number; // lateral displacement at peak (+ = right of travel direction)
 }
 
+export interface TrapDef {
+  t: number;
+  side: number;
+  kind: "spike" | "bar";
+  speed: number;
+  phase: number;
+  active: boolean;
+}
+
 export interface PortalDef {
   tIn: number;
   tOut: number;
@@ -460,6 +469,7 @@ export interface TrackDef {
   /** aesthetic this circuit is built around; the garage pick can still override it */
   theme: ThemeId;
   portals?: PortalDef[];
+  traps?: TrapDef[];
 }
 
 /** Vertical profile of a circuit, written as harmonics of the loop angle. */
@@ -538,6 +548,7 @@ export const TRACKS: TrackDef[] = [
     forks: [[0.06, 0.18], [0.46, 0.56]],
     shortcuts: [{ t0: 0.2, t1: 0.27, side: -1 }, { t0: 0.57, t1: 0.64, side: 1 }],
     branches: [{ t0: 0.1, t1: 0.26, pull: 30 }, { t0: 0.84, t1: 0.98, pull: -28 }],
+    traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
@@ -553,6 +564,7 @@ export const TRACKS: TrackDef[] = [
     forks: [[0.1, 0.22], [0.52, 0.64]],
     shortcuts: [{ t0: 0.66, t1: 0.74, side: -1 }, { t0: 0.56, t1: 0.62, side: 1 }],
     branches: [{ t0: 0.02, t1: 0.16, pull: -32 }, { t0: 0.56, t1: 0.72, pull: 30 }],
+    traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
@@ -607,6 +619,7 @@ export const TRACKS: TrackDef[] = [
     forks: [[0.08, 0.16], [0.84, 0.94]],
     shortcuts: [{ t0: 0.32, t1: 0.38, side: 1 }, { t0: 0.52, t1: 0.6, side: -1 }],
     branches: [{ t0: 0.06, t1: 0.2, pull: 36 }, { t0: 0.34, t1: 0.44, pull: -30 }, { t0: 0.74, t1: 0.9, pull: 32 }],
+    traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
@@ -650,6 +663,7 @@ TRACKS.push(
     forks: [[0.04, 0.13], [0.3, 0.42], [0.68, 0.76]],
     shortcuts: [],
     branches: [{ t0: 0.08, t1: 0.24, pull: 32 }, { t0: 0.44, t1: 0.58, pull: -30 }, { t0: 0.78, t1: 0.94, pull: 28 }],
+    traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
@@ -669,6 +683,7 @@ TRACKS.push(
     forks: [[0.34, 0.42], [0.86, 0.96]],
     shortcuts: [],
     branches: [{ t0: 0.06, t1: 0.22, pull: 34 }, { t0: 0.4, t1: 0.56, pull: -34 }, { t0: 0.72, t1: 0.88, pull: 30 }],
+    traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {

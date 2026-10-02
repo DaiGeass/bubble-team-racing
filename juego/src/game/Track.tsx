@@ -540,6 +540,33 @@ function Clouds({ theme }: { theme: ThemeDef }) {
           </mesh>
         </group>
       ))}
+      {getActiveTrack().traps?.map((tr, i) => {
+        const t = ((tr.t + (performance.now() * 0.0001 * tr.speed + tr.phase)) % 1 + 1) % 1;
+        const c = trackCurve.getPointAt(t);
+        const tan = trackCurve.getTangentAt(t);
+        const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+        const h = halfWidthAt(t) - 2.2;
+        const p = c.clone().addScaledVector(n, tr.side * h);
+        const ground = surfaceYAt(t);
+        if (tr.kind === "bar") {
+          return (
+            <group key={i} position={[p.x, ground + 1.6, p.z]} rotation={[0, Math.atan2(tan.x, tan.z), 0]}>
+              <mesh castShadow>
+                <boxGeometry args={[h * 1.2, 0.4, 0.6]} />
+                <meshStandardMaterial color="#ff7b3d" emissive="#ff7b3d" emissiveIntensity={1.6} />
+              </mesh>
+            </group>
+          );
+        }
+        return (
+          <group key={i} position={[p.x, ground + 0.6, p.z]} rotation={[0, Math.atan2(tan.x, tan.z), Math.PI / 2]}>
+            <mesh castShadow>
+              <cylinderGeometry args={[0.3, 0.3, 2.8, 4]} />
+              <meshStandardMaterial color="#ff4d6d" emissive="#ff4d6d" emissiveIntensity={1.4} />
+            </mesh>
+          </group>
+        );
+      })}
     </group>
   );
 }
