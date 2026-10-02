@@ -667,6 +667,86 @@ for (const trk of TRACKS) {
   trk.shortcuts.sort((a, b) => a.t0 - b.t0);
 }
 
+/**
+ * Per-lap mutation. A race never looks the same twice: every lap rotates the
+ * palette by a different step and re-lights the scene, so the track you learned
+ * on lap one is a different place on lap three.
+ */
+export function mutateTheme(base: ThemeDef, lap: number): ThemeDef {
+  const step = ((lap % MUTATION_STEPS) + MUTATION_STEPS) % MUTATION_STEPS;
+  if (step === 0) return base;
+  const hue = (step / MUTATION_STEPS) * 360;
+  const dim = 0.86 + 0.14 * Math.cos((step / MUTATION_STEPS) * Math.PI * 2);
+  const rot = (c: string, d: number) => shiftColor(c, hue, d, dim);
+  return {
+    ...base,
+    skyTop: rot(base.skyTop, -0.05),
+    skyBottom: rot(base.skyBottom, 0.1),
+    fog: rot(base.fog, 0.05),
+    water: rot(base.water, 0.16),
+    ground: rot(base.ground, -0.12),
+    road: rot(base.road, 0.06),
+    roadLine: rot(base.roadLine, 0.2),
+    roadEdge: rot(base.roadEdge, 0.04),
+    barrierA: rot(base.barrierA, 0.22),
+    barrierB: rot(base.barrierB, 0.3),
+    sun: rot(base.sun, 0.08),
+    sunIntensity: base.sunIntensity * dim,
+    ambient: base.ambient * dim,
+    ambientColor: rot(base.ambientColor, 0.04),
+    hemiSky: rot(base.hemiSky, 0.12),
+    hemiGround: rot(base.hemiGround, -0.1),
+    cloud: rot(base.cloud, 0.02),
+    isle: rot(base.isle, -0.08),
+    glow: rot(base.glow, 0.26),
+    particles: base.particles.map((c, i) => rot(c, 0.18 + i * 0.14)),
+    prop: MUTATION_PROPS[step % MUTATION_PROPS.length],
+    bloom: base.bloom * dim,
+  };
+}
+
+const MUTATION_STEPS = 6;
+const MUTATION_PROPS: ThemeDef["prop"][] = ["palm", "crystal", "tree", "cactus", "coral", "y2k", "circuit", "liquid", "vapor"];
+
+/** Rotates hue, nudges lightness and scales brightness, working on #rrggbb. */
+function shiftColor(hex: string, hue: number, sat: number, dim: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  let r = ((n >> 16) & 255) / 255;
+  let g = ((n >> 8) & 255) / 255;
+  let b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  let h = 0;
+  let sl = 0;
+  if (d > 0) {
+    sl = d / (1 - Math.abs(2 * l - 1));
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  h = (((h + hue / 360) % 1) + 1) % 1;
+  sl = Math.max(0, Math.min(1, sl + sat));
+  const c = (1 - Math.abs(2 * l - 1)) * sl;
+  const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
+  const mm = l - c / 2;
+  const seg = Math.floor(h * 6) % 6;
+  const rgb = [
+    [c, x, 0],
+    [x, c, 0],
+    [0, c, x],
+    [0, x, c],
+    [x, 0, c],
+    [c, 0, x],
+  ][seg] ?? [0, 0, 0];
+  const out = rgb.map((v) => Math.round((v + mm) * dim * 255));
+  return `#${out.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("")}`;
+}
+
 /** Live state for mutating hazards (written by Track, read by the simulation). */
 export const hazardState: {
   positions: { x: number; z: number; t: number }[];

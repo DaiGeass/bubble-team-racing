@@ -1,7 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { trackCurve, halfWidthAt, getActiveTrack, getShortcuts, nearestT, trackPointAt } from "../trackCurve";
+import { trackCurve, halfWidthAt, getActiveTrack, getShortcuts, nearestT, trackPointAt, surfaceYAt } from "../trackCurve";
 import { TRACK_WIDTH, ZONES, SKY_ALTITUDE, hazardState, zoneAt, zoneOfKind, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
 const SEGMENTS = 760;
@@ -139,7 +139,7 @@ function ForkIslands({ theme }: { theme: ThemeDef }) {
               const c = trackCurve.getPointAt(t);
               const tan = trackCurve.getTangentAt(t);
               return (
-                <mesh key={ai} position={[c.x, 0.3, c.z]} rotation={[0, Math.atan2(tan.x, tan.z), 0]}>
+                <mesh key={ai} position={[c.x, c.y + 0.3, c.z]} rotation={[0, Math.atan2(tan.x, tan.z), 0]}>
                   <torusGeometry args={[1.4, 0.16, 8, 22]} />
                   <meshBasicMaterial color={theme.glow} transparent opacity={0.75} toneMapped={false} />
                 </mesh>
@@ -252,6 +252,8 @@ function Props({ theme }: { theme: ThemeDef }) {
       const side = (i % 2 === 0 ? 1 : -1) * (z ? 2.4 : 1);
       const dist = TRACK_WIDTH / 2 + 4 + Math.random() * 12;
       const p = center.clone().addScaledVector(normal, side * dist);
+      const ground = surfaceYAt(nearestT(p, t));
+      p.y = ground - 0.25;
       arr.push({ pos: p, rot: Math.random() * Math.PI, s: 0.8 + Math.random() * 0.9, kind: i % 3 });
     }
     return arr;
@@ -260,7 +262,7 @@ function Props({ theme }: { theme: ThemeDef }) {
   return (
     <group>
       {items.map((it, i) => (
-        <group key={i} position={[it.pos.x, 0, it.pos.z]} rotation={[0, it.rot, 0]} scale={it.s}>
+        <group key={i} position={[it.pos.x, it.pos.y, it.pos.z]} rotation={[0, it.rot, 0]} scale={it.s}>
           {theme.prop === "palm" && (
             <>
               <mesh position={[0, 1.6, 0]} castShadow>
@@ -547,7 +549,7 @@ function StartArch({ theme }: { theme: ThemeDef }) {
   const tangent = trackCurve.getTangentAt(0);
   const angle = Math.atan2(tangent.x, tangent.z);
   return (
-    <group position={[p0.x, 0, p0.z]} rotation={[0, angle, 0]}>
+    <group position={[p0.x, p0.y, p0.z]} rotation={[0, angle, 0]}>
       <mesh position={[-TRACK_WIDTH / 2 - 0.7, 3.4, 0]} castShadow>
         <boxGeometry args={[0.7, 6.8, 0.7]} />
         <meshStandardMaterial color={theme.barrierA} emissive={theme.barrierA} emissiveIntensity={0.5} />

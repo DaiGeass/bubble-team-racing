@@ -11,6 +11,7 @@ import {
   MODES,
   BODY_COLORS,
   THEMES,
+  mutateTheme,
   SHAPES,
   BOATS,
   PLANES,
@@ -158,7 +159,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const vehicleCfg = useGame((s) => s.vehicle);
   const themeId = useGame((s) => s.theme);
   const settings = useGame((s) => s.settings);
-  const theme = THEMES[themeId];
+  // the map mutates every lap: the palette, the props and the hazard patterns shift
+  const aestheticLap = useGame((s) => s.telemetry.lap);
+  const theme = useMemo(() => mutateTheme(THEMES[themeId], aestheticLap - 1), [themeId, aestheticLap]);
   const mode = MODES[modeId];
 
   const shortcuts = useMemo(() => getShortcuts(), []);
@@ -302,7 +305,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const tangent = trackTangentAt(t);
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
       const zone = zoneAt(t);
-      const y = zone?.type === "sky" ? 0 : 0;
+      const y = surfaceYAt(t) + (zone?.type === "sky" ? SKY_ALTITUDE + 1.2 : 1.1);
       coins.push({ pos: center.clone().addScaledVector(normal, (i % 2 === 0 ? 1 : -1) * 1.9).setY(y), active: true, respawn: 0, group: { current: null } });
     }
     // coin bait along every alternate branch route
@@ -477,7 +480,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         puddle.ownerId = r.id;
         puddle.ignoreUntil = performance.now() + 1000;
         puddle.life = 14;
-        puddle.pos.copy(r.pos).addScaledVector(fwd, -2.6).setY(0.08);
+        puddle.pos.copy(r.pos).addScaledVector(fwd, -2.6).setY(surfaceYAt(r.t) + 0.08);
       }
       if (r.isPlayer) sfx.item();
     } else if (w === "beam") {
@@ -544,7 +547,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         mine.ownerId = r.id;
         mine.ignoreUntil = performance.now() + 1100;
         mine.life = 16;
-        mine.pos.copy(r.pos).addScaledVector(fwd, -3.2).setY(0.12);
+        mine.pos.copy(r.pos).addScaledVector(fwd, -3.2).setY(surfaceYAt(r.t) + 0.12);
       }
       if (r.isPlayer) sfx.item();
     } else if (w === "swap") {
@@ -598,7 +601,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         if (o.isPlayer) addShake(0.4);
       }
       for (let i = 0; i < 4; i++) {
-        emitParticles({ position: r.pos.clone().setY(0.2), color: WEAPON_META.quake.glow, count: 14, speed: 6 + i, spread: 2.2, size: 0.24, life: 0.7, upBias: 0.2 });
+        emitParticles({ position: r.pos.clone().setY(surfaceYAt(r.t) + 0.2), color: WEAPON_META.quake.glow, count: 14, speed: 6 + i, spread: 2.2, size: 0.24, life: 0.7, upBias: 0.2 });
       }
       if (r.isPlayer) {
         addShake(0.55);

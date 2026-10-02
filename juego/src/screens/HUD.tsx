@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n, ordinal } from "../i18n";
 import { useGame } from "../store";
-import { WEAPON_META, THEMES, type WeaponId, type VehicleMode } from "../data";
+import { WEAPON_META, THEMES, mutateTheme, type WeaponId, type VehicleMode } from "../data";
 import type { UseControlsReturn } from "../controls";
 import Minimap from "../ui/Minimap";
 
@@ -59,6 +59,8 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
   const toggleMuted = useGame((s) => s.toggleMuted);
   const themeId = useGame((s) => s.theme);
   const themeGlow = THEMES[themeId]?.glow ?? "#8be9ff";
+  // the palette of the current lap, so the mutation is readable and never a surprise
+  const lapTheme = mutateTheme(THEMES[themeId], telemetry.lap - 1);
   const [cdKey, setCdKey] = useState(0);
 
   useEffect(() => setCdKey((k) => k + 1), [telemetry.countdown]);
@@ -70,11 +72,16 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
     <div className="pointer-events-none absolute inset-0 z-20 select-none">
       {/* ---------- top left: lap / position / mode ---------- */}
       <div className="pointer-events-auto absolute left-3 top-3 flex items-stretch gap-2">
-        <div className="glass-panel flex flex-col items-center rounded-2xl px-3 py-1.5">
+        <div className="glass-panel relative flex flex-col items-center rounded-2xl px-3 py-1.5">
           <span className="text-[10px] font-bold uppercase tracking-wide text-sky-900/60">{t("lap")}</span>
           <span className="font-display text-2xl font-extrabold leading-none text-sky-900">
             {telemetry.lap}
             <span className="text-sm opacity-50">/{telemetry.totalLaps}</span>
+          </span>
+          <span className="mt-0.5 flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-sky-900/60">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: lapTheme.glow }} />
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: lapTheme.water }} />
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: lapTheme.barrierA }} />
           </span>
         </div>
         <div className="glass-panel flex flex-col items-center rounded-2xl px-4 py-1.5">
