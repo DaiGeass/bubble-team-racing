@@ -94,6 +94,7 @@ interface Racer {
   fuseShots: number;
   explodeTimer: number;
   exploding: boolean;
+  portalCd: number;
   driftCharge: number;
   isDrifting: boolean;
   mode: VehicleMode;
@@ -255,6 +256,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         fuseShots: 0,
         explodeTimer: 0,
         exploding: false,
+        portalCd: 0,
         driftCharge: 0,
         isDrifting: false,
         mode: "land",
@@ -667,6 +669,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.bumpCd > 0) r.bumpCd -= dt;
     for (let i = 0; i < r.ringCd.length; i++) if (r.ringCd[i] > 0) r.ringCd[i] -= dt;
     if (r.warpCd > 0) r.warpCd -= dt;
+    if (r.portalCd > 0) r.portalCd -= dt;
     if (r.magnetTimer > 0) r.magnetTimer -= dt;
     if (r.ghostTimer > 0) r.ghostTimer -= dt;
 
@@ -1216,6 +1219,32 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         emitParticles({ position: r.pos.clone().setY(r.y + 0.9), color: theme.glow, count: 18, speed: 3.5, spread: 1, size: 0.2, life: 0.6 });
       }
     }
+
+    // ---- portals: gates that warp you across the map ----
+    const trkP = getActiveTrack();
+    if (r.portalCd <= 0 && trkP.portals) {
+      for (const pr of trkP.portals) {
+        const dIn = Math.abs((pr.tIn - r.t + 0.5) % 1 - 0.5);
+        if (dIn < 0.012) {
+          const wTan = trackTangentAt(pr.tOut);
+          const wNrm = new THREE.Vector3(-wTan.z, 0, wTan.x).normalize();
+          const wOff = pr.side * (halfWidthAt(pr.tOut) - 3.6);
+          r.t = pr.tOut;
+          r.pos.copy(trackPointAt(pr.tOut)).addScaledVector(wNrm, wOff);
+          r.y = surfaceYAt(pr.tOut);
+          r.heading = Math.atan2(wTan.x, wTan.z);
+          r.portalCd = pr.cd;
+          r.vy = 0;
+          r.airborne = false;
+          r.boostTimer = Math.max(r.boostTimer, 0.8);
+          r.boostMult = Math.max(r.boostMult, 1.4);
+          emitParticles({ position: r.pos.clone().setY(r.y + 0.8), color: theme.glow, count: 32, speed: 6, spread: 1.6, size: 0.24, life: 0.8 });
+          if (r.isPlayer) { addShake(0.28); sfx.swap(); }
+          break;
+        }
+      }
+    }
+
 
     // ---- trails ----
     r.particleAccum -= dt;
