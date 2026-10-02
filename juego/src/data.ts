@@ -544,6 +544,19 @@ export interface Branch {
   pull: number; // lateral displacement at peak (+ = right of travel direction)
 }
 
+/**
+ * A real hole in the road: a built-up launch ramp, a cliff edge, a pit floor and
+ * a far wall. Slow enough and you drop in; fast enough and you clear it.
+ */
+export interface GapDef {
+  t0: number;
+  t1: number;
+  /** how high the ramp climbs before the lip */
+  ramp: number;
+  /** how far below the tarmac the pit floor sits */
+  pit: number;
+}
+
 export interface TrapDef {
   t: number;
   side: number;
@@ -574,6 +587,7 @@ export interface TrackDef {
   theme: ThemeId;
   portals?: PortalDef[];
   traps?: TrapDef[];
+  gaps?: GapDef[];
 }
 
 /** Vertical profile of a circuit, written as harmonics of the loop angle. */
@@ -638,7 +652,6 @@ export const TRACKS: TrackDef[] = [
     forks: [[0.33, 0.44]],
     shortcuts: [{ t0: 0.72, t1: 0.82, side: 1, lift: 12 }],
     branches: [{ t0: 0.72, t1: 0.93, pull: -26 }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
     id: "vortice", difficulty: 2, hazards: 5, theme: "aero",
@@ -653,7 +666,6 @@ export const TRACKS: TrackDef[] = [
     shortcuts: [{ t0: 0.2, t1: 0.27, side: -1, lift: 9 }, { t0: 0.57, t1: 0.64, side: 1, lift: 12 }],
     branches: [{ t0: 0.1, t1: 0.26, pull: 30 }, { t0: 0.84, t1: 0.98, pull: -28 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
     id: "canon", difficulty: 3, hazards: 7, theme: "eco",
@@ -669,7 +681,6 @@ export const TRACKS: TrackDef[] = [
     shortcuts: [{ t0: 0.66, t1: 0.74, side: -1, lift: 9 }, { t0: 0.56, t1: 0.62, side: 1, lift: 12 }],
     branches: [{ t0: 0.02, t1: 0.16, pull: -32 }, { t0: 0.56, t1: 0.72, pull: 30 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
     id: "celeste", difficulty: 2, hazards: 4, theme: "aero",
@@ -683,7 +694,6 @@ export const TRACKS: TrackDef[] = [
     forks: [[0.78, 0.88]],
     shortcuts: [{ t0: 0.34, t1: 0.44, side: 1, lift: 12 }],
     branches: [{ t0: 0.34, t1: 0.46, pull: 28 }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
     id: "atlantis", difficulty: 3, hazards: 8, theme: "aqua",
@@ -698,7 +708,6 @@ export const TRACKS: TrackDef[] = [
     forks: [[0.04, 0.12], [0.44, 0.54], [0.84, 0.94]],
     shortcuts: [{ t0: 0.76, t1: 0.83, side: -1, lift: 9 }, { t0: 0.39, t1: 0.43, side: 1, lift: 12 }],
     branches: [{ t0: 0.08, t1: 0.24, pull: 34 }, { t0: 0.44, t1: 0.56, pull: -30 }, { t0: 0.86, t1: 0.99, pull: 26 }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
     id: "aether", difficulty: 3, hazards: 6, theme: "vapor",
@@ -713,7 +722,6 @@ export const TRACKS: TrackDef[] = [
     forks: [[0.08, 0.2], [0.42, 0.5], [0.88, 0.98]],
     shortcuts: [{ t0: 0.21, t1: 0.27, side: 1, lift: 12 }],
     branches: [{ t0: 0.04, t1: 0.2, pull: -34 }, { t0: 0.6, t1: 0.76, pull: 32 }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
     id: "neon", difficulty: 3, hazards: 7, theme: "techno",
@@ -724,7 +732,6 @@ export const TRACKS: TrackDef[] = [
     shortcuts: [{ t0: 0.32, t1: 0.38, side: 1, lift: 12 }, { t0: 0.52, t1: 0.6, side: -1, lift: 9 }],
     branches: [{ t0: 0.06, t1: 0.2, pull: 36 }, { t0: 0.34, t1: 0.44, pull: -30 }, { t0: 0.74, t1: 0.9, pull: 32 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
     id: "coral", difficulty: 2, hazards: 4, theme: "frutiger",
@@ -734,7 +741,6 @@ export const TRACKS: TrackDef[] = [
     forks: [[0.5, 0.62]],
     shortcuts: [{ t0: 0.22, t1: 0.28, side: -1, lift: 9 }, { t0: 0.84, t1: 0.92, side: 1, lift: 12 }],
     branches: [{ t0: 0.02, t1: 0.16, pull: -38 }, { t0: 0.32, t1: 0.46, pull: 34 }, { t0: 0.56, t1: 0.7, pull: -32 }, { t0: 0.82, t1: 0.97, pull: 30 }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
     id: "glacier", difficulty: 3, hazards: 6, theme: "aqua",
@@ -744,7 +750,6 @@ export const TRACKS: TrackDef[] = [
     forks: [[0.12, 0.24], [0.78, 0.9]],
     shortcuts: [{ t0: 0.26, t1: 0.34, side: 1, lift: 12 }, { t0: 0.48, t1: 0.56, side: -1, lift: 9 }],
     branches: [{ t0: 0.14, t1: 0.3, pull: -28 }, { t0: 0.66, t1: 0.8, pull: 30 }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
     id: "retro", difficulty: 2, hazards: 6, theme: "win98",
@@ -754,7 +759,6 @@ export const TRACKS: TrackDef[] = [
     forks: [[0.06, 0.14], [0.4, 0.5]],
     shortcuts: [{ t0: 0.3, t1: 0.37, side: 1, lift: 12 }, { t0: 0.86, t1: 0.93, side: -1, lift: 9 }],
     branches: [{ t0: 0.24, t1: 0.38, pull: 26 }, { t0: 0.58, t1: 0.74, pull: -26 }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
 ];
 
@@ -768,7 +772,6 @@ TRACKS.push(
     shortcuts: [],
     branches: [{ t0: 0.08, t1: 0.24, pull: 32 }, { t0: 0.44, t1: 0.58, pull: -30 }, { t0: 0.78, t1: 0.94, pull: 28 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
     id: "nimbus", difficulty: 2, hazards: 5, theme: "sunset",
@@ -788,7 +791,6 @@ TRACKS.push(
     shortcuts: [],
     branches: [{ t0: 0.06, t1: 0.22, pull: 34 }, { t0: 0.4, t1: 0.56, pull: -34 }, { t0: 0.72, t1: 0.88, pull: 30 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
   {
     id: "garden", difficulty: 1, hazards: 4, theme: "eco",
@@ -798,17 +800,62 @@ TRACKS.push(
     forks: [[0.42, 0.52]],
     shortcuts: [],
     branches: [{ t0: 0.28, t1: 0.44, pull: 24 }, { t0: 0.66, t1: 0.8, pull: -24 }],
-    portals: [{ tIn: 0.15, tOut: 0.65, side: -1, cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   }
 );
 
 // Every circuit gets many alternative routes so the finish can be reached in
 // different ways: explicit gates plus auto-generated ones, dodging the zones.
+// Every circuit is normalised to the same lap length. Lap time is basically
+// length / average speed, so without this the short oval finished a lap in 20 s
+// while the long one took 45. Everything else (zones, shortcuts, portals, gaps,
+// item spawns) is expressed in track fractions, so it scales for free.
+const TARGET_LEN = 2000;
 for (const trk of TRACKS) {
+  let len = 0;
+  for (let i = 0; i < trk.points.length; i++) {
+    const a = trk.points[i];
+    const b = trk.points[(i + 1) % trk.points.length];
+    len += Math.hypot(b[0] - a[0], b[2] - a[2]);
+  }
+  const k = TARGET_LEN / len;
+  // hills grow slower than the track: full scaling would turn every rise into a
+  // wall the karts cannot climb
+  const ky = Math.min(1.7, Math.sqrt(k));
+  for (const pt of trk.points) {
+    pt[0] *= k;
+    pt[2] *= k;
+    pt[1] *= ky;
+  }
+}
+
+for (const trk of TRACKS) {
+  if (!trk.gaps) trk.gaps = [];
+  if (!trk.portals) trk.portals = [];
   const occupied = (a: number, b: number) =>
     trk.zones.some((z) => !(b < z.t0 - 0.02 || a > z.t1 + 0.02)) ||
     trk.forks.some((f) => !(b < f[0] - 0.02 || a > f[1] + 0.02)) ||
     trk.shortcuts.some((s) => !(b < s.t0 - 0.02 || a > s.t1 + 0.02));
+  // Two portals per circuit. They always throw you FORWARD by a short hop: a
+  // portal that skips half the lap would wreck the lap count and the pacing.
+  for (let i = 0; i < 2; i++) {
+    const tIn = (0.19 + i * 0.44 + trk.shortcuts.length * 0.003) % 0.9;
+    const tOut = (tIn + 0.075 + i * 0.02) % 1;
+    if (occupied(tIn, tIn + 0.01)) continue;
+    trk.portals!.push({ tIn, tOut, side: i === 0 ? 1 : -1, cd: 3.5 + i });
+  }
+
+  // two real gaps per circuit, placed where nothing else already claims the road
+  const wantGaps = 2;
+  for (let i = 0; i < 60 && trk.gaps!.length < wantGaps; i++) {
+    const t0 = (i * 0.331 + 0.09) % 1;
+    const t1 = t0 + 0.105;
+    if (occupied(t0, t1)) continue;
+    // keep clear of the shortcut gates so a ramp never fights a skyway
+    if (trk.shortcuts.some((sc) => !(t1 < sc.t0 - 0.01 || t0 > sc.t1 + 0.01))) continue;
+    // a drivable ramp: too steep and the kart simply stalls at the bottom
+    trk.gaps!.push({ t0, t1, ramp: 1.7 + (i % 3) * 0.25, pit: 6.5 + (i % 2) * 2 });
+  }
+
   const want = 12;
   // stacked heights: low banked ramps, mid skyways and high bridges all at once
   const LIFTS = [5, 13, 8, 18, 6, 15, 4, 11, 20, 7, 16, 9];

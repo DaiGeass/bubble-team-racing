@@ -93,8 +93,66 @@ export function trackFrameAt(t: number) {
 }
 
 /** Height of the road surface at t. Lanes are level across, so the offset does not matter. */
+function smoothstep(a: number, b: number, x: number) {
+  const u = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+}
+
+/**
+ * Vertical offset of the racing surface caused by a gap. The road mesh and the
+ * physics both read this, so a hole you can see is a hole you fall into.
+ */
+export function gapOffsetAt(t: number): number {
+  const gaps = getActiveTrack().gaps;
+  if (!gaps || !gaps.length) return 0;
+  const tt = ((t % 1) + 1) % 1;
+  let off = 0;
+  for (const g of gaps) {
+    if (tt < g.t0 || tt > g.t1) continue;
+    const span = g.t1 - g.t0 || 0.0001;
+    const u = (tt - g.t0) / span;
+    if (u < 0.45) {
+      // launch ramp: long enough to drive up, steep enough to launch
+      off += g.ramp * Math.pow(u / 0.45, 1.5);
+    } else if (u < 0.56) {
+      // the lip falls away: past here the car is on its own
+      off += g.ramp * (1 - smoothstep(0.45, 0.56, u));
+    } else if (u < 0.8) {
+      // pit floor
+      off -= g.pit * smoothstep(0.56, 0.68, u);
+    } else {
+      // far wall, shallow enough to climb out of if you land with some speed
+      off -= g.pit * (1 - smoothstep(0.8, 1, u) ** 1.5);
+    }
+  }
+  return off;
+}
+
+/** True while the point is inside the pit floor of a gap. */
+export function inGapPit(t: number): boolean {
+  const gaps = getActiveTrack().gaps;
+  if (!gaps) return false;
+  const tt = ((t % 1) + 1) % 1;
+  for (const g of gaps) {
+    const u = (tt - g.t0) / (g.t1 - g.t0 || 1);
+    if (u > 0.5 && u < 0.94) return true;
+  }
+  return false;
+}
+
+/** Parameter just past a gap, used to fish a stuck car back onto the road. */
+export function gapExitT(t: number): number {
+  const gaps = getActiveTrack().gaps ?? [];
+  const tt = ((t % 1) + 1) % 1;
+  let best = -1;
+  for (const g of gaps) {
+    if (tt >= g.t0 && tt <= g.t1) best = Math.max(best, g.t1 + 0.012);
+  }
+  return best < 0 ? tt : best % 1;
+}
+
 export function surfaceYAt(t: number): number {
-  return trackPointAt(t).y;
+  return trackPointAt(t).y + gapOffsetAt(t);
 }
 
 /** True 3D normal of the road at t, for orienting anything that sits on the surface. */

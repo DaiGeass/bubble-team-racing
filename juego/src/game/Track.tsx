@@ -1,7 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { trackCurve, halfWidthAt, getActiveTrack, getShortcuts, nearestT, trackPointAt, surfaceYAt, trapTransform, portalTransform } from "../trackCurve";
+import { trackCurve, halfWidthAt, getActiveTrack, getShortcuts, nearestT, trackPointAt, trackTangentAt, surfaceYAt, trapTransform, portalTransform, gapOffsetAt } from "../trackCurve";
 import { TRACK_WIDTH, ZONES, SKY_ALTITUDE, hazardState, zoneAt, zoneOfKind, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
 const SEGMENTS = 760;
@@ -51,7 +51,8 @@ function buildRoadGeometry() {
     const tangent = trackCurve.getTangentAt(t);
     const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
     const half = halfWidthAt(t);
-    let y = center.y + 0.02;
+    // gaps move the tarmac itself, so the ribbon has to move with them
+    let y = center.y + 0.02 + gapOffsetAt(t);
     // dip the road under water inside lake (shallow) and submarine (deep) zones
     for (const z of ZONES) {
       if (z.type === "sky") continue;
@@ -517,8 +518,8 @@ function Clouds({ theme }: { theme: ThemeDef }) {
     const arr: [number, number, number, number][] = [];
     for (let i = 0; i < 18; i++) {
       const a = (i / 18) * Math.PI * 2;
-      const r = 160 + Math.random() * 200;
-      arr.push([Math.cos(a) * r, 22 + Math.random() * 20, Math.sin(a) * r, 3.2 + Math.random() * 3.4]);
+      const r = 420 + Math.random() * 420;
+      arr.push([Math.cos(a) * r, 26 + Math.random() * 26, Math.sin(a) * r, 5 + Math.random() * 6]);
     }
     return arr;
   }, []);
@@ -717,7 +718,7 @@ function AmbientLife({ theme }: { theme: ThemeDef }) {
       {/* multi-aesthetic glass life: floating droplets + rainbow prism arcs */}
       {Array.from({ length: 14 }, (_, i) => {
         const a = (i / 14) * Math.PI * 2;
-        const r = 60 + (i % 5) * 16;
+        const r = 130 + (i % 5) * 46;
         return (
           <mesh key={`dr${i}`} position={[Math.cos(a) * r, 6 + (i % 4) * 3.5, Math.sin(a) * r]} scale={0.9 + (i % 3) * 0.5}>
             <icosahedronGeometry args={[1.1, 1]} />
@@ -726,7 +727,7 @@ function AmbientLife({ theme }: { theme: ThemeDef }) {
         );
       })}
       {[0, 1, 2].map((i) => (
-        <mesh key={`rc${i}`} position={[(i - 1) * 70, 24 + i * 5, -40 + i * 55]} rotation={[0, i * 1.1, 0]}>
+        <mesh key={`rc${i}`} position={[(i - 1) * 150, 26 + i * 6, -90 + i * 120]} rotation={[0, i * 1.1, 0]}>
           <torusGeometry args={[26 + i * 5, 0.5, 8, 44, Math.PI]} />
           <meshStandardMaterial color={theme.particles[i]} emissive={theme.particles[(i + 1) % 4]} emissiveIntensity={1.1} transparent opacity={0.65} toneMapped={false} />
         </mesh>
@@ -876,6 +877,55 @@ function SubFish({ zone }: { zone: Zone }) {
           </mesh>
         </group>
       ))}
+    </group>
+  );
+}
+
+/** Chevrons up the approach, a lit strip on the lip and a glow on the pit floor. */
+function GapMarkers({ theme }: { theme: ThemeDef }) {
+  const gaps = getActiveTrack().gaps ?? [];
+  const marks = useMemo(() => {
+    const out: { t: number; kind: "chevron" | "lip" | "floor" }[] = [];
+    for (const g of gaps) {
+      for (let i = 0; i < 5; i++) {
+        out.push({ t: (((g.t0 - 0.035 + (i * 0.035) / 5) % 1) + 1) % 1, kind: "chevron" });
+      }
+      out.push({ t: (g.t0 + (g.t1 - g.t0) * 0.29) % 1, kind: "lip" });
+      out.push({ t: (g.t0 + (g.t1 - g.t0) * 0.6) % 1, kind: "floor" });
+    }
+    return out;
+  }, [gaps]);
+  return (
+    <group>
+      {marks.map((m, i) => {
+        const t = m.t;
+        const c = trackPointAt(t);
+        const tan = trackTangentAt(t);
+        const heading = Math.atan2(tan.x, tan.z);
+        const y = surfaceYAt(t);
+        return (
+          <group key={i} position={[c.x, y + 0.06, c.z]} rotation={[0, heading, 0]}>
+            {m.kind === "chevron" && (
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[TRACK_WIDTH * 0.6, 1.6]} />
+                <meshBasicMaterial color={theme.barrierB} transparent opacity={0.45} toneMapped={false} depthWrite={false} />
+              </mesh>
+            )}
+            {m.kind === "lip" && (
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[TRACK_WIDTH * 0.95, 1.1]} />
+                <meshBasicMaterial color={theme.barrierA} transparent opacity={0.85} toneMapped={false} depthWrite={false} />
+              </mesh>
+            )}
+            {m.kind === "floor" && (
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[TRACK_WIDTH * 0.85, 3.2]} />
+                <meshBasicMaterial color={theme.glow} transparent opacity={0.2} toneMapped={false} depthWrite={false} />
+              </mesh>
+            )}
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -1116,12 +1166,12 @@ export default function Track({ theme }: { theme: ThemeDef }) {
   const roadGeometry = useMemo(() => buildRoadGeometry(), []);
   const roadTexture = useMemo(() => makeRoadTexture(theme), [theme]);
   const barriers = useMemo(() => buildBarriers(), []);
-  const terrain = useMemo(() => buildTerrain(360, TRACK_WIDTH / 2 + 6, 0.16, 26), []);
+  const terrain = useMemo(() => buildTerrain(560, TRACK_WIDTH / 2 + 6, 0.16, 26), []);
 
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.9, 0]} receiveShadow>
-        <circleGeometry args={[520, 56]} />
+        <circleGeometry args={[1100, 64]} />
         <meshStandardMaterial color={theme.water} roughness={0.15} metalness={0.3} transparent opacity={0.9} />
       </mesh>
       <mesh geometry={terrain} receiveShadow>
@@ -1139,6 +1189,7 @@ export default function Track({ theme }: { theme: ThemeDef }) {
       <SubZone theme={theme} />
       <Shortcuts theme={theme} />
       <MovingTraps theme={theme} />
+      <GapMarkers theme={theme} />
       <Portals theme={theme} />
       <MovingHazards theme={theme} />
       <Props theme={theme} />

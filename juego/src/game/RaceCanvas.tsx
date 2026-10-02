@@ -25,7 +25,7 @@ export default function RaceCanvas({ controls }: { controls: UseControlsReturn }
       shadows
       dpr={[1, 1.7]}
       gl={{ antialias: true, powerPreference: "high-performance" }}
-      camera={{ fov: 64, near: 0.5, far: 460, position: [0, 5, -14] }}
+      camera={{ fov: 64, near: 0.5, far: 1400, position: [0, 5, -14] }}
       style={{ background: `linear-gradient(180deg, ${theme.skyTop} 0%, ${theme.skyBottom} 62%, ${theme.fog} 100%)` }}
     >
       <Suspense fallback={null}>
@@ -41,7 +41,7 @@ export default function RaceCanvas({ controls }: { controls: UseControlsReturn }
           shadow-camera-right={140}
           shadow-camera-top={140}
           shadow-camera-bottom={-140}
-          shadow-camera-far={400}
+          shadow-camera-far={520}
           shadow-bias={-0.0008}
         />
         <hemisphereLight args={[theme.hemiSky, theme.hemiGround, 0.85]} />

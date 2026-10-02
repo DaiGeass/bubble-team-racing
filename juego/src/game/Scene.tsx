@@ -31,7 +31,7 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, corridorBounds, branchCenterAt, getActiveTrack, getShortcuts, surfaceYAt, trackFrameAt, halfWidthAt, trapPhase, trapTransform } from "../trackCurve";
+import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, corridorBounds, branchCenterAt, getActiveTrack, getShortcuts, surfaceYAt, trackFrameAt, halfWidthAt, trapPhase, trapTransform, inGapPit, gapExitT } from "../trackCurve";
 import { emitParticles, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
 
@@ -66,6 +66,12 @@ interface Racer {
   pitch: number;
   /** seconds spent stuck off the road, and how long the last rescue took */
   stuckFor: number;
+  /** seconds spent pinned against a barrier going nowhere */
+  pinnedFor: number;
+  /** best lap progress, used to spot a driver who is going backwards */
+  bestT: number;
+  /** seconds since the lap progress last moved forward */
+  noProgressFor: number;
   respawnLock: number;
   heading: number;
   speed: number;
@@ -232,6 +238,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         groundY: 0,
         pitch: 0,
         stuckFor: 0,
+        pinnedFor: 0,
+        bestT: 0,
+        noProgressFor: 0,
         respawnLock: 0,
         heading: heading0,
         speed: 0,
@@ -1129,6 +1138,59 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       }
     } else if (r.speed > 1) {
       r.stuckFor = 0;
+    }
+
+    // ---- rescue 2: pinned or going nowhere ----
+    // Grinding a barrier, or sitting in a donut with no forward progress, is as
+    // bad as falling off a cliff: both strand the player behind the pack.
+    if (r.respawnLock <= 0 && r.mode !== "plane" && !r.warp && r.speed < st.maxSpeed * 0.18 && r.speed < 7) {
+      r.pinnedFor += dt;
+    } else if (r.speed > st.maxSpeed * 0.3) {
+      r.pinnedFor = 0;
+    }
+
+    // forward progress is tracked across the whole lap, wrap included
+    const lapKey = r.lap * 1000 + newT;
+    if (lapKey > r.bestT + 0.0005) {
+      r.bestT = lapKey;
+      r.noProgressFor = 0;
+    } else if (r.mode === "land") {
+      r.noProgressFor += dt;
+    }
+
+    // a car sitting in the bottom of a gap gets fished over to the far lip
+    if (r.respawnLock <= 0 && inGapPit(r.t) && r.speed < 5 && !r.airborne) {
+      r.pinnedFor += dt;
+    }
+
+    if (r.respawnLock <= 0 && (r.pinnedFor > 2.6 || r.noProgressFor > 6)) {
+      const wasInPit = inGapPit(r.t);
+      if (wasInPit) {
+        const out = gapExitT(r.t);
+        r.t = out;
+        r.pos.copy(trackPointAt(out));
+        r.y = surfaceYAt(out);
+        r.heading = Math.atan2(trackTangentAt(out).x, trackTangentAt(out).z);
+      }
+      r.pinnedFor = 0;
+      r.noProgressFor = 0;
+      r.stuckFor = 0;
+      r.respawnLock = 1.2;
+      // drop back on the racing line, pointing the right way, at a slow speed
+      const tangent = trackTangentAt(r.t);
+      r.pos.copy(trackPointAt(r.t));
+      r.y = surfaceYAt(r.t);
+      r.vy = 0;
+      r.airborne = false;
+      r.speed = Math.min(r.speed, 7);
+      r.heading = Math.atan2(tangent.x, tangent.z);
+      r.stunTimer = 0;
+      emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: theme.barrierB, count: 24, speed: 5, spread: 1.4, size: 0.22, life: 0.6 });
+      if (r.isPlayer) {
+        addShake(0.22);
+        sfx.bump();
+        useGame.getState().setTelemetry({ shortcutFlash: Date.now() });
+      }
     }
 
     // ---- lap ----
