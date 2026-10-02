@@ -18,6 +18,7 @@ export type ThemeId =
   | "y2k" | "liquid" | "win98" | "vapor";
 export type WheelStyle = "classic" | "sporty" | "glow" | "chrome" | "spike";
 export type SpoilerId = "none" | "wing" | "fin";
+export type FinishId = "solid" | "gloss" | "matte" | "chrome" | "glass" | "holo";
 export type BoosterId = "single" | "twin" | "neon";
 export type BoatId = "cat" | "speed" | "ski" | "yacht" | "tug" | "raft" | "hovercraft";
 export type PlaneId = "wing" | "bi" | "delta" | "stealth" | "jetliner" | "twinprop" | "nimbus";
@@ -282,6 +283,15 @@ export const BODY_COLORS = ["#ff4d6d", "#ff9f1c", "#fde047", "#4ade80", "#22d3ee
 export const DECAL_COLORS = ["#ffffff", "#0ea5e9", "#facc15", "#f472b6", "#22c55e", "#111827", "#ff4fd8"];
 export const WHEEL_STYLES: WheelStyle[] = ["classic", "sporty", "glow", "chrome", "spike"];
 export const SPOILERS: SpoilerId[] = ["none", "wing", "fin"];
+export const FINISHES: FinishId[] = ["solid", "gloss", "matte", "chrome", "glass", "holo"];
+export const FINISH_META: Record<FinishId, { swatch: string; labelKey: string }> = {
+  solid: { swatch: "#8fa3c8", labelKey: "fin_solid" },
+  gloss: { swatch: "#2f7fd1", labelKey: "fin_gloss" },
+  matte: { swatch: "#4b5563", labelKey: "fin_matte" },
+  chrome: { swatch: "#dfe9f5", labelKey: "fin_chrome" },
+  glass: { swatch: "#9fe8ff", labelKey: "fin_glass" },
+  holo: { swatch: "#ff9ee0", labelKey: "fin_holo" },
+};
 export const BOOSTERS: BoosterId[] = ["single", "twin", "neon"];
 export const BOATS: BoatId[] = ["cat", "speed", "ski", "yacht", "tug", "raft", "hovercraft"];
 export const PLANES: PlaneId[] = ["wing", "bi", "delta", "stealth", "jetliner", "twinprop", "nimbus"];

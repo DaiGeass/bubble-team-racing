@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import type { BoatId, PlaneId, ShapeId, SubId } from "../data";
+import type { BoatId, FinishId, PlaneId, ShapeId, SubId } from "../data";
 
 interface C {
   body: string;
@@ -26,8 +26,49 @@ function Glass({ color = "#dff6ff", opacity = 0.38 }: { color?: string; opacity?
   );
 }
 
-function Paint({ color, metal = 0.55, rough = 0.14 }: { color: string; metal?: number; rough?: number }) {
-  return <meshStandardMaterial color={color} roughness={rough} metalness={metal} />;
+/**
+ * Paint layer. A finish overrides the shape's own roughness and metalness, so the
+ * same chassis can be matte, chromed or turned to glass without touching geometry.
+ */
+function Paint({ color, metal = 0.55, rough = 0.14, finish = "solid" }: { color: string; metal?: number; rough?: number; finish?: FinishId }) {
+  const f = finish === "gloss" ? { rough: 0.04, metal: 0.6 }
+    : finish === "matte" ? { rough: 0.92, metal: 0.05 }
+    : finish === "chrome" ? { rough: 0.03, metal: 1 }
+    : finish === "holo" ? { rough: 0.08, metal: 0.75 }
+    : finish === "glass" ? { rough: 0.02, metal: 0.1 }
+    : { rough, metal };
+  if (finish === "holo") {
+    return (
+      <meshPhysicalMaterial
+        color={color}
+        roughness={f.rough}
+        metalness={f.metal}
+        clearcoat={1}
+        iridescence={1}
+        iridescenceIOR={1.9}
+        iridescenceThicknessRange={[140, 780]}
+        sheen={1}
+        sheenColor="#ffffff"
+      />
+    );
+  }
+  if (finish === "glass") {
+    return (
+      <meshPhysicalMaterial
+        color={color}
+        roughness={f.rough}
+        metalness={f.metal}
+        clearcoat={1}
+        clearcoatRoughness={0.02}
+        transmission={0.72}
+        thickness={0.9}
+        ior={1.45}
+        transparent
+        opacity={0.86}
+      />
+    );
+  }
+  return <meshStandardMaterial color={color} roughness={f.rough} metalness={f.metal} />;
 }
 
 function Neon({ color, i = 2.4 }: { color: string; i?: number }) {
@@ -47,18 +88,18 @@ function Underglow({ color, w = 1.2, l = 2.3, y = 0.2 }: { color: string; w?: nu
 // ---------------------------------------------------------------------------
 // NEW LAND CHASSIS: coupe, glass van, formula, bubble car
 // ---------------------------------------------------------------------------
-export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }) {
+export function ExtraShapes({ shape, body, decal, glow, finish }: C & { shape: ShapeId } & { finish?: FinishId }) {
   const g = glow ?? "#7de1ff";
   if (shape === "coupe")
     return (
       <>
         <mesh position={[0, 0.42, 0]} castShadow>
           <boxGeometry args={[1.25, 0.3, 2.5]} />
-          <Paint color={body} metal={0.7} rough={0.1} />
+          <Paint color={body} metal={0.7} rough={0.1}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.42, 1.45]} rotation={[Math.PI / 2, 0, 0]}>
           <coneGeometry args={[0.62, 0.95, 4]} />
-          <Paint color={body} metal={0.7} rough={0.1} />
+          <Paint color={body} metal={0.7} rough={0.1}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.82, -0.15]} scale={[0.62, 0.34, 0.95]}>
           <sphereGeometry args={[1, 18, 14]} />
@@ -66,7 +107,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
         </mesh>
         <mesh position={[0, 0.6, -1.25]}>
           <boxGeometry args={[1.15, 0.09, 0.5]} />
-          <Paint color={decal} />
+          <Paint color={decal}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.55, 0.1]}>
           <boxGeometry args={[0.18, 0.04, 2.3]} />
@@ -80,7 +121,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
       <>
         <mesh position={[0, 0.5, 0]} castShadow>
           <boxGeometry args={[1.5, 0.5, 2.4]} />
-          <Paint color={body} metal={0.35} rough={0.25} />
+          <Paint color={body} metal={0.35} rough={0.25}  finish={finish} />
         </mesh>
         {/* glass greenhouse so the pilot is visible */}
         <mesh position={[0, 1.05, -0.05]}>
@@ -89,13 +130,13 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
         </mesh>
         <mesh position={[0, 1.4, -0.05]}>
           <boxGeometry args={[1.5, 0.08, 1.75]} />
-          <Paint color={decal} />
+          <Paint color={decal}  finish={finish} />
         </mesh>
         {[-0.68, 0.68].map((x) =>
           [-0.75, 0.75].map((z) => (
             <mesh key={`${x}${z}`} position={[x, 1.05, z - 0.05]}>
               <boxGeometry args={[0.07, 0.65, 0.07]} />
-              <Paint color={decal} />
+              <Paint color={decal}  finish={finish} />
             </mesh>
           ))
         )}
@@ -111,17 +152,17 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
       <>
         <mesh position={[0, 0.52, 0.1]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <capsuleGeometry args={[0.38, 2.1, 6, 12]} />
-          <Paint color={body} metal={0.65} rough={0.1} />
+          <Paint color={body} metal={0.65} rough={0.1}  finish={finish} />
         </mesh>
         {[-0.62, 0.62].map((x) => (
           <mesh key={x} position={[x, 0.5, 0]}>
             <boxGeometry args={[0.34, 0.26, 1.2]} />
-            <Paint color={decal} />
+            <Paint color={decal}  finish={finish} />
           </mesh>
         ))}
         <mesh position={[0, 0.4, 1.7]}>
           <boxGeometry args={[2.0, 0.06, 0.42]} />
-          <Paint color={decal} metal={0.7} />
+          <Paint color={decal} metal={0.7}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.98, -1.1]}>
           <boxGeometry args={[1.5, 0.08, 0.4]} />
@@ -129,7 +170,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
         </mesh>
         <mesh position={[0, 1.05, 0.15]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[0.32, 0.04, 6, 16, Math.PI]} />
-          <Paint color={decal} />
+          <Paint color={decal}  finish={finish} />
         </mesh>
       </>
     );
@@ -138,7 +179,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
       <>
         <mesh position={[0, 0.5, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <capsuleGeometry args={[0.5, 2.1, 8, 16]} />
-          <Paint color={body} metal={0.75} rough={0.08} />
+          <Paint color={body} metal={0.75} rough={0.08}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.88, -0.3]}>
           <sphereGeometry args={[0.52, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.6]} />
@@ -146,7 +187,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
         </mesh>
         <mesh position={[0, 0.4, 1.55]}>
           <boxGeometry args={[1.6, 0.07, 0.5]} />
-          <Paint color={decal} metal={0.7} />
+          <Paint color={decal} metal={0.7}  finish={finish} />
         </mesh>
         <mesh position={[0, 1.0, -1.15]}>
           <boxGeometry args={[1.8, 0.09, 0.5]} />
@@ -161,7 +202,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
       <>
         <mesh position={[0, 0.4, 0]} castShadow>
           <cylinderGeometry args={[1.05, 1.15, 0.34, 24]} />
-          <Paint color={body} metal={0.5} rough={0.12} />
+          <Paint color={body} metal={0.5} rough={0.12}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.9, 0]}>
           <sphereGeometry args={[1.12, 24, 18, 0, Math.PI * 2, 0, Math.PI * 0.62]} />
@@ -202,16 +243,16 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
         ))}
         <mesh position={[0, 0.62, -0.1]} rotation={[0.12, 0, 0]} castShadow>
           <boxGeometry args={[1.5, 0.5, 2.5]} />
-          <Paint color={body} metal={0.5} rough={0.32} />
+          <Paint color={body} metal={0.5} rough={0.32}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.98, 0.55]} rotation={[0.5, 0, 0]}>
           <boxGeometry args={[1.32, 0.06, 0.9]} />
-          <Paint color={decal} metal={0.6} />
+          <Paint color={decal} metal={0.6}  finish={finish} />
         </mesh>
         <group ref={rot} position={[0, 1.05, -0.35]}>
           <mesh castShadow>
             <cylinderGeometry args={[0.46, 0.56, 0.42, 12]} />
-            <Paint color={decal} metal={0.7} rough={0.18} />
+            <Paint color={decal} metal={0.7} rough={0.18}  finish={finish} />
           </mesh>
           <mesh position={[0, 0.02, 1.05]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[0.11, 0.13, 1.7, 10]} />
@@ -232,11 +273,11 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
       <>
         <mesh position={[0, 0.32, 0]} rotation={[0, 0, 0]} castShadow>
           <boxGeometry args={[2.7, 0.16, 2.5]} />
-          <Paint color={body} metal={0.68} rough={0.1} />
+          <Paint color={body} metal={0.68} rough={0.1}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.44, 0.75]} rotation={[0.22, 0, 0]}>
           <boxGeometry args={[1.5, 0.1, 1.3]} />
-          <Paint color={decal} metal={0.5} />
+          <Paint color={decal} metal={0.5}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.62, -0.25]} scale={[1, 0.42, 1.05]}>
           <sphereGeometry args={[0.78, 18, 12]} />
@@ -250,7 +291,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
         ))}
         <mesh position={[0, 0.26, -1.32]} rotation={[0.5, 0, 0]}>
           <boxGeometry args={[2.2, 0.08, 0.5]} />
-          <Paint color={decal} metal={0.72} />
+          <Paint color={decal} metal={0.72}  finish={finish} />
         </mesh>
         <Underglow color={g} w={2.4} l={2.4} y={0.12} />
       </>
@@ -262,7 +303,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
       <>
         <mesh position={[0, 0.44, -0.1]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <capsuleGeometry args={[0.42, 2.3, 6, 14]} />
-          <Paint color={body} metal={0.72} rough={0.12} />
+          <Paint color={body} metal={0.72} rough={0.12}  finish={finish} />
         </mesh>
         {[-0.62, 0.62].map((x) => (
           <mesh key={x} position={[x, 0.16, 1.15]} rotation={[0.06, 0, 0]}>
@@ -304,7 +345,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
         </mesh>
         <mesh ref={ring1} position={[0, 0.72, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[1.28, 0.09, 10, 28]} />
-          <Paint color={decal} metal={0.8} rough={0.1} />
+          <Paint color={decal} metal={0.8} rough={0.1}  finish={finish} />
         </mesh>
         <mesh ref={ring2} position={[0, 0.72, 0]} rotation={[0, 0, 0.5]}>
           <torusGeometry args={[1.02, 0.06, 8, 24]} />
@@ -328,7 +369,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
       <>
         <mesh position={[0, 0.5, 0]} castShadow>
           <boxGeometry args={[1.5, 0.42, 2.9]} />
-          <Paint color={body} metal={0.35} rough={0.45} />
+          <Paint color={body} metal={0.35} rough={0.45}  finish={finish} />
         </mesh>
         {[-0.66, 0.66].map((x) => (
           <group key={x}>
@@ -342,7 +383,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
             </mesh>
             <mesh position={[x, 1.5, -0.16]} rotation={[0, 0, 0]}>
               <boxGeometry args={[0.09, 0.09, 1.4]} />
-              <Paint color={decal} metal={0.6} />
+              <Paint color={decal} metal={0.6}  finish={finish} />
             </mesh>
           </group>
         ))}
@@ -352,7 +393,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
         </mesh>
         <mesh position={[0, 1.05, -1.6]} rotation={[0.22, 0, 0]}>
           <boxGeometry args={[2.4, 0.1, 0.62]} />
-          <Paint color={decal} metal={0.55} />
+          <Paint color={decal} metal={0.55}  finish={finish} />
         </mesh>
         {[-1.1, 1.1].map((x) => (
           <mesh key={x} position={[x, 0.86, -1.5]}>
@@ -378,7 +419,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
         </mesh>
         <mesh position={[0, 0.68, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[0.82, 0.82, 1.1]}>
           <capsuleGeometry args={[0.6, 1.7, 6, 14]} />
-          <Paint color={body} metal={0.3} rough={0.5} />
+          <Paint color={body} metal={0.3} rough={0.5}  finish={finish} />
         </mesh>
         {[-0.9, 0.9].map((x) => (
           <mesh key={x} position={[x, 0.36, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -404,7 +445,7 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
 // ---------------------------------------------------------------------------
 // BOATS (the default "cat" catamaran lives in Vehicle.tsx)
 // ---------------------------------------------------------------------------
-export function BoatAlt({ kind, body, decal, glow }: C & { kind: BoatId }) {
+export function BoatAlt({ kind, body, decal, glow, finish }: C & { kind: BoatId } & { finish?: FinishId }) {
   const g = glow ?? "#4fd8e8";
   if (kind === "speed")
     return (
@@ -415,7 +456,7 @@ export function BoatAlt({ kind, body, decal, glow }: C & { kind: BoatId }) {
         </mesh>
         <mesh position={[0, 0.2, 0.2]} rotation={[Math.PI / 2, 0, 0]} scale={[0.62, 1.38, 0.3]}>
           <capsuleGeometry args={[0.8, 2.2, 6, 14]} />
-          <Paint color={body} metal={0.4} />
+          <Paint color={body} metal={0.4}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.7, 1.0]} rotation={[-0.7, 0, 0]}>
           <boxGeometry args={[0.95, 0.55, 0.05]} />
@@ -444,11 +485,11 @@ export function BoatAlt({ kind, body, decal, glow }: C & { kind: BoatId }) {
       <group>
         <mesh position={[0, 0.1, 0.1]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.55]} castShadow>
           <capsuleGeometry args={[0.55, 1.8, 6, 12]} />
-          <Paint color={body} metal={0.4} rough={0.1} />
+          <Paint color={body} metal={0.4} rough={0.1}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.5, -0.45]}>
           <boxGeometry args={[0.55, 0.25, 1.1]} />
-          <Paint color={decal} metal={0.2} rough={0.5} />
+          <Paint color={decal} metal={0.2} rough={0.5}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.9, 0.75]} rotation={[0.3, 0, 0]}>
           <cylinderGeometry args={[0.05, 0.06, 0.7, 6]} />
@@ -475,15 +516,15 @@ export function BoatAlt({ kind, body, decal, glow }: C & { kind: BoatId }) {
       <group>
         <mesh position={[0, 0.05, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <boxGeometry args={[2.1, 0.7, 3.4]} />
-          <Paint color={body} metal={0.35} rough={0.4} />
+          <Paint color={body} metal={0.35} rough={0.4}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.5, -0.9]} rotation={[Math.PI / 2, 0, 0]}>
           <capsuleGeometry args={[0.6, 1.3, 6, 14]} />
-          <Paint color={decal} metal={0.45} />
+          <Paint color={decal} metal={0.45}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.62, -1.35]}>
           <boxGeometry args={[1.5, 1.15, 0.9]} />
-          <Paint color={decal} metal={0.2} rough={0.5} />
+          <Paint color={decal} metal={0.2} rough={0.5}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.95, -1.32]} scale={[1, 0.55, 0.5]}>
           <sphereGeometry args={[0.5, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
@@ -521,7 +562,7 @@ export function BoatAlt({ kind, body, decal, glow }: C & { kind: BoatId }) {
         {[0, 1, 2, 3, 4, 5].map((k) => (
           <mesh key={k} position={[0, 0.16, 0]} rotation={[Math.PI / 2, 0, (k * Math.PI) / 6]}>
             <torusGeometry args={[1.16, 0.06, 6, 20, Math.PI / 3]} />
-            <Paint color={decal} metal={0.2} />
+            <Paint color={decal} metal={0.2}  finish={finish} />
           </mesh>
         ))}
         <mesh position={[0, 0.42, 0]} castShadow>
@@ -530,7 +571,7 @@ export function BoatAlt({ kind, body, decal, glow }: C & { kind: BoatId }) {
         </mesh>
         <mesh position={[0, 0.3, 0]}>
           <cylinderGeometry args={[0.42, 0.5, 0.6, 12]} />
-          <Paint color={body} metal={0.4} />
+          <Paint color={body} metal={0.4}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.92, 0]}>
           <cylinderGeometry args={[0.05, 0.05, 0.55, 6]} />
@@ -551,7 +592,7 @@ export function BoatAlt({ kind, body, decal, glow }: C & { kind: BoatId }) {
       <group>
         <mesh position={[0, 0.24, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <capsuleGeometry args={[0.72, 2.1, 8, 18]} />
-          <Paint color={body} metal={0.7} rough={0.1} />
+          <Paint color={body} metal={0.7} rough={0.1}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.62, 0.2]} scale={[0.85, 0.5, 1]}>
           <sphereGeometry args={[0.62, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
@@ -579,7 +620,7 @@ export function BoatAlt({ kind, body, decal, glow }: C & { kind: BoatId }) {
 // ---------------------------------------------------------------------------
 // PLANES (default "wing" lives in Vehicle.tsx)
 // ---------------------------------------------------------------------------
-export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
+export function PlaneAlt({ kind, body, decal, glow, finish }: C & { kind: PlaneId } & { finish?: FinishId }) {
   const prop = useRef<THREE.Mesh>(null);
   useFrame((_, dt) => {
     if (prop.current) prop.current.rotation.z += dt * 34;
@@ -600,11 +641,11 @@ export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
       <group>
         <mesh position={[0, 0.65, -0.1]} castShadow>
           <boxGeometry args={[3.4, 0.08, 0.7]} />
-          <Paint color={decal} metal={0.3} rough={0.25} />
+          <Paint color={decal} metal={0.3} rough={0.25}  finish={finish} />
         </mesh>
         <mesh position={[0, 1.7, -0.1]} castShadow>
           <boxGeometry args={[3.4, 0.08, 0.7]} />
-          <Paint color={body} metal={0.3} rough={0.25} />
+          <Paint color={body} metal={0.3} rough={0.25}  finish={finish} />
         </mesh>
         {[-1.2, 1.2].map((x) => (
           <mesh key={x} position={[x, 1.18, -0.1]}>
@@ -620,11 +661,11 @@ export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
         ))}
         <mesh position={[0, 0.95, -1.3]}>
           <boxGeometry args={[0.12, 0.9, 0.4]} />
-          <Paint color={body} />
+          <Paint color={body}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.55, -1.3]}>
           <boxGeometry args={[1.2, 0.07, 0.34]} />
-          <Paint color={decal} />
+          <Paint color={decal}  finish={finish} />
         </mesh>
         <mesh ref={prop} position={[0, 0.7, 1.5]}>
           <boxGeometry args={[1.9, 0.09, 0.12]} />
@@ -636,7 +677,7 @@ export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
     return (
       <group>
         <mesh geometry={delta} position={[0, 0.7, -0.2]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-          <Paint color={body} metal={0.7} rough={0.1} />
+          <Paint color={body} metal={0.7} rough={0.1}  finish={finish} />
         </mesh>
         <mesh geometry={delta} position={[0, 0.76, -0.2]} rotation={[Math.PI / 2, 0, 0]} scale={[0.82, 0.82, 0.3]}>
           <Neon color={decal} i={1.4} />
@@ -658,7 +699,7 @@ export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
       <group>
         <mesh position={[0, 0.08, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <capsuleGeometry args={[0.5, 3.1, 8, 18]} />
-          <Paint color={body} metal={0.75} rough={0.08} />
+          <Paint color={body} metal={0.75} rough={0.08}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.42, -0.25]} scale={[0.8, 0.5, 1.15]}>
           <sphereGeometry args={[0.52, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
@@ -666,7 +707,7 @@ export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
         </mesh>
         <mesh position={[0, 0.36, 1.5]} rotation={[Math.PI / 2, 0, 0]}>
           <coneGeometry args={[0.44, 1.3, 14]} />
-          <Paint color={decal} metal={0.65} />
+          <Paint color={decal} metal={0.65}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.36, 2.28]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.3, 0.36, 0.5, 14]} />
@@ -684,7 +725,7 @@ export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
         ))}
         <mesh position={[0, 0.5, 0.7]} rotation={[0, 0, 0]}>
           <boxGeometry args={[0.09, 0.09, 1.6]} />
-          <Paint color={decal} metal={0.7} />
+          <Paint color={decal} metal={0.7}  finish={finish} />
         </mesh>
       </group>
     );
@@ -703,11 +744,11 @@ export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
           <group key={x}>
             <mesh position={[x, 0.6, 0.15]}>
               <boxGeometry args={[1.5, 0.12, 0.9]} />
-              <Paint color={decal} metal={0.5} />
+              <Paint color={decal} metal={0.5}  finish={finish} />
             </mesh>
             <mesh position={[x, 0.6, 0.72]}>
               <boxGeometry args={[0.12, 0.7, 0.6]} />
-              <Paint color={decal} metal={0.5} />
+              <Paint color={decal} metal={0.5}  finish={finish} />
             </mesh>
             <mesh position={[x, 0.66, -0.35]} rotation={[Math.PI / 2, 0, 0]}>
               <cylinderGeometry args={[0.24, 0.24, 0.22, 10]} />
@@ -721,7 +762,7 @@ export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
         ))}
         <mesh position={[0, 0.46, 1.0]} rotation={[0.28, 0, 0]}>
           <boxGeometry args={[0.08, 0.7, 0.6]} />
-          <Paint color={decal} metal={0.6} />
+          <Paint color={decal} metal={0.6}  finish={finish} />
         </mesh>
         <Underglow color={g} w={3.2} l={1.6} y={0.1} />
       </group>
@@ -735,7 +776,7 @@ export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
         </mesh>
         <mesh position={[0, 0.3, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[0.62, 0.72, 0.86]}>
           <capsuleGeometry args={[0.78, 2.7, 6, 14]} />
-          <Paint color={body} metal={0.4} rough={0.3} />
+          <Paint color={body} metal={0.4} rough={0.3}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.66, 0.55]} scale={[0.7, 0.45, 0.9]}>
           <sphereGeometry args={[0.56, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
@@ -767,7 +808,7 @@ export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
 // ---------------------------------------------------------------------------
 // SUBMARINES: classic, glass pod, shark
 // ---------------------------------------------------------------------------
-export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
+export function SubModel({ kind, body, decal, glow, finish }: C & { kind: SubId } & { finish?: FinishId }) {
   const rot = useRef<THREE.Group>(null);
   const tail = useRef<THREE.Group>(null);
   useFrame((s, dt) => {
@@ -785,7 +826,7 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
         </mesh>
         <mesh position={[0, 0.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[1.08, 0.13, 10, 28]} />
-          <Paint color={body} />
+          <Paint color={body}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[1.08, 0.05, 8, 28]} />
@@ -814,7 +855,7 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
       <group>
         <mesh position={[0, 0.08, 0.1]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.8]} castShadow>
           <capsuleGeometry args={[0.8, 2.5, 8, 16]} />
-          <Paint color={body} metal={0.45} rough={0.14} />
+          <Paint color={body} metal={0.45} rough={0.14}  finish={finish} />
         </mesh>
         <mesh position={[0, -0.18, 0.3]} rotation={[Math.PI / 2, 0, 0]} scale={[0.85, 0.9, 0.5]}>
           <capsuleGeometry args={[0.8, 2.3, 8, 16]} />
@@ -822,12 +863,12 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
         </mesh>
         <mesh position={[0, 0.9, -0.5]} rotation={[-0.35, 0, 0]}>
           <coneGeometry args={[0.38, 1.0, 4]} />
-          <Paint color={body} />
+          <Paint color={body}  finish={finish} />
         </mesh>
         <group ref={tail} position={[0, 0.1, -1.9]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]}>
             <coneGeometry args={[0.55, 1.0, 4]} />
-            <Paint color={decal} />
+            <Paint color={decal}  finish={finish} />
           </mesh>
         </group>
         {[-1, 1].map((s) => (
@@ -842,7 +883,7 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
             </mesh>
             <mesh position={[s * 0.95, -0.1, 0.4]} rotation={[0.2, 0, s * 0.9]}>
               <coneGeometry args={[0.28, 0.8, 4]} />
-              <Paint color={decal} />
+              <Paint color={decal}  finish={finish} />
             </mesh>
           </group>
         ))}
@@ -867,7 +908,7 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
         ))}
         <mesh position={[0, 1.42, -0.6]} rotation={[Math.PI / 2, 0, 0]}>
           <capsuleGeometry args={[0.42, 0.9, 6, 12]} />
-          <Paint color={decal} metal={0.6} />
+          <Paint color={decal} metal={0.6}  finish={finish} />
         </mesh>
         <mesh position={[0, 1.5, -0.55]} scale={[0.9, 0.5, 0.6]}>
           <sphereGeometry args={[0.44, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
@@ -892,11 +933,11 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
       <group>
         <mesh position={[0, 0.55, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <capsuleGeometry args={[0.6, 2.1, 8, 18]} />
-          <Paint color={body} metal={0.6} rough={0.16} />
+          <Paint color={body} metal={0.6} rough={0.16}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.55, 0.1]} rotation={[Math.PI / 2, 0, 0]} scale={[1.04, 0.3, 1.04]}>
           <capsuleGeometry args={[0.6, 2.1, 6, 14]} />
-          <Paint color={decal} metal={0.7} />
+          <Paint color={decal} metal={0.7}  finish={finish} />
         </mesh>
         <mesh position={[0, 0.55, 1.35]} rotation={[Math.PI / 2, 0, 0]}>
           <sphereGeometry args={[0.52, 16, 12]} />
@@ -904,7 +945,7 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
         </mesh>
         <mesh position={[0, 0.55, 1.35]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[0.5, 0.07, 8, 18]} />
-          <Paint color={decal} metal={0.75} />
+          <Paint color={decal} metal={0.75}  finish={finish} />
         </mesh>
         <group ref={rot} position={[0, 0.55, 1.3]}>
           <mesh rotation={[0, 0, Math.PI / 2]}>
@@ -914,7 +955,7 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
         </group>
         <mesh position={[0, 1.05, -0.55]}>
           <boxGeometry args={[0.5, 0.45, 0.8]} />
-          <Paint color={decal} metal={0.5} />
+          <Paint color={decal} metal={0.5}  finish={finish} />
         </mesh>
         <mesh position={[0, 1.35, -0.55]}>
           <cylinderGeometry args={[0.05, 0.05, 0.6, 6]} />
@@ -938,7 +979,7 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
         {[-1.0, -0.2, 0.6, 1.4].map((z) => (
           <mesh key={z} position={[0, 0.72 + Math.abs(z) * 0.04, z]} rotation={[0, 0, 0]}>
             <coneGeometry args={[0.18, 0.6, 4]} />
-            <Paint color={decal} metal={0.6} />
+            <Paint color={decal} metal={0.6}  finish={finish} />
           </mesh>
         ))}
         <mesh position={[0, 0.5, 1.85]} scale={[1, 0.9, 0.85]}>
@@ -958,11 +999,11 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
         <group ref={tail} position={[0, 0.5, -1.85]}>
           <mesh rotation={[0, 0, Math.PI / 2]}>
             <coneGeometry args={[0.4, 1.2, 4]} />
-            <Paint color={decal} metal={0.5} />
+            <Paint color={decal} metal={0.5}  finish={finish} />
           </mesh>
           <mesh position={[0, 0, -0.7]} rotation={[0, 0, Math.PI / 2]}>
             <coneGeometry args={[0.28, 1.0, 3]} />
-            <Paint color={decal} metal={0.45} />
+            <Paint color={decal} metal={0.45}  finish={finish} />
           </mesh>
         </group>
         <mesh position={[0, 0.5, 0.15]} rotation={[Math.PI / 2, 0, 0]} scale={[1.06, 1.06, 1.02]}>
@@ -976,15 +1017,15 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
     <group>
       <mesh position={[0, 0.05, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
         <capsuleGeometry args={[0.85, 2.3, 8, 18]} />
-        <Paint color={body} metal={0.55} rough={0.14} />
+        <Paint color={body} metal={0.55} rough={0.14}  finish={finish} />
       </mesh>
       <mesh position={[0, 0.05, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1.02, 0.35, 1.02]}>
         <capsuleGeometry args={[0.85, 2.3, 8, 18]} />
-        <Paint color={decal} />
+        <Paint color={decal}  finish={finish} />
       </mesh>
       <mesh position={[0, 0.95, -1.0]}>
         <cylinderGeometry args={[0.36, 0.42, 0.55, 12]} />
-        <Paint color={decal} />
+        <Paint color={decal}  finish={finish} />
       </mesh>
       <mesh position={[0.14, 1.5, -1.0]}>
         <cylinderGeometry args={[0.04, 0.04, 0.7, 6]} />
@@ -1016,11 +1057,11 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
       </group>
       <mesh position={[0, 0.35, -1.8]}>
         <boxGeometry args={[0.1, 0.9, 0.5]} />
-        <Paint color={decal} />
+        <Paint color={decal}  finish={finish} />
       </mesh>
       <mesh position={[0, 0.05, -1.8]}>
         <boxGeometry args={[1.6, 0.08, 0.5]} />
-        <Paint color={decal} />
+        <Paint color={decal}  finish={finish} />
       </mesh>
     </group>
   );

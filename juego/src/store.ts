@@ -110,6 +110,7 @@ export interface VehiclePrefs {
   boat: BoatId;
   plane: PlaneId;
   sub: SubId;
+  finish: import("./data").FinishId;
 }
 
 export interface Settings {

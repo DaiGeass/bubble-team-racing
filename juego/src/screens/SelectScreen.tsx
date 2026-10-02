@@ -18,6 +18,8 @@ import {
   MODES,
   WEAPONS,
   WEAPON_META,
+  FINISH_META,
+  FINISHES,
   type WheelStyle,
   type ShapeId,
   type ThemeId,
@@ -27,6 +29,7 @@ import {
   type PlaneId,
   type SubId,
   type VehicleMode,
+  type FinishId,
 } from "../data";
 import { setActiveTrack } from "../trackCurve";
 import { Bubbles, GlassButton, Panel, PrimaryButton, StatBar } from "../ui/common";
@@ -500,7 +503,24 @@ export default function SelectScreen() {
                       {t(p === "A" ? "presetA" : "presetB")}
                     </button>
                   ))}
+                                <div className="col-span-full">
+                  <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-sky-900/70">{t("finish")}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {FINISHES.map((fin: any) => (
+                      <button
+                        key={fin}
+                        onClick={() => setVehicle({ finish: fin })}
+                        className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                          vehicle.finish === fin ? "glass-btn text-sky-900" : "bg-white/25 text-sky-800/70 hover:bg-white/45"
+                        }`}
+                      >
+                        <span className="h-4 w-4 rounded-full border-2 border-white/70" style={{ background: FINISH_META[fin as FinishId].swatch }} />
+                        {t(FINISH_META[fin as FinishId].labelKey)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+</div>
               </div>
             </Panel>
           )}

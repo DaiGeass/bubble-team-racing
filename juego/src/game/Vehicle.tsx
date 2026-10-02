@@ -439,7 +439,7 @@ function Chassis({
   wingRef: React.MutableRefObject<THREE.Group | null>;
   wheelRef: React.MutableRefObject<THREE.Group | null>;
 }) {
-  const { body, decal, shape } = vehicle;
+  const { body, decal, shape } = vehicle as any; const finish = (vehicle as any).finish as import("../data").FinishId | undefined;
   const propRef = useRef<THREE.Mesh>(null);
   useFrame((_, dt) => {
     if (propRef.current && wingRef.current?.visible) propRef.current.rotation.z += dt * 30;
@@ -552,7 +552,7 @@ function Chassis({
         </>
       )}
 
-      <ExtraShapes shape={shape} body={body} decal={decal} glow={glow} />
+      <ExtraShapes shape={shape} body={body} decal={decal} glow={glow} finish={finish} />
       <Spoiler kind={vehicle.spoiler ?? "none"} decal={decal} glow={glow} />
       <Boosters kind={vehicle.booster ?? "single"} glow={glow} />
 
@@ -749,13 +749,13 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
           <Chassis vehicle={vehicle} glow={glow} spin={spin} hullRef={hullRef} wingRef={wingRef} wheelRef={wheelRef} />
         </group>
         <group ref={boatAltRef} visible={false}>
-          <BoatAlt kind={vehicle.boat ?? "cat"} body={vehicle.body} decal={vehicle.decal} glow={glow} />
+          <BoatAlt kind={vehicle.boat ?? "cat"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
         </group>
         <group ref={planeAltRef} visible={false}>
-          <PlaneAlt kind={vehicle.plane ?? "wing"} body={vehicle.body} decal={vehicle.decal} glow={glow} />
+          <PlaneAlt kind={vehicle.plane ?? "wing"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
         </group>
         <group ref={subRef} visible={false}>
-          <SubModel kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} />
+          <SubModel kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
         </group>
         <ModeModels vehicle={vehicle} stateRef={stateRef} glow={glow} />
         <group ref={mainPilot}>
