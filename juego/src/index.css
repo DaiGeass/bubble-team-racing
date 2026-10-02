@@ -197,3 +197,90 @@ input[type="range"] {
 button, a, [role="button"] {
   touch-action: manipulation;
 }
+
+/* ---------- UI skins per aesthetic ----------
+   The world already mutates per circuit; these make the chrome follow too, so a
+   dreamcore run does not sit inside the same aqua glass as a retro one. */
+
+.theme-dreamcore {
+  color: #2b2050;
+}
+.theme-dreamcore .font-display {
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 18px rgba(255, 225, 245, 0.9);
+}
+.theme-dreamcore .glass-panel,
+.theme-dreamcore .glass-btn {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.72), rgba(226, 214, 255, 0.42) 55%, rgba(255, 225, 245, 0.5));
+  border: 1.5px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 16px 50px rgba(150, 130, 220, 0.32),
+    inset 0 2px 0 #fff,
+    inset 0 -12px 30px rgba(200, 180, 255, 0.35),
+    0 0 30px rgba(255, 225, 245, 0.35);
+}
+.theme-dreamcore .glass-btn:hover {
+  box-shadow: 0 18px 60px rgba(170, 140, 240, 0.45), 0 0 40px rgba(255, 225, 245, 0.6);
+}
+.theme-dreamcore .aero-gradient {
+  background: linear-gradient(180deg, #c7b9ff 0%, #f2e6ff 45%, #ffe1f5 100%);
+}
+.theme-dreamcore .bubble {
+  background: radial-gradient(circle at 30% 25%, #fff, rgba(226, 214, 255, 0.5));
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.9);
+}
+
+.theme-cyberpunk {
+  color: #e8f7ff;
+}
+.theme-cyberpunk .font-display {
+  text-shadow: 0 0 14px rgba(57, 255, 20, 0.85), 0 0 34px rgba(124, 156, 255, 0.55);
+  letter-spacing: 0.14em;
+}
+.theme-cyberpunk .glass-panel,
+.theme-cyberpunk .glass-btn {
+  background: linear-gradient(160deg, rgba(15, 16, 43, 0.86), rgba(26, 20, 51, 0.78));
+  border: 1px solid rgba(57, 255, 20, 0.65);
+  box-shadow: 0 0 26px rgba(57, 255, 20, 0.28), inset 0 0 26px rgba(124, 156, 255, 0.16);
+  color: #e8f7ff;
+}
+.theme-cyberpunk .glass-btn:hover {
+  border-color: #39ff14;
+  box-shadow: 0 0 40px rgba(57, 255, 20, 0.55), inset 0 0 30px rgba(124, 156, 255, 0.25);
+}
+.theme-cyberpunk .aero-gradient {
+  background: radial-gradient(circle at 50% 120%, #1a1433, #050510 70%);
+}
+.theme-cyberpunk .bubble {
+  background: rgba(57, 255, 20, 0.16);
+  border: 1px solid rgba(57, 255, 20, 0.55);
+  box-shadow: 0 0 16px rgba(57, 255, 20, 0.5);
+}
+
+.theme-noir {
+  color: #f5f5f5;
+  filter: grayscale(1) contrast(1.06);
+}
+.theme-noir .font-display {
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: 0.16em;
+}
+.theme-noir .glass-panel,
+.theme-noir .glass-btn {
+  background: rgba(16, 16, 16, 0.82);
+  border: 1px solid rgba(216, 216, 216, 0.6);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  color: #f5f5f5;
+  backdrop-filter: blur(4px) saturate(0%);
+  -webkit-backdrop-filter: blur(4px) saturate(0%);
+}
+.theme-noir .glass-btn:hover {
+  border-color: #fff;
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.35);
+}
+.theme-noir .aero-gradient {
+  background: linear-gradient(180deg, #0b0b0b, #1a1a1a);
+}
+.theme-noir .bubble {
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.5), rgba(160, 160, 160, 0.16));
+}
