@@ -17,6 +17,7 @@ export interface KartVisualState {
   fused?: boolean;
   ghost?: boolean;
   magnet?: boolean;
+  exploding?: boolean;
 }
 
 export interface VehicleConfig {
@@ -676,6 +677,10 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
     if (gunnerMain.current) gunnerMain.current.visible = fused && usePartner;
     if (gunnerAlt.current) gunnerAlt.current.visible = fused && !usePartner;
 
+    if (body.current && st?.exploding) {
+      const f = Math.abs(Math.sin(t.current * 40));
+      (body.current as any).traverse((ch: any) => { if (ch.isMesh && ch.material) { const m = ch.material; if (Array.isArray(m)) m.forEach((mm:any)=>mm.emissive?.setHex?.(f>0.5?0xff4d6d:0xffffff)); else m.emissive?.setHex?.(f>0.5?0xff4d6d:0xffffff); } });
+    }
     if (body.current) {
       const bobAmp = mode === "boat" ? 0.08 : mode === "plane" ? 0.06 : 0.02;
       body.current.position.y = Math.sin(t.current * (mode === "boat" ? 3.2 : 6)) * bobAmp;
@@ -701,6 +706,10 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
       (shield.current.material as THREE.MeshStandardMaterial).opacity = 0.3 + Math.sin(t.current * 7) * 0.12;
     }
     // GHOST: the whole vehicle turns into translucent glass
+    if (body.current && st?.exploding) {
+      const f = Math.abs(Math.sin(t.current * 40));
+      (body.current as any).traverse((ch: any) => { if (ch.isMesh && ch.material) { const m = ch.material; if (Array.isArray(m)) m.forEach((mm:any)=>mm.emissive?.setHex?.(f>0.5?0xff4d6d:0xffffff)); else m.emissive?.setHex?.(f>0.5?0xff4d6d:0xffffff); } });
+    }
     if (body.current) {
       const ghost = !!st?.ghost;
       if (ghost !== ghostApplied.current) {
