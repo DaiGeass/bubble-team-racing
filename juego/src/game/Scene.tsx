@@ -1144,6 +1144,21 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         }
       }
     }
+    // ---- moving traps ----
+    const trkP2 = getActiveTrack();
+    if (r.mode === "land" && r.hazardCd <= 0 && trkP2.traps) {
+      for (const tr of trkP2.traps) {
+        const t = ((tr.t + (performance.now() * 0.0001 * tr.speed + tr.phase)) % 1 + 1) % 1;
+        const d = Math.abs((t - r.t + 0.5) % 1 - 0.5);
+        if (d < 0.015) {
+          r.hazardCd = 1.0;
+          applyHit(r, false);
+          emitParticles({ position: r.pos.clone().setY(r.y + 0.8), color: WEAPON_META.zap.glow, count: 12, speed: 3, spread: 1, size: 0.2, life: 0.45 });
+          break;
+        }
+      }
+    }
+
 
     // ---- FUSION (Crash Tag Team style): partner mans the turret, auto-fires ----
     if (r.isPlayer && r.fuseTimer > 0) {
