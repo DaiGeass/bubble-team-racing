@@ -16,25 +16,29 @@ import {
   PLANES,
   SUBS,
   TRACK_WIDTH,
-  ZONES,
   SKY_ALTITUDE,
   WEAPON_META,
   raceSnapshot,
   hazardState,
   rollWeapon,
   zoneAt,
+  zoneOfKind,
   craftSpeed,
   craftHandling,
   type CharacterDef,
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, corridorBounds, branchCenterAt, getActiveTrack, getShortcuts } from "../trackCurve";
+import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, corridorBounds, branchCenterAt, getActiveTrack, getShortcuts, surfaceYAt, trackFrameAt } from "../trackCurve";
 import { emitParticles, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
 
 const TAG_COOLDOWN_MAX = 3.6;
 const RING_COUNT = 7;
+/** Downward acceleration for crest launches and jumps, in units per second squared. */
+const GRAVITY = 26;
+/** Fastest vertical speed the road surface may drag a vehicle up or down with it. */
+const MAX_GLUE = 34;
 
 function wrapAngle(a: number) {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -51,6 +55,16 @@ interface Racer {
   vehicle: VehicleConfig;
   pos: THREE.Vector3;
   y: number;
+  /** vertical velocity, only meaningful while airborne */
+  vy: number;
+  airborne: boolean;
+  /** surface height under the vehicle, used to spot crests that launch it */
+  groundY: number;
+  /** road slope in radians, drives the visual pitch */
+  pitch: number;
+  /** seconds spent stuck off the road, and how long the last rescue took */
+  stuckFor: number;
+  respawnLock: number;
   heading: number;
   speed: number;
   steerSmooth: number;
@@ -150,13 +164,14 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const shortcuts = useMemo(() => getShortcuts(), []);
 
   const skyRings = useMemo(() => {
-    const z = ZONES[1];
+    const z = zoneOfKind("sky");
     const out: THREE.Vector3[] = [];
+    if (!z) return out;
     for (let i = 0; i < RING_COUNT; i++) {
       const t = z.t0 + ((i + 0.5) / RING_COUNT) * (z.t1 - z.t0);
       const p = trackCurvePoint(t);
       const u = (t - z.t0) / (z.t1 - z.t0);
-      out.push(new THREE.Vector3(p.x, Math.sin(u * Math.PI) * SKY_ALTITUDE + 1.6, p.z));
+      out.push(new THREE.Vector3(p.x, p.y + Math.sin(u * Math.PI) * SKY_ALTITUDE + 1.6, p.z));
     }
     return out;
   }, []);
@@ -200,7 +215,13 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
               sub: SUBS[(i + 2) % SUBS.length],
             },
         pos,
-        y: 0,
+        y: surfaceYAt(nearestT(pos)),
+        vy: 0,
+        airborne: false,
+        groundY: 0,
+        pitch: 0,
+        stuckFor: 0,
+        respawnLock: 0,
         heading: heading0,
         speed: 0,
         steerSmooth: 0,
@@ -637,20 +658,22 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const e = Math.min(1, w.t);
       const ease = e * e * (3 - 2 * e);
       r.pos.lerpVectors(w.from, w.to, ease);
-      r.y = Math.sin(e * Math.PI) * 8;
+      r.y = THREE.MathUtils.lerp(w.from.y, w.to.y, ease) + Math.sin(e * Math.PI) * 8;
+      r.vy = 0;
+      r.airborne = false;
       r.heading += wrapAngle(w.heading - r.heading) * Math.min(1, dt * 6);
       if (frame.current % 2 === 0) {
         emitParticles({ position: r.pos.clone().setY(r.y + 0.4), color: theme.glow, count: 2, speed: 0.8, spread: 0.3, size: 0.22, life: 0.5, gravity: 0 });
       }
       if (e >= 1) {
         r.warp = null;
-        r.y = 0;
         r.t = nearestT(r.pos);
+        r.y = surfaceYAt(r.t);
         r.mode = "land";
         r.boostTimer = Math.max(r.boostTimer, 1.2);
         r.boostMult = Math.max(r.boostMult, 1.5);
         r.warpCd = 2.5;
-        emitParticles({ position: r.pos.clone().setY(0.6), color: theme.glow, count: 30, speed: 5, spread: 1.4, size: 0.24, life: 0.7 });
+        emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: theme.glow, count: 30, speed: 5, spread: 1.4, size: 0.24, life: 0.7 });
         if (r.isPlayer) {
           addShake(0.3);
           sfx.boost();
@@ -810,16 +833,48 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       r.pos.addScaledVector(nrm, -r.steerSmooth * 0.32 * Math.abs(r.speed) * dt);
     }
 
-    // altitude per mode
+    // ---- vertical: every mode rides the road surface, and crests launch the vehicle ----
+    const groundY = surfaceYAt(r.t);
+    let rideY = groundY;
     if (r.mode === "plane") {
-      r.y = Math.sin(Math.min(1, Math.max(0, inSky)) * Math.PI) * SKY_ALTITUDE;
+      rideY = groundY + Math.sin(Math.min(1, Math.max(0, inSky)) * Math.PI) * SKY_ALTITUDE;
     } else if (r.mode === "boat") {
-      r.y = -0.12 + Math.sin(performance.now() * 0.004 + r.aiPhase) * 0.09;
+      rideY = groundY - 0.12 + Math.sin(performance.now() * 0.004 + r.aiPhase) * 0.09;
     } else if (r.mode === "sub") {
-      r.y = THREE.MathUtils.lerp(r.y, 0.35 + Math.sin(performance.now() * 0.003 + r.aiPhase) * 0.1, 0.12);
-    } else {
-      r.y = THREE.MathUtils.lerp(r.y, 0, 0.2);
+      rideY = groundY + 0.35 + Math.sin(performance.now() * 0.003 + r.aiPhase) * 0.1;
     }
+
+    if (r.mode === "plane") {
+      // planes fly: hold the altitude profile whatever the ground does
+      r.airborne = false;
+      r.vy = 0;
+      r.y = THREE.MathUtils.lerp(r.y, rideY, 0.12);
+    } else {
+      // vertical speed needed to stay glued to the surface over this frame, capped so a
+      // discontinuity (respawn, warp exit, zone change) can never fling the car upward
+      const need = THREE.MathUtils.clamp(dt > 1e-4 ? (rideY - r.y) / dt : 0, -MAX_GLUE, MAX_GLUE);
+      const fall = r.vy - GRAVITY * dt;
+      // the ground fell away faster than gravity can follow: we leave it
+      if (!r.airborne && need < fall - 0.5) r.airborne = true;
+      if (r.airborne) {
+        r.vy = fall;
+        r.y += r.vy * dt;
+        if (r.y <= rideY && r.vy <= 0) {
+          r.y = rideY;
+          r.vy = 0;
+          r.airborne = false;
+        }
+      } else {
+        r.y = rideY;
+        r.vy = THREE.MathUtils.lerp(r.vy, need, 0.4);
+      }
+    }
+    r.groundY = groundY;
+
+    // the road slope becomes visual pitch, so hills are felt and not only seen
+    const surface = trackFrameAt(r.t);
+    const slope = Math.asin(THREE.MathUtils.clamp(surface.tangent.y, -1, 1));
+    r.pitch = THREE.MathUtils.lerp(r.pitch, slope, r.mode === "plane" ? 0.05 : 0.25);
 
     // ---- track containment (relaxed while flying) ----
     const newT = nearestT(r.pos, r.t);
@@ -853,6 +908,36 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       } else {
         r.speed *= 1 - (r.mode === "plane" ? 0.25 : 0.8) * dt;
       }
+    }
+
+    // ---- rescue: nobody stays stranded off the road ----
+    if (r.respawnLock > 0) r.respawnLock -= dt;
+    const cb2 = corridorBounds(newT);
+    const outsideBy = offset < cb2.min ? cb2.min - offset : offset > cb2.max ? offset - cb2.max : 0;
+    if (r.mode !== "plane" && (outsideBy > 4 || r.y < groundY - 8)) {
+      r.stuckFor += dt;
+      // three seconds of drifting off the road puts you back on the tarmac
+      if (r.stuckFor > 3 && r.respawnLock <= 0) {
+        r.stuckFor = 0;
+        r.respawnLock = 1.2;
+        r.t = newT;
+        const tangent = trackTangentAt(newT);
+        const nrm = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+        const back = offset > cb2.max ? cb2.max - 3 : cb2.min + 3;
+        r.pos.addScaledVector(nrm, back - offset);
+        r.y = surfaceYAt(newT);
+        r.vy = 0;
+        r.airborne = false;
+        r.speed = Math.min(r.speed, 6);
+        r.heading = Math.atan2(tangent.x, tangent.z);
+        emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: theme.glow, count: 26, speed: 5, spread: 1.4, size: 0.22, life: 0.6 });
+        if (r.isPlayer) {
+          addShake(0.25);
+          sfx.bump();
+        }
+      }
+    } else if (r.speed > 1) {
+      r.stuckFor = 0;
     }
 
     // ---- lap ----
@@ -1104,7 +1189,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
     if (r.group.current) {
       r.group.current.position.set(r.pos.x, r.y, r.pos.z);
+      r.group.current.rotation.order = "YXZ";
       r.group.current.rotation.y = r.heading;
+      r.group.current.rotation.x = r.mode === "plane" ? 0 : -r.pitch;
     }
   }
 
@@ -1293,7 +1380,14 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
 
     // minimap snapshot
-    raceSnapshot.racers = racers.map((r) => ({ x: r.pos.x, z: r.pos.z, color: r.isPlayer ? "#ffffff" : r.vehicle.body, isPlayer: r.isPlayer, mode: r.mode }));
+    raceSnapshot.racers = racers.map((r) => ({
+      x: r.pos.x,
+      y: r.y,
+      z: r.pos.z,
+      color: r.isPlayer ? "#ffffff" : r.vehicle.body,
+      isPlayer: r.isPlayer,
+      mode: r.mode,
+    }));
     raceSnapshot.camAngle = player.heading;
 
     updateCamera(dt, false);
@@ -1313,7 +1407,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       .setY(player.y)
       .addScaledVector(fwd, -dist - speedKick * 1.4)
       .add(new THREE.Vector3(0, height + speedKick * 0.5, 0));
-    const look = player.pos.clone().setY(player.y).addScaledVector(fwd, 7).add(new THREE.Vector3(0, 1.2, 0));
+    // look at the road ahead, not at the sky above a crest or into the ground on a descent
+    const aheadY = surfaceYAt(player.t + 0.022);
+    const look = player.pos.clone()
+      .setY(THREE.MathUtils.lerp(player.y, aheadY, 0.8) + 1.2)
+      .addScaledVector(fwd, 7);
     camPos.current.lerp(desired, idle ? 0.05 : 0.11);
     camLook.current.lerp(look, idle ? 0.05 : 0.13);
 

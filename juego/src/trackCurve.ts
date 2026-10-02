@@ -70,6 +70,45 @@ export function trackTangentAt(t: number) {
   return trackCurve.getTangentAt(tt);
 }
 
+const _tangent = new THREE.Vector3();
+
+/**
+ * Orthonormal surface frame at t. `normal` is the horizontal lateral axis and `up` the
+ * true 3D normal of the road, so a circuit with elevation gets a real slope.
+ */
+export function trackFrameAt(t: number) {
+  const tt = ((t % 1) + 1) % 1;
+  const point = trackCurve.getPointAt(tt);
+  const tangent = _tangent.copy(trackCurve.getTangentAt(tt)).normalize();
+  const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
+  if (normal.lengthSq() < 1e-8) normal.set(1, 0, 0);
+  normal.normalize();
+  // keep it perpendicular to the tangent now that the tangent can climb
+  normal.addScaledVector(tangent, -normal.dot(tangent));
+  if (normal.lengthSq() < 1e-8) normal.set(1, 0, 0);
+  else normal.normalize();
+  const up = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+  if (up.y < 0) up.negate();
+  return { point, tangent: tangent.clone(), normal, up };
+}
+
+/** Height of the road surface at t. Lanes are level across, so the offset does not matter. */
+export function surfaceYAt(t: number): number {
+  return trackPointAt(t).y;
+}
+
+/** True 3D normal of the road at t, for orienting anything that sits on the surface. */
+export function surfaceUpAt(t: number): THREE.Vector3 {
+  return trackFrameAt(t).up;
+}
+
+/** Slope angle of the road at t, positive when the track climbs ahead. */
+export function slopeAt(t: number): number {
+  const tt = ((t % 1) + 1) % 1;
+  const tan = trackCurve.getTangentAt(tt);
+  return Math.asin(THREE.MathUtils.clamp(tan.y, -1, 1));
+}
+
 /** Half-width of the drivable road at parameter t (forks are wider, two lanes). */
 export function halfWidthAt(t: number) {
   const def = getActiveTrack();
@@ -153,7 +192,6 @@ export function getShortcuts(): ShortcutGeo[] {
       const tan = trackTangentAt(t);
       const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
       const p = c.clone().addScaledVector(n, s.side * (halfWidthAt(t) - 3.6));
-      p.y = 0;
       return { p, h: Math.atan2(tan.x, tan.z) };
     };
     const a = mk(s.t0);

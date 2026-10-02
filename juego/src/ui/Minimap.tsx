@@ -6,15 +6,24 @@ import { raceSnapshot, THEMES, ZONES } from "../data";
 const SIZE = 168;
 const PAD = 14;
 
+/** Lightens a hex colour by u, used for the elevation shading of the map. */
+function shade(hex: string, u: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * (0.12 + 0.5 * u));
+  return `rgb(${mix((n >> 16) & 255)},${mix((n >> 8) & 255)},${mix(n & 255)})`;
+}
+
 export default function Minimap() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pathRef = useRef<{ x: number; y: number; zone: "water" | "sky" | "sub" | null }[]>([]);
+  const pathRef = useRef<{ x: number; y: number; h: number; zone: "water" | "sky" | "sub" | null }[]>([]);
   const scRef = useRef<{ ax: number; ay: number; bx: number; by: number }[]>([]);
   const boundsRef = useRef({ minX: 0, maxX: 1, minZ: 0, maxZ: 1 });
 
   useEffect(() => {
     // project track once
-    const pts: { x: number; y: number; zone: "water" | "sky" | "sub" | null }[] = [];
+    const pts: { x: number; y: number; h: number; zone: "water" | "sky" | "sub" | null }[] = [];
     scRef.current = getShortcuts().map((s) => ({ ax: s.entry.x, ay: s.entry.z, bx: s.exit.x, by: s.exit.z }));
     let minX = Infinity;
     let maxX = -Infinity;
@@ -29,7 +38,7 @@ export default function Minimap() {
       minZ = Math.min(minZ, p.z);
       maxZ = Math.max(maxZ, p.z);
       const zone = ZONES.find((z) => t >= z.t0 && t <= z.t1);
-      pts.push({ x: p.x, y: p.z, zone: zone?.type ?? null });
+      pts.push({ x: p.x, y: p.z, h: p.y, zone: zone?.type ?? null });
     }
     pathRef.current = pts;
     boundsRef.current = { minX, maxX, minZ, maxZ };
@@ -76,9 +85,21 @@ export default function Minimap() {
       ctx.strokeStyle = "rgba(10,50,80,0.35)";
       ctx.lineWidth = 9;
       ctx.stroke();
-      ctx.strokeStyle = theme.road;
-      ctx.lineWidth = 6;
-      ctx.stroke();
+      // shade the ribbon by elevation so climbs and descents read at a glance
+      const hs = pts.map((p) => p.h);
+      const hMin = Math.min(...hs);
+      const hSpan = Math.max(1, Math.max(...hs) - hMin);
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i];
+        const b = pts[i + 1];
+        const u = (a.h - hMin) / hSpan;
+        ctx.beginPath();
+        ctx.moveTo(toX(a.x), toY(a.y));
+        ctx.lineTo(toX(b.x), toY(b.y));
+        ctx.strokeStyle = shade(theme.road, u);
+        ctx.lineWidth = 6;
+        ctx.stroke();
+      }
 
       // zones
       ctx.lineWidth = 6;
@@ -171,6 +192,15 @@ export default function Minimap() {
           ctx.fill();
           ctx.strokeStyle = "rgba(255,255,255,0.9)";
           ctx.lineWidth = 1.4;
+          ctx.stroke();
+        }
+        if (r.isPlayer) {
+          // little altitude tick: shows how high the road is right now
+          const u = Math.max(0, Math.min(1, (r.y - hMin) / hSpan));
+          ctx.beginPath();
+          ctx.arc(x, y, 7.5, -Math.PI / 2, -Math.PI / 2 + u * Math.PI * 2);
+          ctx.strokeStyle = shade(theme.glow, u);
+          ctx.lineWidth = 2.4;
           ctx.stroke();
         }
         if (r.mode === "plane") {

@@ -411,8 +411,10 @@ export const MODES: Record<string, GameMode> = {
 export interface Zone {
   t0: number;
   t1: number;
-  type: "water" | "sky" | "sub";
+  type: ZoneKind;
 }
+
+export type ZoneKind = "water" | "sky" | "sub";
 
 export interface ShortcutDef {
   t0: number;
@@ -436,34 +438,67 @@ export interface TrackDef {
   branches: Branch[];
   hazards: number;
   difficulty: 1 | 2 | 3;
+  relief?: ReliefDef;
 }
 
-function scaled(pts: [number, number, number][], k: number): [number, number, number][] {
-  return pts.map((p) => [p[0] * k, p[1], p[2] * k] as [number, number, number]);
+/** Vertical profile of a circuit, written as harmonics of the loop angle. */
+export interface ReliefDef {
+  /** peak height of the terrain the road rides on, in world units */
+  amp: number;
+  /** [frequency, amplitude, phase] triples, amplitudes normalised so the sum spans about -1..1 */
+  waves: [number, number, number][];
+}
+
+/** Height of the terrain at loop angle th. Never negative: the road stays above the sea. */
+export function reliefY(th: number, relief?: ReliefDef): number {
+  if (!relief) return 0;
+  let sum = 0;
+  for (const [f, a, p] of relief.waves) sum += a * Math.sin(f * th + p);
+  const clamped = Math.min(1, Math.max(-1, sum));
+  return relief.amp * (0.5 + 0.5 * clamped);
+}
+
+function scaled(
+  pts: [number, number, number][],
+  k: number,
+  relief?: ReliefDef
+): [number, number, number][] {
+  return pts.map((p) => {
+    const th = Math.atan2(p[0], -p[2]);
+    return [p[0] * k, reliefY(th, relief), p[2] * k] as [number, number, number];
+  });
 }
 
 /** Star-shaped closed loop with harmonic wobble: long, winding and never self-crossing. */
-function radial(n: number, R: number, harm: [number, number, number][], sx = 1, sz = 1): [number, number, number][] {
+function radial(
+  n: number,
+  R: number,
+  harm: [number, number, number][],
+  sx = 1,
+  sz = 1,
+  relief?: ReliefDef
+): [number, number, number][] {
   const pts: [number, number, number][] = [];
   for (let i = 0; i < n; i++) {
     const th = (i / n) * Math.PI * 2;
     let k = 1;
     for (const [f, a, p] of harm) k += a * Math.sin(f * th + p);
     const r = R * k;
-    pts.push([Math.sin(th) * r * sx, 0, -Math.cos(th) * r * sz]);
+    pts.push([Math.sin(th) * r * sx, reliefY(th, relief), -Math.cos(th) * r * sz]);
   }
   return pts;
 }
 
-const K = 1.4; // classic circuits are stretched to be much longer
+const K = 1.75; // classic circuits are stretched to be much longer
 
 export const TRACKS: TrackDef[] = [
   {
     id: "laguna", difficulty: 1, hazards: 3,
+    relief: { amp: 14, waves: [[1, 0.7, 0.6], [3, 0.35, 2.1]] },
     points: scaled([
       [0, 0, -46], [26, 0, -40], [46, 0, -18], [50, 0, 8], [34, 0, 32], [10, 0, 28],
       [-6, 0, 8], [-28, 0, 10], [-46, 0, 32], [-62, 0, 12], [-56, 0, -18], [-30, 0, -36], [-12, 0, -26],
-    ], K),
+    ], K, { amp: 14, waves: [[1, 0.7, 0.6], [3, 0.35, 2.1]] }),
     zones: [{ t0: 0.13, t1: 0.27, type: "water" }, { t0: 0.55, t1: 0.68, type: "sky" }],
     forks: [[0.33, 0.44]],
     shortcuts: [{ t0: 0.72, t1: 0.82, side: 1 }],
@@ -471,11 +506,12 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "vortice", difficulty: 2, hazards: 5,
+    relief: { amp: 20, waves: [[2, 0.75, 1.1], [5, 0.3, 0.2]] },
     points: scaled([
       [0, 0, -62], [30, 0, -58], [52, 0, -44], [40, 0, -22], [56, 0, -4], [64, 0, 20],
       [52, 0, 46], [26, 0, 52], [6, 0, 34], [-8, 0, 20], [-20, 0, 38], [-44, 0, 50],
       [-66, 0, 36], [-58, 0, 8], [-34, 0, -4], [-48, 0, -26], [-38, 0, -52], [-12, 0, -50],
-    ], K),
+    ], K, { amp: 20, waves: [[2, 0.75, 1.1], [5, 0.3, 0.2]] }),
     zones: [{ t0: 0.3, t1: 0.42, type: "water" }, { t0: 0.66, t1: 0.8, type: "sky" }, { t0: 0.86, t1: 0.95, type: "sub" }],
     forks: [[0.06, 0.18], [0.46, 0.56]],
     shortcuts: [{ t0: 0.2, t1: 0.27, side: -1 }, { t0: 0.57, t1: 0.64, side: 1 }],
@@ -483,12 +519,13 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "canon", difficulty: 3, hazards: 7,
+    relief: { amp: 26, waves: [[1, 0.8, 2.4], [4, 0.35, 1.4], [7, 0.15, 0.7]] },
     points: scaled([
       [0, 0, -70], [26, 0, -66], [34, 0, -46], [58, 0, -42], [72, 0, -18], [56, 0, 0],
       [68, 0, 20], [58, 0, 46], [30, 0, 40], [22, 0, 62], [-8, 0, 70], [-28, 0, 52],
       [-14, 0, 32], [-38, 0, 18], [-62, 0, 30], [-78, 0, 8], [-62, 0, -18], [-36, 0, -22],
       [-50, 0, -48], [-22, 0, -62], [-4, 0, -52],
-    ], K),
+    ], K, { amp: 26, waves: [[1, 0.8, 2.4], [4, 0.35, 1.4], [7, 0.15, 0.7]] }),
     zones: [{ t0: 0.36, t1: 0.47, type: "water" }, { t0: 0.76, t1: 0.9, type: "sky" }, { t0: 0.26, t1: 0.33, type: "sub" }],
     forks: [[0.1, 0.22], [0.52, 0.64]],
     shortcuts: [{ t0: 0.66, t1: 0.74, side: -1 }, { t0: 0.56, t1: 0.62, side: 1 }],
@@ -496,11 +533,12 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "celeste", difficulty: 2, hazards: 4,
+    relief: { amp: 18, waves: [[3, 0.7, 0.3], [6, 0.3, 2.6]] },
     points: scaled([
       [0, 0, -58], [34, 0, -54], [62, 0, -32], [68, 0, 2], [52, 0, 30], [30, 0, 52],
       [0, 0, 54], [-22, 0, 44], [-26, 0, 18], [-10, 0, 2], [-34, 0, -12], [-62, 0, 0],
       [-72, 0, -28], [-50, 0, -54], [-20, 0, -50],
-    ], K),
+    ], K, { amp: 18, waves: [[3, 0.7, 0.3], [6, 0.3, 2.6]] }),
     zones: [{ t0: 0.18, t1: 0.3, type: "water" }, { t0: 0.48, t1: 0.72, type: "sky" }],
     forks: [[0.78, 0.88]],
     shortcuts: [{ t0: 0.34, t1: 0.44, side: 1 }],
@@ -508,12 +546,13 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "atlantis", difficulty: 3, hazards: 8,
+    relief: { amp: 22, waves: [[1, 0.7, 1.9], [3, 0.4, 0.5]] },
     points: scaled([
       [0, 0, -74], [34, 0, -70], [56, 0, -56], [44, 0, -34], [70, 0, -22], [80, 0, 4],
       [62, 0, 18], [72, 0, 44], [48, 0, 60], [20, 0, 52], [12, 0, 28], [-6, 0, 16],
       [-18, 0, 36], [-44, 0, 56], [-72, 0, 52], [-88, 0, 28], [-76, 0, 2], [-56, 0, -12],
       [-72, 0, -38], [-58, 0, -62], [-28, 0, -70], [-8, 0, -58],
-    ], K),
+    ], K, { amp: 22, waves: [[1, 0.7, 1.9], [3, 0.4, 0.5]] }),
     zones: [{ t0: 0.14, t1: 0.22, type: "water" }, { t0: 0.58, t1: 0.74, type: "sky" }, { t0: 0.3, t1: 0.38, type: "sub" }],
     forks: [[0.04, 0.12], [0.44, 0.54], [0.84, 0.94]],
     shortcuts: [{ t0: 0.76, t1: 0.83, side: -1 }, { t0: 0.39, t1: 0.43, side: 1 }],
@@ -521,12 +560,13 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "aether", difficulty: 3, hazards: 6,
+    relief: { amp: 30, waves: [[2, 0.8, 0.8], [5, 0.35, 2.2]] },
     points: scaled([
       [0, 0, -68], [38, 0, -62], [66, 0, -40], [58, 0, -14], [84, 0, 2], [74, 0, 28],
       [52, 0, 42], [24, 0, 34], [10, 0, 54], [-16, 0, 66], [-42, 0, 56], [-52, 0, 32],
       [-32, 0, 18], [-52, 0, 4], [-78, 0, 16], [-92, 0, -12], [-70, 0, -34], [-44, 0, -32],
       [-54, 0, -58], [-24, 0, -70], [-6, 0, -56],
-    ], K),
+    ], K, { amp: 30, waves: [[2, 0.8, 0.8], [5, 0.35, 2.2]] }),
     zones: [{ t0: 0.28, t1: 0.38, type: "water" }, { t0: 0.55, t1: 0.85, type: "sky" }],
     forks: [[0.08, 0.2], [0.42, 0.5], [0.88, 0.98]],
     shortcuts: [{ t0: 0.21, t1: 0.27, side: 1 }],
@@ -534,7 +574,8 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "neon", difficulty: 3, hazards: 7,
-    points: radial(30, 118, [[2, 0.14, 0.3], [3, 0.12, 1.2], [5, 0.09, 2.1]], 1.15, 0.9),
+    relief: { amp: 16, waves: [[4, 0.75, 1.7], [8, 0.25, 0.4]] },
+    points: radial(30, 148, [[2, 0.14, 0.3], [3, 0.12, 1.2], [5, 0.09, 2.1]], 1.15, 0.9, { amp: 16, waves: [[4, 0.75, 1.7], [8, 0.25, 0.4]] }),
     zones: [{ t0: 0.22, t1: 0.3, type: "water" }, { t0: 0.62, t1: 0.78, type: "sky" }, { t0: 0.4, t1: 0.48, type: "sub" }],
     forks: [[0.08, 0.16], [0.84, 0.94]],
     shortcuts: [{ t0: 0.32, t1: 0.38, side: 1 }, { t0: 0.52, t1: 0.6, side: -1 }],
@@ -542,7 +583,8 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "coral", difficulty: 2, hazards: 4,
-    points: radial(28, 105, [[3, 0.16, 0.8], [4, 0.1, 2.4], [6, 0.06, 0.4]], 1.0, 1.1),
+    relief: { amp: 13, waves: [[3, 0.7, 2.8], [6, 0.3, 1.1]] },
+    points: radial(28, 131, [[3, 0.16, 0.8], [4, 0.1, 2.4], [6, 0.06, 0.4]], 1.0, 1.1, { amp: 13, waves: [[3, 0.7, 2.8], [6, 0.3, 1.1]] }),
     zones: [{ t0: 0.1, t1: 0.2, type: "water" }, { t0: 0.68, t1: 0.8, type: "sky" }, { t0: 0.3, t1: 0.42, type: "sub" }],
     forks: [[0.5, 0.62]],
     shortcuts: [{ t0: 0.22, t1: 0.28, side: -1 }, { t0: 0.84, t1: 0.92, side: 1 }],
@@ -550,7 +592,8 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "glacier", difficulty: 3, hazards: 6,
-    points: radial(34, 128, [[2, 0.2, 2], [4, 0.12, 0.6], [7, 0.07, 1.4]], 1.2, 0.95),
+    relief: { amp: 24, waves: [[1, 0.75, 0.2], [3, 0.35, 2.9]] },
+    points: radial(34, 160, [[2, 0.2, 2], [4, 0.12, 0.6], [7, 0.07, 1.4]], 1.2, 0.95, { amp: 24, waves: [[1, 0.75, 0.2], [3, 0.35, 2.9]] }),
     zones: [{ t0: 0.36, t1: 0.44, type: "water" }, { t0: 0.6, t1: 0.72, type: "sky" }],
     forks: [[0.12, 0.24], [0.78, 0.9]],
     shortcuts: [{ t0: 0.26, t1: 0.34, side: 1 }, { t0: 0.48, t1: 0.56, side: -1 }],
@@ -558,7 +601,8 @@ export const TRACKS: TrackDef[] = [
   },
   {
     id: "retro", difficulty: 2, hazards: 6,
-    points: radial(32, 112, [[4, 0.2, 0], [8, 0.06, 0.5]], 1, 1),
+    relief: { amp: 12, waves: [[2, 0.7, 2.2], [5, 0.3, 0.9]] },
+    points: radial(32, 140, [[4, 0.2, 0], [8, 0.06, 0.5]], 1, 1, { amp: 12, waves: [[2, 0.7, 2.2], [5, 0.3, 0.9]] }),
     zones: [{ t0: 0.2, t1: 0.28, type: "water" }, { t0: 0.58, t1: 0.7, type: "sky" }, { t0: 0.74, t1: 0.82, type: "sub" }],
     forks: [[0.06, 0.14], [0.4, 0.5]],
     shortcuts: [{ t0: 0.3, t1: 0.37, side: 1 }, { t0: 0.86, t1: 0.93, side: -1 }],
@@ -569,7 +613,8 @@ export const TRACKS: TrackDef[] = [
 TRACKS.push(
   {
     id: "prisma", difficulty: 3, hazards: 8,
-    points: radial(36, 132, [[2, 0.18, 1.1], [3, 0.13, 2.6], [5, 0.08, 0.2], [8, 0.05, 1.8]], 1.1, 1.0),
+    relief: { amp: 28, waves: [[1, 0.8, 1.5], [4, 0.4, 0.3], [7, 0.2, 2.5]] },
+    points: radial(36, 165, [[2, 0.18, 1.1], [3, 0.13, 2.6], [5, 0.08, 0.2], [8, 0.05, 1.8]], 1.1, 1.0, { amp: 28, waves: [[1, 0.8, 1.5], [4, 0.4, 0.3], [7, 0.2, 2.5]] }),
     zones: [{ t0: 0.16, t1: 0.24, type: "water" }, { t0: 0.52, t1: 0.66, type: "sky" }, { t0: 0.78, t1: 0.88, type: "sub" }],
     forks: [[0.04, 0.13], [0.3, 0.42], [0.68, 0.76]],
     shortcuts: [],
@@ -577,7 +622,8 @@ TRACKS.push(
   },
   {
     id: "nimbus", difficulty: 2, hazards: 5,
-    points: radial(30, 120, [[3, 0.17, 1.9], [6, 0.09, 0.7]], 1.25, 0.88),
+    relief: { amp: 32, waves: [[2, 0.8, 2.6], [5, 0.35, 1.2]] },
+    points: radial(30, 150, [[3, 0.17, 1.9], [6, 0.09, 0.7]], 1.25, 0.88, { amp: 32, waves: [[2, 0.8, 2.6], [5, 0.35, 1.2]] }),
     zones: [{ t0: 0.26, t1: 0.34, type: "water" }, { t0: 0.5, t1: 0.74, type: "sky" }],
     forks: [[0.08, 0.2], [0.82, 0.94]],
     shortcuts: [],
@@ -585,7 +631,8 @@ TRACKS.push(
   },
   {
     id: "abyss", difficulty: 3, hazards: 7,
-    points: radial(34, 126, [[2, 0.22, 0.4], [5, 0.1, 2.2], [7, 0.06, 1.1]], 0.95, 1.2),
+    relief: { amp: 20, waves: [[3, 0.7, 0.9], [6, 0.3, 2.2]] },
+    points: radial(34, 158, [[2, 0.22, 0.4], [5, 0.1, 2.2], [7, 0.06, 1.1]], 0.95, 1.2, { amp: 20, waves: [[3, 0.7, 0.9], [6, 0.3, 2.2]] }),
     zones: [{ t0: 0.12, t1: 0.3, type: "sub" }, { t0: 0.44, t1: 0.52, type: "water" }, { t0: 0.66, t1: 0.78, type: "sky" }],
     forks: [[0.34, 0.42], [0.86, 0.96]],
     shortcuts: [],
@@ -593,7 +640,8 @@ TRACKS.push(
   },
   {
     id: "garden", difficulty: 1, hazards: 4,
-    points: radial(28, 108, [[4, 0.15, 2.8], [2, 0.1, 0.9]], 1.05, 1.05),
+    relief: { amp: 15, waves: [[1, 0.7, 2.9], [3, 0.3, 1.4]] },
+    points: radial(28, 135, [[4, 0.15, 2.8], [2, 0.1, 0.9]], 1.05, 1.05, { amp: 15, waves: [[1, 0.7, 2.9], [3, 0.3, 1.4]] }),
     zones: [{ t0: 0.2, t1: 0.3, type: "water" }, { t0: 0.6, t1: 0.72, type: "sky" }],
     forks: [[0.42, 0.52]],
     shortcuts: [],
@@ -631,6 +679,11 @@ export const SKY_ALTITUDE = 9;
 // Mutable active zones — rewritten by setActiveTrack() in trackCurve.ts
 export const ZONES: Zone[] = [...TRACKS[0].zones];
 
+/** First zone of a given kind. Circuits do not all declare their zones in the same order. */
+export function zoneOfKind(kind: ZoneKind): Zone | null {
+  return ZONES.find((z) => z.type === kind) ?? null;
+}
+
 export function zoneAt(t: number): Zone | null {
   const tt = ((t % 1) + 1) % 1;
   for (const z of ZONES) if (tt >= z.t0 && tt <= z.t1) return z;
@@ -643,7 +696,7 @@ export function zoneProgress(t: number, z: Zone) {
 
 // Live snapshot consumed by the minimap (written by the sim each frame).
 export const raceSnapshot: {
-  racers: { x: number; z: number; color: string; isPlayer: boolean; mode: VehicleMode }[];
+  racers: { x: number; y: number; z: number; color: string; isPlayer: boolean; mode: VehicleMode }[];
   camAngle: number;
   theme: ThemeId;
 } = { racers: [], camAngle: 0, theme: "frutiger" };

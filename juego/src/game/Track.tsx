@@ -1,8 +1,8 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { trackCurve, halfWidthAt, getActiveTrack, getShortcuts } from "../trackCurve";
-import { TRACK_WIDTH, ZONES, SKY_ALTITUDE, hazardState, zoneAt, type ThemeDef, type Zone } from "../data";
+import { trackCurve, halfWidthAt, getActiveTrack, getShortcuts, nearestT, trackPointAt } from "../trackCurve";
+import { TRACK_WIDTH, ZONES, SKY_ALTITUDE, hazardState, zoneAt, zoneOfKind, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
 const SEGMENTS = 760;
 
@@ -58,7 +58,7 @@ function buildRoadGeometry() {
       if (t >= z.t0 - 0.015 && t <= z.t1 + 0.015) {
         const u = (t - z.t0) / (z.t1 - z.t0);
         const depth = z.type === "sub" ? 0 : 0.55;
-        y = -depth * Math.sin(Math.min(1, Math.max(0, u)) * Math.PI);
+        y -= depth * Math.sin(Math.min(1, Math.max(0, u)) * Math.PI);
       }
     }
     const left = center.clone().addScaledVector(normal, half);
@@ -401,15 +401,16 @@ function Props({ theme }: { theme: ThemeDef }) {
 
 function SkyRings({ theme }: { theme: ThemeDef }) {
   const rings = useMemo(() => {
-    const z = ZONES[1];
+    const z = zoneOfKind("sky");
     const out: { pos: THREE.Vector3; angle: number }[] = [];
     const n = 7;
+    if (!z) return out;
     for (let i = 0; i < n; i++) {
       const t = z.t0 + ((i + 0.5) / n) * (z.t1 - z.t0);
       const p = trackCurve.getPointAt(t);
       const tan = trackCurve.getTangentAt(t);
       const u = (t - z.t0) / (z.t1 - z.t0);
-      out.push({ pos: new THREE.Vector3(p.x, Math.sin(u * Math.PI) * SKY_ALTITUDE + 1.6, p.z), angle: Math.atan2(tan.x, tan.z) });
+      out.push({ pos: new THREE.Vector3(p.x, p.y + Math.sin(u * Math.PI) * SKY_ALTITUDE + 1.6, p.z), angle: Math.atan2(tan.x, tan.z) });
     }
     return out;
   }, []);
@@ -425,9 +426,51 @@ function SkyRings({ theme }: { theme: ThemeDef }) {
   );
 }
 
-function buildRibbon(halfWidth: number, y: number, pad: number) {
-  const z = ZONES[0];
+/**
+ * Terrain that follows the circuit: every vertex drops away from the height of the road
+ * it is closest to, so an elevated circuit sits on a valley floor instead of a flat disc.
+ */
+function buildTerrain(outer: number, shoulder: number, dropRate: number, maxDrop: number) {
+  const RINGS = 22;
+  const SECTORS = 96;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const p = new THREE.Vector3();
+  for (let ri = 0; ri <= RINGS; ri++) {
+    // denser rings near the road, then stretch out to the horizon
+    const u = ri / RINGS;
+    const r = shoulder + (outer - shoulder) * Math.pow(u, 2.1);
+    for (let si = 0; si <= SECTORS; si++) {
+      const a = (si / SECTORS) * Math.PI * 2;
+      p.set(Math.sin(a) * r, 0, -Math.cos(a) * r);
+      const t = nearestT(p);
+      const center = trackPointAt(t);
+      const d = Math.hypot(p.x - center.x, p.z - center.z);
+      const drop = Math.min(maxDrop, 1.1 + Math.max(0, d - halfWidthAt(t) - 1) * dropRate);
+      positions.push(p.x, center.y - drop, p.z);
+      uvs.push(p.x / 26, p.z / 26);
+    }
+  }
+  const row = SECTORS + 1;
+  for (let ri = 0; ri < RINGS; ri++) {
+    for (let si = 0; si < SECTORS; si++) {
+      const a = ri * row + si;
+      indices.push(a, a + row, a + 1, a + 1, a + row, a + row + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  g.setIndex(indices);
+  g.computeVertexNormals();
+  return g;
+}
+
+function buildRibbon(halfWidth: number, y: number, pad: number, kind: ZoneKind = "water") {
+  const z = zoneOfKind(kind);
   const N = 70;
+  if (!z) return new THREE.BufferGeometry();
   const t0 = z.t0 - pad;
   const span = z.t1 - z.t0 + pad * 2;
   const positions: number[] = [];
@@ -439,7 +482,7 @@ function buildRibbon(halfWidth: number, y: number, pad: number) {
     const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
     const l = c.clone().addScaledVector(n, halfWidth);
     const r = c.clone().addScaledVector(n, -halfWidth);
-    positions.push(l.x, y, l.z, r.x, y, r.z);
+    positions.push(l.x, c.y + y, l.z, r.x, c.y + y, r.z);
   }
   for (let i = 0; i < N; i++) {
     const a = i * 2;
@@ -453,8 +496,8 @@ function buildRibbon(halfWidth: number, y: number, pad: number) {
 }
 
 function Lake({ theme }: { theme: ThemeDef }) {
-  const shore = useMemo(() => buildRibbon(TRACK_WIDTH / 2 + 12, -0.42, 0.02), []);
-  const water = useMemo(() => buildRibbon(TRACK_WIDTH / 2 + 9, -0.3, 0.012), []);
+  const shore = useMemo(() => buildRibbon(TRACK_WIDTH / 2 + 12, -0.42, 0.02, "water"), []);
+  const water = useMemo(() => buildRibbon(TRACK_WIDTH / 2 + 9, -0.3, 0.012, "water"), []);
   return (
     <group>
       <mesh geometry={shore} receiveShadow>
@@ -974,6 +1017,7 @@ export default function Track({ theme }: { theme: ThemeDef }) {
   const roadGeometry = useMemo(() => buildRoadGeometry(), []);
   const roadTexture = useMemo(() => makeRoadTexture(theme), [theme]);
   const barriers = useMemo(() => buildBarriers(), []);
+  const terrain = useMemo(() => buildTerrain(360, TRACK_WIDTH / 2 + 6, 0.16, 26), []);
 
   return (
     <group>
@@ -981,8 +1025,7 @@ export default function Track({ theme }: { theme: ThemeDef }) {
         <circleGeometry args={[520, 56]} />
         <meshStandardMaterial color={theme.water} roughness={0.15} metalness={0.3} transparent opacity={0.9} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.35, 0]} receiveShadow>
-        <circleGeometry args={[340, 56]} />
+      <mesh geometry={terrain} receiveShadow>
         <meshStandardMaterial color={theme.ground} roughness={1} />
       </mesh>
       <Lake theme={theme} />
