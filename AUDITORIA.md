@@ -32,8 +32,8 @@ el único que funciona bien en los cuatro) y **ningún sistema duplicado**.
 | Pistas: rutas alternativas | **(3)** | `corridorBounds` asimétrico + `branchCenterAt` + cintas de calzada reales |
 | Pistas:checkpoint visual | **(1)** | `SubFish`, anillos de cielo |
 | Personajes | **(1) + (3)** | Los 25 de `(1)` **más** los 3 exclusivos de `(3)` (COBALT, KIWI, MAGMA) = **28** |
-| Garaje: carrocerías | **(1) + (2)** | 11 + `rocket` + `mono` = **13** |
-| Garaje: botes y aviones | **(3)** | Tablas con velocidad y agarre por modelo |
+| Garaje: carrocerías | **(1) + (2)** | 11 + `rocket` + `mono` = **13**, más 6 formas nuevas = **19** (`tank`, `wedge`, `sled`, `orbit`, `dune`, `phantom`) |
+| Garaje: botes y aviones | **(3)** | Tablas con velocidad y agarre por modelo; **7 + 7 + 7** artefactos (barcos, aviones, submarinos) con stats e i18n |
 | Garaje: acabados | **ninguno** | Hay que crearlos (vidrio, cromo, translúcido, mate) |
 | Menús y UI | **(3)** | El estilo de la interfaz cambia con la estética: `glass`, `y2k`, `win98` |
 | HUD y minimapa | **original / (1)** | Se conserva y se le añaden los niveles al minimapa |
@@ -73,11 +73,11 @@ y `tsc` limpio. Encima se le aplica, **sistema por sistema y sin duplicar nada**
 | Transformaciones | 4 modos | 4 modos | 4 modos | 4 modos (sub fusionado) | 4 modos, de A |
 | Fusión | MEDIO | MEDIO | MEDIO | MEDIO | se completa (fase 4) |
 | Pistas | 10 | **14** | 10 | 8 | **14** |
-| Rutas alternativas | atajos volados | atajos volados | atajos volados | **ramas reales** | **ramas reales + 3 alturas** (fase 3) |
+| Rutas alternativas | atajos volados | atajos volados | atajos volados | **ramas reales** | **ramas reales + relieve real**, los atajos vuelan siguiendo la carretera |
 | Personajes | 25 | 25 | 25 | **28** | **28**, se eligen 12 al inicio y 16 al final |
-| Garaje | 11 carrocerías | 12 | 12 | 9 | **13 + acabados nuevos** |
-| Botes y aviones | sin stats | sin stats | sin stats | **con stats** | **12 artefactos con stats** |
-| Botes/aviones | 3 + 3, sin stats | 3 + 3, sin stats | 3 + 3, sin stats | **4 + 4 con stats** | **tablas con stats** |
+| Garaje | 11 carrocerías | 12 | 12 | 9 | **19 + acabados nuevos** |
+| Botes y aviones | sin stats | sin stats | sin stats | **con stats** | **21 artefactos con stats** |
+| Botes/aviones/sub | 3 + 3, sin stats | 3 + 3, sin stats | 3 + 3, sin stats | **4 + 4 con stats** | **7 + 7 + 7 con stats** |
 | Menús | OK | OK | OK | **OK + UI por estética** | de (3) |
 | HUD/minimapa | OK | OK | OK | OK | de A + niveles |
 | Idiomas | 8 | 8 (+ más textos) | 8 | 8 | 8, se completan |
@@ -141,9 +141,13 @@ así que el rendimiento hay que comprobarlo en un navegador con GPU.
 - [x] **Fase 1.4** — Personajes COBALT, KIWI y MAGMA de `(3)` → 28 en total
 - [ ] **Fase 1.5** — Interfaz por estética de `(3)` (`ui`: glass / y2k / win98)
 - [ ] **Fase 1.6** — Modo `endurance` de `(3)`
-- [ ] **Fase 2 — Arreglos obligatorios**
-- [ ] **Fase 3 — Pistas verticales**
+- [x] **Fase 2 — Arreglos obligatorios** (pared, atajos por la carretera, cámara fuera del terreno, bote sin parpadeo)
+- [x] **Fase 3 — Pistas verticales** — las 14 pistas suben de 0 a 12-32 unidades de altura, el terreno sigue la carretera, la física tiene gravedad y saltos, el minimapa sombrea por altura
 - [ ] **Fase 4 — Completar según la visión**
+  - [x] Modelos: 19 carrocerías y 7 + 7 + 7 artefactos con stats e i18n
+  - [x] Estéticas mutables: la paleta, la luz y la vegetación cambian en cada vuelta
+  - [ ] Acabados del garaje (vidrio, cromo, translúcido, mate)
+  - [ ] Reasignación táctil real y modo `endurance`
 
 ### Lo que tienes que probar tú
 
