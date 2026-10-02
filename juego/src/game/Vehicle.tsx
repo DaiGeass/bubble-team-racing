@@ -646,9 +646,14 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
     const planeKind = vehicle.plane ?? "wing";
     if (hullRef.current) hullRef.current.visible = mode === "boat" && boatKind === "cat";
     if (wingRef.current) wingRef.current.visible = mode === "plane" && planeKind === "wing";
-    if (boatAltRef.current) boatAltRef.current.visible = mode === "boat" && boatKind !== "cat";
-    if (planeAltRef.current) planeAltRef.current.visible = mode === "plane" && planeKind !== "wing";
-    if (subRef.current) subRef.current.visible = mode === "sub" && vehicle.sub !== "diver";
+    if (boatAltRef.current)
+      boatAltRef.current.visible =
+        mode === "boat" && boatKind !== "cat" && boatKind !== "yacht";
+    if (planeAltRef.current)
+      planeAltRef.current.visible =
+        mode === "plane" && planeKind !== "wing" && planeKind !== "stealth";
+    if (subRef.current)
+      subRef.current.visible = mode === "sub" && vehicle.sub !== "diver";
     // the land chassis is hidden while submerged (the sub hull replaces it)
     if (chassisRef.current) chassisRef.current.visible = mode !== "sub";
     if (wheelRef.current)

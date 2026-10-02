@@ -470,6 +470,109 @@ export function BoatAlt({ kind, body, decal, glow }: C & { kind: BoatId }) {
         </mesh>
       </group>
     );
+  if (kind === "tug")
+    return (
+      <group>
+        <mesh position={[0, 0.05, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <boxGeometry args={[2.1, 0.7, 3.4]} />
+          <Paint color={body} metal={0.35} rough={0.4} />
+        </mesh>
+        <mesh position={[0, 0.5, -0.9]} rotation={[Math.PI / 2, 0, 0]}>
+          <capsuleGeometry args={[0.6, 1.3, 6, 14]} />
+          <Paint color={decal} metal={0.45} />
+        </mesh>
+        <mesh position={[0, 0.62, -1.35]}>
+          <boxGeometry args={[1.5, 1.15, 0.9]} />
+          <Paint color={decal} metal={0.2} rough={0.5} />
+        </mesh>
+        <mesh position={[0, 0.95, -1.32]} scale={[1, 0.55, 0.5]}>
+          <sphereGeometry args={[0.5, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+          <Glass opacity={0.34} />
+        </mesh>
+        <mesh position={[0, 1.5, -1.5]}>
+          <cylinderGeometry args={[0.16, 0.2, 0.95, 10]} />
+          <meshStandardMaterial color="#2b2f3a" roughness={0.55} metalness={0.6} />
+        </mesh>
+        {[-0.85, 0.85].map((x) => (
+          <mesh key={x} position={[x, 0.45, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.3, 0.3, 0.4, 10]} />
+            <meshStandardMaterial color="#2b2f3a" roughness={0.6} metalness={0.5} />
+          </mesh>
+        ))}
+        {[-0.55, 0.55].map((x) => (
+          <mesh key={x} position={[x, 0.42, 1.6]} rotation={[0.22, 0, 0]}>
+            <boxGeometry args={[0.7, 0.1, 0.6]} />
+            <Neon color={g} i={2.4} />
+          </mesh>
+        ))}
+        <mesh position={[0, 0.2, 1.75]}>
+          <boxGeometry args={[1.5, 0.14, 0.14]} />
+          <Neon color={g} i={2.8} />
+        </mesh>
+      </group>
+    );
+  if (kind === "raft")
+    return (
+      <group>
+        <mesh position={[0, -0.02, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[1.15, 1.0, 0.34, 18]} />
+          <meshStandardMaterial color="#ff8a3d" roughness={0.85} />
+        </mesh>
+        {[0, 1, 2, 3, 4, 5].map((k) => (
+          <mesh key={k} position={[0, 0.16, 0]} rotation={[Math.PI / 2, 0, (k * Math.PI) / 6]}>
+            <torusGeometry args={[1.16, 0.06, 6, 20, Math.PI / 3]} />
+            <Paint color={decal} metal={0.2} />
+          </mesh>
+        ))}
+        <mesh position={[0, 0.42, 0]} castShadow>
+          <sphereGeometry args={[0.78, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+          <Glass opacity={0.32} />
+        </mesh>
+        <mesh position={[0, 0.3, 0]}>
+          <cylinderGeometry args={[0.42, 0.5, 0.6, 12]} />
+          <Paint color={body} metal={0.4} />
+        </mesh>
+        <mesh position={[0, 0.92, 0]}>
+          <cylinderGeometry args={[0.05, 0.05, 0.55, 6]} />
+          <meshStandardMaterial color="#2b2f3a" roughness={0.5} metalness={0.7} />
+        </mesh>
+        <mesh position={[0, 1.2, 0]}>
+          <sphereGeometry args={[0.16, 12, 10]} />
+          <Neon color={g} i={3.2} />
+        </mesh>
+        <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[1.5, 24]} />
+          <meshBasicMaterial color={g} transparent opacity={0.32} toneMapped={false} depthWrite={false} />
+        </mesh>
+      </group>
+    );
+  if (kind === "hovercraft")
+    return (
+      <group>
+        <mesh position={[0, 0.24, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <capsuleGeometry args={[0.72, 2.1, 8, 18]} />
+          <Paint color={body} metal={0.7} rough={0.1} />
+        </mesh>
+        <mesh position={[0, 0.62, 0.2]} scale={[0.85, 0.5, 1]}>
+          <sphereGeometry args={[0.62, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+          <Glass opacity={0.36} />
+        </mesh>
+        {[-0.78, 0.78].map((x) => (
+          <mesh key={x} position={[x, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.36, 0.09, 8, 18]} />
+            <Neon color={g} i={3.4} />
+          </mesh>
+        ))}
+        <mesh position={[0, 0.34, 1.35]} rotation={[0.35, 0, 0]}>
+          <boxGeometry args={[1.2, 0.07, 0.42]} />
+          <Neon color={decal} i={2.6} />
+        </mesh>
+        <mesh position={[0, -0.06, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[1.7, 26]} />
+          <meshBasicMaterial color={g} transparent opacity={0.3} toneMapped={false} depthWrite={false} />
+        </mesh>
+      </group>
+    );
   return null;
 }
 
@@ -547,6 +650,114 @@ export function PlaneAlt({ kind, body, decal, glow }: C & { kind: PlaneId }) {
         <mesh position={[0, 0.7, -1.0]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.3, 0.38, 0.4, 12]} />
           <Neon color="#ffffff" i={2.6} />
+        </mesh>
+      </group>
+    );
+  if (kind === "jetliner")
+    return (
+      <group>
+        <mesh position={[0, 0.08, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <capsuleGeometry args={[0.5, 3.1, 8, 18]} />
+          <Paint color={body} metal={0.75} rough={0.08} />
+        </mesh>
+        <mesh position={[0, 0.42, -0.25]} scale={[0.8, 0.5, 1.15]}>
+          <sphereGeometry args={[0.52, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+          <Glass color="#d8f4ff" opacity={0.4} />
+        </mesh>
+        <mesh position={[0, 0.36, 1.5]} rotation={[Math.PI / 2, 0, 0]}>
+          <coneGeometry args={[0.44, 1.3, 14]} />
+          <Paint color={decal} metal={0.65} />
+        </mesh>
+        <mesh position={[0, 0.36, 2.28]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.3, 0.36, 0.5, 14]} />
+          <Neon color={g} i={3.2} />
+        </mesh>
+        <mesh position={[0, 0.4, -1.4]} rotation={[0.4, 0, 0]}>
+          <boxGeometry args={[0.08, 0.85, 0.7]} />
+          <Neon color={decal} i={2.2} />
+        </mesh>
+        {[-0.62, 0.62].map((x) => (
+          <mesh key={x} position={[x, -0.02, 0.2]} rotation={[Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[0.28, 0.6, 12, 1, true]} />
+            <meshStandardMaterial color="#2b2f3a" roughness={0.5} metalness={0.7} side={2} />
+          </mesh>
+        ))}
+        <mesh position={[0, 0.5, 0.7]} rotation={[0, 0, 0]}>
+          <boxGeometry args={[0.09, 0.09, 1.6]} />
+          <Paint color={decal} metal={0.7} />
+        </mesh>
+      </group>
+    );
+  if (kind === "twinprop")
+    return (
+      <group>
+        <mesh position={[0, 0.42, 0]} castShadow>
+          <capsuleGeometry args={[0.42, 1.5, 6, 14]} />
+          <meshStandardMaterial color={body} roughness={0.22} metalness={0.6} />
+        </mesh>
+        <mesh position={[0, 0.72, -0.45]} scale={[0.85, 0.55, 1]}>
+          <sphereGeometry args={[0.46, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+          <Glass opacity={0.36} />
+        </mesh>
+        {[-1.35, 1.35].map((x) => (
+          <group key={x}>
+            <mesh position={[x, 0.6, 0.15]}>
+              <boxGeometry args={[1.5, 0.12, 0.9]} />
+              <Paint color={decal} metal={0.5} />
+            </mesh>
+            <mesh position={[x, 0.6, 0.72]}>
+              <boxGeometry args={[0.12, 0.7, 0.6]} />
+              <Paint color={decal} metal={0.5} />
+            </mesh>
+            <mesh position={[x, 0.66, -0.35]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.24, 0.24, 0.22, 10]} />
+              <Neon color={g} i={1.6} />
+            </mesh>
+            <mesh position={[x, 0.66, 0.35]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.24, 0.24, 0.22, 10]} />
+              <Neon color={g} i={1.6} />
+            </mesh>
+          </group>
+        ))}
+        <mesh position={[0, 0.46, 1.0]} rotation={[0.28, 0, 0]}>
+          <boxGeometry args={[0.08, 0.7, 0.6]} />
+          <Paint color={decal} metal={0.6} />
+        </mesh>
+        <Underglow color={g} w={3.2} l={1.6} y={0.1} />
+      </group>
+    );
+  if (kind === "nimbus")
+    return (
+      <group>
+        <mesh position={[0, 0.3, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <capsuleGeometry args={[0.78, 2.7, 8, 18]} />
+          <Glass color="#eafaff" opacity={0.3} />
+        </mesh>
+        <mesh position={[0, 0.3, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[0.62, 0.72, 0.86]}>
+          <capsuleGeometry args={[0.78, 2.7, 6, 14]} />
+          <Paint color={body} metal={0.4} rough={0.3} />
+        </mesh>
+        <mesh position={[0, 0.66, 0.55]} scale={[0.7, 0.45, 0.9]}>
+          <sphereGeometry args={[0.56, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+          <Glass opacity={0.3} />
+        </mesh>
+        {[-1.5, 1.5].map((x) => (
+          <mesh key={x} position={[x, 0.28, -0.35]} rotation={[0, 0, x > 0 ? 0.34 : -0.34]}>
+            <boxGeometry args={[1.5, 0.07, 0.62]} />
+            <Neon color={g} i={2.8} />
+          </mesh>
+        ))}
+        <mesh position={[0, 1.02, -1.0]} rotation={[0.3, 0, 0]}>
+          <boxGeometry args={[2.3, 0.07, 0.5]} />
+          <Neon color={decal} i={2.6} />
+        </mesh>
+        <mesh position={[0, 0.3, 1.75]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.28, 0.4, 0.5, 14]} />
+          <Neon color="#ffffff" i={3} />
+        </mesh>
+        <mesh position={[0, -0.16, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[1.8, 26]} />
+          <meshBasicMaterial color={g} transparent opacity={0.28} toneMapped={false} depthWrite={false} />
         </mesh>
       </group>
     );
@@ -638,6 +849,125 @@ export function SubModel({ kind, body, decal, glow }: C & { kind: SubId }) {
         <mesh position={[0, 1.0, 0.1]} scale={[0.85, 0.7, 0.95]}>
           <sphereGeometry args={[0.8, 16, 12]} />
           <Glass opacity={0.28} />
+        </mesh>
+      </group>
+    );
+  if (kind === "dredger")
+    return (
+      <group>
+        <mesh position={[0, 0.62, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[0.95, 1.05, 3.0, 16]} />
+          <meshStandardMaterial color={body} roughness={0.55} metalness={0.45} />
+        </mesh>
+        {[-1.3, -0.6, 0.1, 0.8].map((z) => (
+          <mesh key={z} position={[0, 0.62, z]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[1.08, 1.08, 0.14, 16]} />
+            <meshStandardMaterial color="#2b2f3a" roughness={0.7} metalness={0.4} />
+          </mesh>
+        ))}
+        <mesh position={[0, 1.42, -0.6]} rotation={[Math.PI / 2, 0, 0]}>
+          <capsuleGeometry args={[0.42, 0.9, 6, 12]} />
+          <Paint color={decal} metal={0.6} />
+        </mesh>
+        <mesh position={[0, 1.5, -0.55]} scale={[0.9, 0.5, 0.6]}>
+          <sphereGeometry args={[0.44, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+          <Glass opacity={0.34} />
+        </mesh>
+        <mesh position={[0, 1.15, 1.55]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.14, 0.2, 1.3, 10]} />
+          <meshStandardMaterial color="#3b4250" roughness={0.5} metalness={0.65} />
+        </mesh>
+        <mesh ref={rot} position={[0, 0.34, 1.95]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.55, 0.1, 8, 18]} />
+          <Neon color={g} i={2.6} />
+        </mesh>
+        <mesh position={[0, 0.62, -1.7]} rotation={[0.4, 0, 0]}>
+          <cylinderGeometry args={[0.3, 0.34, 0.5, 12]} />
+          <Neon color={decal} i={2} />
+        </mesh>
+      </group>
+    );
+  if (kind === "sleuth")
+    return (
+      <group>
+        <mesh position={[0, 0.55, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <capsuleGeometry args={[0.6, 2.1, 8, 18]} />
+          <Paint color={body} metal={0.6} rough={0.16} />
+        </mesh>
+        <mesh position={[0, 0.55, 0.1]} rotation={[Math.PI / 2, 0, 0]} scale={[1.04, 0.3, 1.04]}>
+          <capsuleGeometry args={[0.6, 2.1, 6, 14]} />
+          <Paint color={decal} metal={0.7} />
+        </mesh>
+        <mesh position={[0, 0.55, 1.35]} rotation={[Math.PI / 2, 0, 0]}>
+          <sphereGeometry args={[0.52, 16, 12]} />
+          <Glass opacity={0.44} />
+        </mesh>
+        <mesh position={[0, 0.55, 1.35]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.5, 0.07, 8, 18]} />
+          <Paint color={decal} metal={0.75} />
+        </mesh>
+        <group ref={rot} position={[0, 0.55, 1.3]}>
+          <mesh rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.05, 0.05, 1.1, 6]} />
+            <Neon color={g} i={3} />
+          </mesh>
+        </group>
+        <mesh position={[0, 1.05, -0.55]}>
+          <boxGeometry args={[0.5, 0.45, 0.8]} />
+          <Paint color={decal} metal={0.5} />
+        </mesh>
+        <mesh position={[0, 1.35, -0.55]}>
+          <cylinderGeometry args={[0.05, 0.05, 0.6, 6]} />
+          <Neon color={g} i={2.4} />
+        </mesh>
+        {[-0.5, 0.5].map((x) => (
+          <mesh key={x} position={[x, 0.1, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.24, 0.24, 0.2, 10]} />
+            <Neon color={g} i={2} />
+          </mesh>
+        ))}
+      </group>
+    );
+  if (kind === "leviathan")
+    return (
+      <group>
+        <mesh position={[0, 0.5, 0.15]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <capsuleGeometry args={[0.95, 3.1, 8, 18]} />
+          <meshStandardMaterial color={body} roughness={0.35} metalness={0.55} />
+        </mesh>
+        {[-1.0, -0.2, 0.6, 1.4].map((z) => (
+          <mesh key={z} position={[0, 0.72 + Math.abs(z) * 0.04, z]} rotation={[0, 0, 0]}>
+            <coneGeometry args={[0.18, 0.6, 4]} />
+            <Paint color={decal} metal={0.6} />
+          </mesh>
+        ))}
+        <mesh position={[0, 0.5, 1.85]} scale={[1, 0.9, 0.85]}>
+          <sphereGeometry args={[0.62, 16, 12]} />
+          <meshStandardMaterial color={body} roughness={0.3} metalness={0.6} />
+        </mesh>
+        <mesh position={[0, 0.62, 2.2]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.44, 0.09, 8, 16, Math.PI * 1.3]} />
+          <Neon color={g} i={2.8} />
+        </mesh>
+        {[-0.34, 0.34].map((x) => (
+          <mesh key={x} position={[x, 0.62, 2.25]}>
+            <sphereGeometry args={[0.13, 10, 8]} />
+            <Neon color="#ffffff" i={3.2} />
+          </mesh>
+        ))}
+        <group ref={tail} position={[0, 0.5, -1.85]}>
+          <mesh rotation={[0, 0, Math.PI / 2]}>
+            <coneGeometry args={[0.4, 1.2, 4]} />
+            <Paint color={decal} metal={0.5} />
+          </mesh>
+          <mesh position={[0, 0, -0.7]} rotation={[0, 0, Math.PI / 2]}>
+            <coneGeometry args={[0.28, 1.0, 3]} />
+            <Paint color={decal} metal={0.45} />
+          </mesh>
+        </group>
+        <mesh position={[0, 0.5, 0.15]} rotation={[Math.PI / 2, 0, 0]} scale={[1.06, 1.06, 1.02]}>
+          <torusGeometry args={[1.0, 0.05, 6, 22]} />
+          <Neon color={g} i={2} />
         </mesh>
       </group>
     );

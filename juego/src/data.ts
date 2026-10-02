@@ -19,9 +19,9 @@ export type ThemeId =
 export type WheelStyle = "classic" | "sporty" | "glow" | "chrome" | "spike";
 export type SpoilerId = "none" | "wing" | "fin";
 export type BoosterId = "single" | "twin" | "neon";
-export type BoatId = "cat" | "speed" | "ski" | "yacht";
-export type PlaneId = "wing" | "bi" | "delta" | "stealth";
-export type SubId = "classic" | "pod" | "shark" | "diver";
+export type BoatId = "cat" | "speed" | "ski" | "yacht" | "tug" | "raft" | "hovercraft";
+export type PlaneId = "wing" | "bi" | "delta" | "stealth" | "jetliner" | "twinprop" | "nimbus";
+export type SubId = "classic" | "pod" | "shark" | "diver" | "dredger" | "sleuth" | "leviathan";
 export type VehicleMode = "land" | "boat" | "plane" | "sub";
 
 export interface CharacterDef {
@@ -283,9 +283,9 @@ export const DECAL_COLORS = ["#ffffff", "#0ea5e9", "#facc15", "#f472b6", "#22c55
 export const WHEEL_STYLES: WheelStyle[] = ["classic", "sporty", "glow", "chrome", "spike"];
 export const SPOILERS: SpoilerId[] = ["none", "wing", "fin"];
 export const BOOSTERS: BoosterId[] = ["single", "twin", "neon"];
-export const BOATS: BoatId[] = ["cat", "speed", "ski", "yacht"];
-export const PLANES: PlaneId[] = ["wing", "bi", "delta", "stealth"];
-export const SUBS: SubId[] = ["classic", "pod", "shark", "diver"];
+export const BOATS: BoatId[] = ["cat", "speed", "ski", "yacht", "tug", "raft", "hovercraft"];
+export const PLANES: PlaneId[] = ["wing", "bi", "delta", "stealth", "jetliner", "twinprop", "nimbus"];
+export const SUBS: SubId[] = ["classic", "pod", "shark", "diver", "dredger", "sleuth", "leviathan"];
 
 /**
  * Per-craft speed and handling, taken from the second lineage and extended to every
@@ -302,6 +302,9 @@ export const BOAT_STATS: CraftStat[] = [
   { id: "speed", speed: 1.22, handling: 0.9 },
   { id: "ski", speed: 1.1, handling: 1.15 },
   { id: "yacht", speed: 1.12, handling: 1.05 },
+  { id: "tug", speed: 0.82, handling: 1.0 },
+  { id: "raft", speed: 0.95, handling: 1.4 },
+  { id: "hovercraft", speed: 1.3, handling: 1.15 },
 ];
 
 export const PLANE_STATS: CraftStat[] = [
@@ -309,6 +312,9 @@ export const PLANE_STATS: CraftStat[] = [
   { id: "bi", speed: 0.9, handling: 1.2 },
   { id: "delta", speed: 1.12, handling: 0.9 },
   { id: "stealth", speed: 1.05, handling: 1.1 },
+  { id: "jetliner", speed: 1.35, handling: 0.82 },
+  { id: "twinprop", speed: 0.85, handling: 1.3 },
+  { id: "nimbus", speed: 1.18, handling: 1.22 },
 ];
 
 export const SUB_STATS: CraftStat[] = [
@@ -316,6 +322,9 @@ export const SUB_STATS: CraftStat[] = [
   { id: "pod", speed: 0.95, handling: 1.05 },
   { id: "shark", speed: 1.18, handling: 0.85 },
   { id: "diver", speed: 1.0, handling: 1.15 },
+  { id: "dredger", speed: 0.8, handling: 0.95 },
+  { id: "sleuth", speed: 0.92, handling: 1.35 },
+  { id: "leviathan", speed: 1.4, handling: 0.72 },
 ];
 
 const CRAFT_SPEEDS: Record<string, number> = {};
