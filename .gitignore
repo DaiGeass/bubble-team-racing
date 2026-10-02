@@ -1,0 +1,4 @@
+*.zip
+juego/node_modules/
+juego/dist/
+juego/.harness/
