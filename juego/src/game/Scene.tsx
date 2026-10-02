@@ -20,6 +20,8 @@ import {
   hazardState,
   rollWeapon,
   zoneAt,
+  craftSpeed,
+  craftHandling,
   type CharacterDef,
   type WeaponId,
   type VehicleMode,
@@ -768,9 +770,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
     // ---- speed ----
     let effMax = st.maxSpeed * r.boostMult * (r.isPlayer ? 1 : r.aiMult);
-    if (r.mode === "boat") effMax *= st.boatBonus * 0.94;
-    if (r.mode === "sub") effMax *= st.boatBonus * 0.9;
-    if (r.mode === "plane") effMax *= st.planeBonus * 1.12;
+    if (r.mode === "boat") effMax *= st.boatBonus * 0.94 * craftSpeed(r.vehicle.boat, 1);
+    if (r.mode === "sub") effMax *= st.boatBonus * 0.9 * craftSpeed(r.vehicle.sub, 1);
+    if (r.mode === "plane") effMax *= st.planeBonus * 1.12 * craftSpeed(r.vehicle.plane, 1);
     if (r.slowTimer > 0) effMax *= 0.55;
 
     const accelNow = st.accel * (r.mode === "plane" ? 1.25 : 1);
@@ -786,7 +788,14 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const speedFrac = THREE.MathUtils.clamp(Math.abs(r.speed) / st.maxSpeed, 0, 1);
     const authority = (0.4 + speedFrac * 0.6) * (1 - speedFrac * 0.18);
     const driftMul = r.isDrifting ? 1.55 : 1;
-    const modeMul = r.mode === "boat" ? 1.25 : r.mode === "plane" ? 0.8 : 1;
+    const modeMul =
+      r.mode === "boat"
+        ? 1.25 * craftHandling(r.vehicle.boat, 1)
+        : r.mode === "sub"
+          ? 1.15 * craftHandling(r.vehicle.sub, 1)
+          : r.mode === "plane"
+            ? 0.8 * craftHandling(r.vehicle.plane, 1)
+            : 1;
     const dir = r.speed >= 0 ? 1 : -1;
     r.heading += r.steerSmooth * st.turnRate * authority * driftMul * modeMul * dir * dt;
 

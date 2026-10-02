@@ -275,6 +275,53 @@ export const BOATS: BoatId[] = ["cat", "speed", "ski", "yacht"];
 export const PLANES: PlaneId[] = ["wing", "bi", "delta", "stealth"];
 export const SUBS: SubId[] = ["classic", "pod", "shark", "diver"];
 
+/**
+ * Per-craft speed and handling, taken from the second lineage and extended to every
+ * craft here. speed scales the top speed in that mode, handling scales turn rate.
+ */
+export interface CraftStat {
+  id: BoatId | PlaneId | SubId;
+  speed: number;
+  handling: number;
+}
+
+export const BOAT_STATS: CraftStat[] = [
+  { id: "cat", speed: 0.92, handling: 0.95 },
+  { id: "speed", speed: 1.22, handling: 0.9 },
+  { id: "ski", speed: 1.1, handling: 1.15 },
+  { id: "yacht", speed: 1.12, handling: 1.05 },
+];
+
+export const PLANE_STATS: CraftStat[] = [
+  { id: "wing", speed: 1.0, handling: 1.0 },
+  { id: "bi", speed: 0.9, handling: 1.2 },
+  { id: "delta", speed: 1.12, handling: 0.9 },
+  { id: "stealth", speed: 1.05, handling: 1.1 },
+];
+
+export const SUB_STATS: CraftStat[] = [
+  { id: "classic", speed: 1.05, handling: 1.0 },
+  { id: "pod", speed: 0.95, handling: 1.05 },
+  { id: "shark", speed: 1.18, handling: 0.85 },
+  { id: "diver", speed: 1.0, handling: 1.15 },
+];
+
+const CRAFT_SPEEDS: Record<string, number> = {};
+const CRAFT_HANDLING: Record<string, number> = {};
+for (const t of [...BOAT_STATS, ...PLANE_STATS, ...SUB_STATS]) {
+  CRAFT_SPEEDS[t.id] = t.speed;
+  CRAFT_HANDLING[t.id] = t.handling;
+}
+
+/** Craft stat lookup that never throws when a build ships an id without a row. */
+export function craftSpeed(id: string | undefined, fallback: number): number {
+  return (id !== undefined && CRAFT_SPEEDS[id]) || fallback;
+}
+
+export function craftHandling(id: string | undefined, fallback: number): number {
+  return (id !== undefined && CRAFT_HANDLING[id]) || fallback;
+}
+
 // ---------------------------------------------------------------------------
 // Weapons / items
 // ---------------------------------------------------------------------------
