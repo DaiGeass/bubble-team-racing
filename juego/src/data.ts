@@ -119,12 +119,17 @@ const RAW_CHARACTERS: CharacterDef[] = [
   { id: "mist", name: "MIST", form: "cloud", eye: "sparkle", primary: "#a5f3fc", secondary: "#f0fdff", accent: "#0e7490", speed: 3, accel: 4, handling: 5, weight: 1, role: "handler", favorite: "bubble" },
   { id: "terra", name: "TERRA", form: "leaf", eye: "sharp", primary: "#84cc16", secondary: "#f7fee7", accent: "#4d7c0f", speed: 4, accel: 3, handling: 3, weight: 4, role: "heavy", favorite: "slime" },
   { id: "prism", name: "PRISM", form: "holo", eye: "sparkle", primary: "#e879f9", secondary: "#fdf4ff", accent: "#a21caf", speed: 4, accel: 5, handling: 3, weight: 2, role: "tech", favorite: "beam" },
+  { id: "cobalt", name: "COBALT", form: "drop", eye: "sharp", primary: "#2b5cff", secondary: "#e7ecff", accent: "#12239c", speed: 4, accel: 4, handling: 3, weight: 3, role: "balanced", favorite: "missile" },
+  { id: "kiwi", name: "KIWI", form: "leaf", eye: "sparkle", primary: "#c6ff4f", secondary: "#f7ffe4", accent: "#6da300", speed: 3, accel: 5, handling: 4, weight: 1, role: "trickster", favorite: "slime" },
+  { id: "magma", name: "MAGMA", form: "flame", eye: "visor", primary: "#ff2d00", secondary: "#ffe6dc", accent: "#8f1500", speed: 5, accel: 3, handling: 2, weight: 5, role: "heavy", favorite: "zap" },
 ];
 
 const fixEarColors: Record<string, { primary?: string; secondary?: string; accent?: string }> = {
   yuki: { primary: "#c7e4ff", secondary: "#ffffff", accent: "#3b82f6" },
   rook: { primary: "#a78bfa", secondary: "#ede9fe", accent: "#5b21b6" },
   onyx: { primary: "#4f6bff", secondary: "#dbe4ff", accent: "#1e2a8a" },
+  cobalt: { primary: "#2b5cff", secondary: "#e7ecff", accent: "#12239c" },
+  magma: { primary: "#ff2d00", secondary: "#ffe6dc", accent: "#8f1500" },
 };
 
 export const CHARACTERS: CharacterDef[] = RAW_CHARACTERS.map((c) => {

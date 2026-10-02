@@ -31,7 +31,7 @@ el único que funciona bien en los cuatro) y **ningún sistema duplicado**.
 | Pistas: número | **(1)** | **14 pistas** |
 | Pistas: rutas alternativas | **(3)** | `corridorBounds` asimétrico + `branchCenterAt` + cintas de calzada reales |
 | Pistas:checkpoint visual | **(1)** | `SubFish`, anillos de cielo |
-| Personajes | **(1) + (3)** | Los 16 de A **más** los 4 exclusivos de `(3)` = **20**, y se eligen 12 finales |
+| Personajes | **(1) + (3)** | Los 25 de `(1)` **más** los 3 exclusivos de `(3)` (COBALT, KIWI, MAGMA) = **28** |
 | Garaje: carrocerías | **(1) + (2)** | 11 + `rocket` + `mono` = **13** |
 | Garaje: botes y aviones | **(3)** | Tablas con velocidad y agarre por modelo |
 | Garaje: acabados | **ninguno** | Hay que crearlos (vidrio, cromo, translúcido, mate) |
@@ -74,8 +74,9 @@ y `tsc` limpio. Encima se le aplica, **sistema por sistema y sin duplicar nada**
 | Fusión | MEDIO | MEDIO | MEDIO | MEDIO | se completa (fase 4) |
 | Pistas | 10 | **14** | 10 | 8 | **14** |
 | Rutas alternativas | atajos volados | atajos volados | atajos volados | **ramas reales** | **ramas reales + 3 alturas** (fase 3) |
-| Personajes | 16 | 16 | 16 | **20** | **20 → 12 finales** |
+| Personajes | 25 | 25 | 25 | **28** | **28**, se eligen 12 al inicio y 16 al final |
 | Garaje | 11 carrocerías | 12 | 12 | 9 | **13 + acabados nuevos** |
+| Botes y aviones | sin stats | sin stats | sin stats | **con stats** | **12 artefactos con stats** |
 | Botes/aviones | 3 + 3, sin stats | 3 + 3, sin stats | 3 + 3, sin stats | **4 + 4 con stats** | **tablas con stats** |
 | Menús | OK | OK | OK | **OK + UI por estética** | de (3) |
 | HUD/minimapa | OK | OK | OK | OK | de A + niveles |
@@ -84,6 +85,14 @@ y `tsc` limpio. Encima se le aplica, **sistema por sistema y sin duplicar nada**
 | Sonido | MEDIO | MEDIO | MEDIO | MEDIO | se amplía |
 | Rendimiento | sin medir | sin medir | sin medir | sin medir | **tú lo mides** |
 | Organización | MEDIO | MEDIO | MEDIO | MEDIO | se divide en ficheros |
+
+### Bugs reales encontrados al medir (estaban en los 4 ZIP)
+
+1. **Pared congelante** — al tocar la pared se reescribía la posición entera del coche cada
+   frame, así que se perdía todo el avance longitudinal: el acelerador subía y el kart no
+   avanzaba. **Arreglado** en la Fase 1.2: ahora solo se cancela el exceso lateral.
+   Verificado: pegado a la pared el kart avanza (x 4 → 42) y conserva velocidad.
+2. **Sin modo de atasco** — no hay reaparición automática si te quedas encallado (Fase 2).
 
 ### Lo que falta en los cuatro (hay que construirlo)
 
@@ -125,7 +134,13 @@ así que el rendimiento hay que comprobarlo en un navegador con GPU.
 ## 3. Estado
 
 - [x] **Fase 0 — Auditoría** (este documento)
-- [ ] **Fase 1 — Unir**: esqueleto de (1) + correcciones de (2) + sistema de rutas de (3)
+- [x] **Fase 1.1** — Base `(1)` + `mono` y el arreglo de color de `(2)`
+- [x] **Fase 1.2** — Rutas alternativas reales de `(3)` (`corridorBounds`, cintas, cebo)
+- [x] **Fase 1.2b** — Fuera la instrumentación de pruebas
+- [x] **Fase 1.3** — Estadísticas por bote, avión y submarino de `(3)`
+- [x] **Fase 1.4** — Personajes COBALT, KIWI y MAGMA de `(3)` → 28 en total
+- [ ] **Fase 1.5** — Interfaz por estética de `(3)` (`ui`: glass / y2k / win98)
+- [ ] **Fase 1.6** — Modo `endurance` de `(3)`
 - [ ] **Fase 2 — Arreglos obligatorios**
 - [ ] **Fase 3 — Pistas verticales**
 - [ ] **Fase 4 — Completar según la visión**
