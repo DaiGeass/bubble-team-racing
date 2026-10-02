@@ -184,6 +184,8 @@ export interface ShortcutGeo {
   t0: number;
   t1: number;
   side: number;
+  /** centre line of the alternate route, hugging the terrain plus `lift` */
+  path: THREE.Vector3[];
 }
 
 /** Alternative paths: drive into the glowing gate and you fly an arc to the exit gate. */
@@ -199,9 +201,34 @@ export function getShortcuts(): ShortcutGeo[] {
     };
     const a = mk(s.t0);
     const b = mk(s.t1);
-    // t0/t1 travel with the geometry so a warp can run along the road instead of
-    // cutting a straight chord through a hill
-    return { entry: a.p, exit: b.p, heading: b.h, entryHeading: a.h, lift: 9, t0: s.t0, t1: s.t1, side: s.side };
+    const span = ((s.t1 - s.t0) % 1 + 1) % 1;
+    // The alternate route is sampled straight off the circuit so it climbs and
+    // dives with the relief instead of cutting a chord through a hillside, and so
+    // the drawn ribbon matches exactly the line the warp follows.
+    const path: THREE.Vector3[] = [];
+    const STEPS = 26;
+    for (let i = 0; i <= STEPS; i++) {
+      const e = i / STEPS;
+      const t = (s.t0 + span * e) % 1;
+      const c = trackPointAt(t);
+      const tan = trackTangentAt(t);
+      const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+      const off = s.side * (halfWidthAt(t) - 3.6);
+      const p = c.clone().addScaledVector(n, off);
+      p.y = surfaceYAt(t) + Math.sin(e * Math.PI) * s.lift;
+      path.push(p);
+    }
+    return {
+      entry: a.p,
+      exit: b.p,
+      heading: b.h,
+      entryHeading: a.h,
+      lift: s.lift,
+      t0: s.t0,
+      t1: s.t1,
+      side: s.side,
+      path,
+    };
   });
 }
 
@@ -211,4 +238,37 @@ export function lateralOffsetFrom(pos: THREE.Vector3, t: number) {
   const toPoint = new THREE.Vector3().subVectors(pos, center);
   const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
   return toPoint.dot(normal);
+}
+
+/**
+ * Traps slide along the circuit instead of sitting still. Both the renderer and
+ * the collision check run this so what you see is what you hit.
+ */
+export function trapPhase(tr: { t: number; speed: number; phase: number }, now: number) {
+  return ((((tr.t + now * 0.0001 * tr.speed + tr.phase) % 1) + 1) % 1);
+}
+
+/** World transform of a trap at a given clock time. */
+export function trapTransform(
+  tr: { t: number; side: number; kind: "spike" | "bar"; speed: number; phase: number },
+  now: number
+) {
+  const t = trapPhase(tr, now);
+  const c = trackPointAt(t);
+  const tan = trackTangentAt(t);
+  const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+  const off = tr.side * (halfWidthAt(t) - 2.2);
+  const p = c.clone().addScaledVector(n, off);
+  return { t, p, ground: surfaceYAt(t), heading: Math.atan2(tan.x, tan.z), span: halfWidthAt(t) };
+}
+
+/** Ground-anchored world position of a portal mouth. */
+export function portalTransform(pr: { tIn: number; side: number }, which: "in" | "out", out?: { tOut: number; side: number }) {
+  const t = which === "in" ? pr.tIn : out!.tOut;
+  const side = which === "in" ? pr.side : out!.side;
+  const c = trackPointAt(t);
+  const tan = trackTangentAt(t);
+  const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+  const p = c.clone().addScaledVector(n, side * (halfWidthAt(t) - 2.6));
+  return { t, p, ground: surfaceYAt(t), heading: Math.atan2(tan.x, tan.z) };
 }

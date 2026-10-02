@@ -7,14 +7,16 @@ import { EXTRA3 } from "./i18n5";
 import { EXTRA4 } from "./i18n6";
 import { EXTRA5 } from "./i18n7";
 import { useGame } from "./store";
+import { bindShakeScale } from "./particles";
 import { useControls } from "./controls";
-import { bindMuteGetter } from "./sound";
+import { bindMuteGetter, bindVolumeGetter } from "./sound";
 import { THEMES } from "./data";
 import StartScreen from "./screens/StartScreen";
 import SelectScreen from "./screens/SelectScreen";
 import RaceCanvas from "./game/RaceCanvas";
 import HUD from "./screens/HUD";
 import { PauseOverlay, ResultsScreen, HighScoresScreen, HowToScreen } from "./screens/Overlays";
+import OptionsScreen from "./screens/OptionsScreen";
 
 export default function App() {
   const screen = useGame((s) => s.screen);
@@ -30,6 +32,8 @@ export default function App() {
 
   useEffect(() => {
     bindMuteGetter(() => useGame.getState().muted);
+    bindVolumeGetter(() => useGame.getState().settings.volume);
+    bindShakeScale(() => useGame.getState().settings.shake);
   }, []);
 
   useEffect(() => {
@@ -77,6 +81,7 @@ export default function App() {
         {screen === "select" && <SelectScreen />}
         {screen === "highscores" && <HighScoresScreen />}
         {screen === "howto" && <HowToScreen />}
+        {screen === "options" && <OptionsScreen />}
         {screen === "race" && (
           <div className="relative h-full w-full">
             <RaceCanvas key={raceRunId} controls={controls} />

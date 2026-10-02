@@ -408,18 +408,20 @@ export default function SelectScreen() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {THEME_LIST.map((id) => {
                 const th = THEMES[id as ThemeId];
+                const ink = th.dark ? "text-white" : "text-sky-950";
+                const inkSub = th.dark ? "text-white/70" : "text-sky-900/70";
                 return (
                   <button key={id} onClick={() => setTheme(id)} className={`group relative overflow-hidden rounded-3xl p-4 text-left transition hover:-translate-y-1 ${theme === id ? "ring-4 ring-white" : ""}`}>
                     <div className="absolute inset-0" style={{ background: `linear-gradient(150deg, ${th.skyTop}, ${th.skyBottom} 55%, ${th.ground})` }} />
                     <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full blur-xl" style={{ background: th.glow, opacity: 0.8 }} />
                     <div className="relative">
-                      <div className="font-display text-xl font-extrabold text-sky-950 drop-shadow-sm">{th.name}</div>
+                      <div className={`font-display text-xl font-extrabold drop-shadow-sm ${ink}`}>{th.name}</div>
                       <div className="mt-3 flex gap-1.5">
                         {[th.road, th.roadLine, th.barrierA, th.barrierB, th.glow, th.water].map((c, i) => (
                           <span key={i} className="h-5 w-5 rounded-full ring-2 ring-white/70" style={{ background: c }} />
                         ))}
                       </div>
-                      <div className="mt-2 text-[11px] font-semibold text-sky-900/70">
+                      <div className={`mt-2 text-[11px] font-semibold ${inkSub}`}>
                         {th.prop.toUpperCase()} · {t("bloomOn")} {Math.round(th.bloom * 100)}%
                       </div>
                     </div>

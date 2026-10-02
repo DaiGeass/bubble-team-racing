@@ -37,7 +37,7 @@ function tone({ freq, duration, type = "sine", volume = 0.2, freqEnd, delay = 0 
   osc.type = type;
   osc.frequency.setValueAtTime(freq, t0);
   if (freqEnd !== undefined) osc.frequency.exponentialRampToValueAtTime(Math.max(1, freqEnd), t0 + duration);
-  gain.gain.setValueAtTime(volume, t0);
+  gain.gain.setValueAtTime(volume * masterVolume(), t0);
   gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
   osc.connect(gain);
   gain.connect(c.destination);
@@ -46,8 +46,21 @@ function tone({ freq, duration, type = "sine", volume = 0.2, freqEnd, delay = 0 
 }
 
 let mutedGetter: () => boolean = () => false;
+let volumeGetter: () => number = () => 1;
 export function bindMuteGetter(fn: () => boolean) {
   mutedGetter = fn;
+}
+/** master volume slider from the options screen */
+export function bindVolumeGetter(fn: () => number) {
+  volumeGetter = fn;
+}
+function masterVolume() {
+  try {
+    const v = volumeGetter();
+    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+  } catch {
+    return 1;
+  }
 }
 function useMutedCheck() {
   try {

@@ -1,3 +1,4 @@
+import type { ModeId, AiSkillId } from "./data";
 import { create } from "zustand";
 import type { Lang } from "./i18n";
 import {
@@ -18,7 +19,7 @@ import {
   type SubId,
 } from "./data";
 
-export type Screen = "start" | "select" | "howto" | "race" | "results" | "highscores";
+export type Screen = "start" | "select" | "howto" | "options" | "race" | "results" | "highscores";
 
 export interface HighScoreEntry {
   name: string;
@@ -113,19 +114,76 @@ export interface VehiclePrefs {
   finish: import("./data").FinishId;
 }
 
+// ---------------------------------------------------------------------------
+// Input remapping: the same action list drives the keyboard binds and the
+// on-screen buttons, so anything the HUD can do the player can reassign.
+// ---------------------------------------------------------------------------
+
+export type Action = "item" | "drift" | "swap" | "fuse" | "turbo" | "left" | "right" | "gas" | "brake";
+
+export const ACTIONS: Action[] = ["item", "drift", "swap", "fuse", "turbo", "left", "right", "gas", "brake"];
+
+/** Physical slots available to the touch overlay. */
+export type TouchSlot = "padL" | "padR" | "drift" | "gas" | "brake" | "swap" | "fuse" | "item";
+
+export const TOUCH_SLOTS: TouchSlot[] = ["padL", "padR", "drift", "gas", "brake", "swap", "fuse", "item"];
+
+export const DEFAULT_KEYBINDS: Record<Action, string[]> = {
+  item: ["Space"],
+  drift: ["ShiftLeft", "ShiftRight"],
+  swap: ["KeyQ"],
+  fuse: ["KeyF", "KeyE"],
+  turbo: ["KeyK", "KeyJ"],
+  left: ["ArrowLeft", "KeyA"],
+  right: ["ArrowRight", "KeyD"],
+  gas: ["ArrowUp", "KeyW"],
+  brake: ["ArrowDown", "KeyS"],
+};
+
+export const DEFAULT_TOUCH: Record<TouchSlot, Action> = {
+  padL: "left",
+  padR: "right",
+  drift: "drift",
+  gas: "gas",
+  brake: "brake",
+  swap: "swap",
+  fuse: "fuse",
+  item: "item",
+};
+
 export interface Settings {
   autoGas: boolean;
   steerAssist: boolean;
   bloom: boolean;
   controlPreset: "A" | "B";
+  /** how hard the AI pushes */
+  aiSkill: AiSkillId;
+  /** invert the steering axis */
+  invertSteer: boolean;
+  /** camera shake 0..1 */
+  shake: number;
+  /** show the debug telemetry overlay */
+  telemetry: boolean;
+  /** master-ish volume 0..1 */
+  volume: number;
+  /** 0 = crisp, 1 = cinematic blur on the fast camera */
+  motionBlur: number;
+  /** remapped keyboard bindings */
+  keybinds: Record<Action, string[]>;
+  /** which action each on-screen slot performs */
+  touchLayout: Record<TouchSlot, Action>;
+  /** 0.8 small .. 1.4 chunky touch buttons */
+  touchScale: number;
+  /** mirrors the touch overlay for left handed players */
+  handed: "right" | "left";
 }
 
 interface GameState {
   screen: Screen;
   lang: Lang;
   setLang: (l: Lang) => void;
-  modeId: "quick" | "trial" | "chaos" | "sprint" | "duel";
-  setMode: (m: "quick" | "trial" | "chaos" | "sprint" | "duel") => void;
+  modeId: ModeId;
+  setMode: (m: ModeId) => void;
   trackId: string;
   setTrackId: (id: string) => void;
   theme: ThemeId;
@@ -217,7 +275,22 @@ const defaultVehicle: VehiclePrefs = {
 // Sensible defaults per device: touch screens get auto-throttle, small screens skip bloom.
 const isTouch = typeof window !== "undefined" && (window.matchMedia?.("(pointer: coarse)").matches || (navigator.maxTouchPoints ?? 0) > 0);
 const isSmall = typeof window !== "undefined" && Math.min(window.innerWidth, window.innerHeight) < 700;
-const defaultSettings: Settings = { autoGas: isTouch, steerAssist: true, bloom: !isSmall, controlPreset: "A" };
+const defaultSettings: Settings = {
+  autoGas: isTouch,
+  steerAssist: true,
+  bloom: !isSmall,
+  controlPreset: "A",
+  aiSkill: "pro",
+  invertSteer: false,
+  shake: 1,
+  telemetry: false,
+  volume: 0.8,
+  motionBlur: 0,
+  keybinds: DEFAULT_KEYBINDS,
+  touchLayout: DEFAULT_TOUCH,
+  touchScale: 1,
+  handed: "right",
+};
 
 export const useGame = create<GameState>((set, get) => ({
   screen: "start",

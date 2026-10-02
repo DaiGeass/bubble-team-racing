@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useGame } from "./store";
+import { useGame, DEFAULT_KEYBINDS, DEFAULT_TOUCH, type Action, type TouchSlot } from "./store";
 
 export interface ControlState {
   steer: number; // -1 left .. +1 right (screen-correct)
@@ -16,13 +16,27 @@ export interface ControlState {
   pausePressed: boolean;
 }
 
-// Two remappable keyboard layouts (selectable in Settings).
+// Legacy presets. The live bindings live in settings.keybinds so the options
+// screen can rewrite them; the presets only seed the defaults.
 const LAYOUTS = {
   A: { item: ["Space"], drift: ["ShiftLeft", "ShiftRight"], swap: ["KeyQ"], fuse: ["KeyF", "KeyE"] },
   B: { item: ["KeyE", "ControlLeft"], drift: ["Space"], swap: ["KeyQ", "Tab"], fuse: ["KeyF", "KeyR"] },
 } as const;
 
 export type ControlPreset = keyof typeof LAYOUTS;
+
+/** Actions map onto the on-screen flags the game already tracks. */
+const TOUCH_KEY: Record<Action, keyof { left: boolean; right: boolean; up: boolean; down: boolean; item: boolean; swap: boolean; fuse: boolean; turbo: boolean; drift: boolean }> = {
+  left: "left",
+  right: "right",
+  gas: "up",
+  brake: "down",
+  item: "item",
+  swap: "swap",
+  fuse: "fuse",
+  turbo: "turbo",
+  drift: "drift",
+};
 
 export function useControls() {
   const state = useRef<ControlState>({
@@ -76,19 +90,25 @@ export function useControls() {
   function poll(): ControlState {
     const k = keys.current;
     const t = touch.current;
-    const preset = (useGame.getState().settings.controlPreset ?? "A") as ControlPreset;
-    const map = LAYOUTS[preset] ?? LAYOUTS.A;
-    const any = (codes: readonly string[]) => codes.some((c) => k[c]);
+    const st = useGame.getState().settings;
+    const binds = { ...DEFAULT_KEYBINDS, ...(st.keybinds ?? {}) };
+    const held = (a: Action) => binds[a].some((c) => k[c]);
+    const touchSlot = (slot: TouchSlot) => t[TOUCH_KEY[(st.touchLayout ?? DEFAULT_TOUCH)[slot] ?? "item"]];
 
-    const left = k["ArrowLeft"] || k["KeyA"] || t.left;
-    const right = k["ArrowRight"] || k["KeyD"] || t.right;
-    const fwd = k["ArrowUp"] || k["KeyW"] || t.up;
-    const back = k["ArrowDown"] || k["KeyS"] || t.down;
-    const item = !!(any(map.item) || t.item);
-    const swap = !!(any(map.swap) || t.swap);
-    const fuse = !!(any(map.fuse) || t.fuse);
-    const turbo = !!(k["KeyK"] || k["KeyJ"] || t.turbo);
-    const drift = !!(any(map.drift) || t.drift);
+    let left = !!(held("left") || touchSlot("padL") || k["ArrowLeft"] || k["KeyA"] || t.left);
+    let right = !!(held("right") || touchSlot("padR") || k["ArrowRight"] || k["KeyD"] || t.right);
+    const fwd = !!(held("gas") || touchSlot("gas") || k["ArrowUp"] || k["KeyW"] || t.up);
+    const back = !!(held("brake") || touchSlot("brake") || k["ArrowDown"] || k["KeyS"] || t.down);
+    const item = !!(held("item") || touchSlot("item") || t.item);
+    const swap = !!(held("swap") || touchSlot("swap") || t.swap);
+    const fuse = !!(held("fuse") || touchSlot("fuse") || t.fuse);
+    const turbo = !!(held("turbo") || t.turbo);
+    const drift = !!(held("drift") || touchSlot("drift") || t.drift);
+    if (st.invertSteer) {
+      const flip = left;
+      left = right;
+      right = flip;
+    }
 
     state.current.steer = (left ? -1 : 0) + (right ? 1 : 0);
     state.current.throttle = (fwd ? 1 : 0) + (back ? -1 : 0);
@@ -110,7 +130,12 @@ export function useControls() {
     return { ...state.current, pausePressed };
   }
 
-  return { poll, setTouch };
+  /** press a remapped action: HUD slots hand over the action, not the raw flag */
+  function setAction(action: Action, val: boolean) {
+    setTouch(TOUCH_KEY[action] ?? "item", val);
+  }
+
+  return { poll, setTouch, setAction };
 }
 
 export type UseControlsReturn = ReturnType<typeof useControls>;

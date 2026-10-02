@@ -1,7 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { trackCurve, halfWidthAt, getActiveTrack, getShortcuts, nearestT, trackPointAt, surfaceYAt } from "../trackCurve";
+import { trackCurve, halfWidthAt, getActiveTrack, getShortcuts, nearestT, trackPointAt, surfaceYAt, trapTransform, portalTransform } from "../trackCurve";
 import { TRACK_WIDTH, ZONES, SKY_ALTITUDE, hazardState, zoneAt, zoneOfKind, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
 const SEGMENTS = 760;
@@ -540,33 +540,6 @@ function Clouds({ theme }: { theme: ThemeDef }) {
           </mesh>
         </group>
       ))}
-      {getActiveTrack().traps?.map((tr, i) => {
-        const t = ((tr.t + (performance.now() * 0.0001 * tr.speed + tr.phase)) % 1 + 1) % 1;
-        const c = trackCurve.getPointAt(t);
-        const tan = trackCurve.getTangentAt(t);
-        const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-        const h = halfWidthAt(t) - 2.2;
-        const p = c.clone().addScaledVector(n, tr.side * h);
-        const ground = surfaceYAt(t);
-        if (tr.kind === "bar") {
-          return (
-            <group key={i} position={[p.x, ground + 1.6, p.z]} rotation={[0, Math.atan2(tan.x, tan.z), 0]}>
-              <mesh castShadow>
-                <boxGeometry args={[h * 1.2, 0.4, 0.6]} />
-                <meshStandardMaterial color="#ff7b3d" emissive="#ff7b3d" emissiveIntensity={1.6} />
-              </mesh>
-            </group>
-          );
-        }
-        return (
-          <group key={i} position={[p.x, ground + 0.6, p.z]} rotation={[0, Math.atan2(tan.x, tan.z), Math.PI / 2]}>
-            <mesh castShadow>
-              <cylinderGeometry args={[0.3, 0.3, 2.8, 4]} />
-              <meshStandardMaterial color="#ff4d6d" emissive="#ff4d6d" emissiveIntensity={1.4} />
-            </mesh>
-          </group>
-        );
-      })}
     </group>
   );
 }
@@ -907,17 +880,114 @@ function SubFish({ zone }: { zone: Zone }) {
   );
 }
 
+/** Hanging spike bars and sliding road spikes; they move with the same clock as the damage check. */
+function MovingTraps({ theme }: { theme: ThemeDef }) {
+  const traps = getActiveTrack().traps ?? [];
+  const refs = useRef<(THREE.Group | null)[]>([]);
+  useFrame((state) => {
+    const now = state.clock.elapsedTime * 1000;
+    traps.forEach((tr, i) => {
+      const g = refs.current[i];
+      if (!g) return;
+      const { p, ground, heading, span } = trapTransform(tr, now);
+      g.position.set(p.x, ground, p.z);
+      g.rotation.set(0, heading, 0);
+      const k = tr.kind === "bar" ? span * 0.55 : 1;
+      g.scale.set(k, 1, 1);
+    });
+  });
+  return (
+    <group>
+      {traps.map((tr, i) => (
+        <group key={i} ref={(el) => (refs.current[i] = el)}>
+          {tr.kind === "bar" ? (
+            <>
+              <mesh position={[0, 2.2, 0]} castShadow>
+                <boxGeometry args={[7, 0.5, 0.7]} />
+                <meshStandardMaterial color={theme.barrierA} emissive={theme.barrierA} emissiveIntensity={1.8} toneMapped={false} />
+              </mesh>
+              <mesh position={[-3.2, 1.1, 0]}>
+                <boxGeometry args={[0.4, 2.2, 0.4]} />
+                <meshStandardMaterial color="#2b2b33" />
+              </mesh>
+              <mesh position={[3.2, 1.1, 0]}>
+                <boxGeometry args={[0.4, 2.2, 0.4]} />
+                <meshStandardMaterial color="#2b2b33" />
+              </mesh>
+            </>
+          ) : (
+            <>
+              {[0, 1, 2].map((k) => (
+                <mesh key={k} position={[(k - 1) * 1.1, 0.7, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+                  <cylinderGeometry args={[0.26, 0.26, 2.6, 5]} />
+                  <meshStandardMaterial color="#ff4d6d" emissive="#ff4d6d" emissiveIntensity={1.4} toneMapped={false} />
+                </mesh>
+              ))}
+            </>
+          )}
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/** Portal mouths: a swirl you can drive into that spits you out somewhere else on the lap. */
+function Portals({ theme }: { theme: ThemeDef }) {
+  const portals = getActiveTrack().portals ?? [];
+  const inRefs = useRef<(THREE.Group | null)[]>([]);
+  const outRefs = useRef<(THREE.Group | null)[]>([]);
+  const nowRef = useRef(0);
+  useFrame((state) => {
+    nowRef.current = state.clock.elapsedTime * 1000;
+    const now = nowRef.current;
+    portals.forEach((pr, i) => {
+      const a = inRefs.current[i];
+      if (a) {
+        const { p, ground, heading } = portalTransform(pr, "in");
+        a.position.set(p.x, ground + 2.6, p.z);
+        a.rotation.set(0, heading, now * 0.0012 + i);
+      }
+      const b = outRefs.current[i];
+      if (b) {
+        const { p, ground, heading } = portalTransform(pr, "out", pr);
+        b.position.set(p.x, ground + 2.6, p.z);
+        b.rotation.set(0, heading, -now * 0.0012 + i);
+      }
+    });
+  });
+  return (
+    <group>
+      {portals.map((_pr, i) =>
+        [
+          { ref: inRefs, key: "in", glow: theme.glow, ring: theme.barrierA },
+          { ref: outRefs, key: "out", glow: theme.barrierB, ring: theme.barrierB },
+        ].map(({ ref, key, glow, ring }) => (
+          <group key={key + i} ref={(el) => (ref.current[i] = el)}>
+            <mesh>
+              <torusGeometry args={[2.7, 0.3, 12, 36]} />
+              <meshBasicMaterial color={ring} toneMapped={false} />
+            </mesh>
+            <mesh>
+              <circleGeometry args={[2.5, 30]} />
+              <meshBasicMaterial color={glow} transparent opacity={0.28} side={THREE.DoubleSide} toneMapped={false} depthWrite={false} />
+            </mesh>
+            <mesh>
+              <torusGeometry args={[1.6, 0.09, 8, 28]} />
+              <meshBasicMaterial color={glow} toneMapped={false} />
+            </mesh>
+          </group>
+        ))
+      )}
+    </group>
+  );
+}
+
 /** Alternative paths: pulsing gates joined by a translucent glowing skyway arc. */
 function Shortcuts({ theme }: { theme: ThemeDef }) {
   const shortcuts = useMemo(() => getShortcuts(), []);
   const arcs = useMemo(
     () =>
-      shortcuts.map((s) => {
-        const mid = s.entry.clone().lerp(s.exit, 0.5);
-        mid.y = s.lift;
-        const curve = new THREE.QuadraticBezierCurve3(s.entry.clone().setY(0.6), mid, s.exit.clone().setY(0.6));
-        return new THREE.TubeGeometry(curve, 34, 0.28, 8, false);
-      }),
+      shortcuts.map((s) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(s.path), 48, 0.3, 8, false)),
     [shortcuts]
   );
   const gateRefs = useRef<(THREE.Group | null)[]>([]);
@@ -938,10 +1008,10 @@ function Shortcuts({ theme }: { theme: ThemeDef }) {
             <meshStandardMaterial color={theme.glow} emissive={theme.glow} emissiveIntensity={1.6} transparent opacity={0.4} toneMapped={false} depthWrite={false} />
           </mesh>
           {[
-            { p: s.entry, h: s.entryHeading, k: 0 },
-            { p: s.exit, h: s.heading, k: 1 },
+            { p: s.path[0], h: s.entryHeading, k: 0 },
+            { p: s.path[s.path.length - 1], h: s.heading, k: 1 },
           ].map((g) => (
-            <group key={g.k} position={[g.p.x, 2.2, g.p.z]} rotation={[0, g.h, 0]}>
+            <group key={g.k} position={[g.p.x, g.p.y + 2.2, g.p.z]} rotation={[0, g.h, 0]}>
               <group ref={(el) => (gateRefs.current[i * 2 + g.k] = el)}>
                 <mesh>
                   <torusGeometry args={[2.5, 0.22, 10, 32]} />
@@ -1068,6 +1138,8 @@ export default function Track({ theme }: { theme: ThemeDef }) {
       <BranchRibbons theme={theme} />
       <SubZone theme={theme} />
       <Shortcuts theme={theme} />
+      <MovingTraps theme={theme} />
+      <Portals theme={theme} />
       <MovingHazards theme={theme} />
       <Props theme={theme} />
       <Clouds theme={theme} />

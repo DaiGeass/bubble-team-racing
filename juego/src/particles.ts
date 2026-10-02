@@ -26,6 +26,19 @@ export function drainParticleQueue(): ParticleBurstRequest[] {
 
 // Screen shake shared state
 export const shakeState = { trauma: 0 };
+let shakeScale: () => number = () => 1;
+/** camera shake slider, 0 disables it entirely */
+export function bindShakeScale(fn: () => number) {
+  shakeScale = fn;
+}
+
 export function addShake(amount: number) {
-  shakeState.trauma = Math.min(1, shakeState.trauma + amount);
+  let k = 1;
+  try {
+    k = shakeScale();
+  } catch {
+    k = 1;
+  }
+  if (k <= 0) return;
+  shakeState.trauma = Math.min(1, shakeState.trauma + amount * k);
 }

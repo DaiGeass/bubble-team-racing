@@ -22,6 +22,7 @@ import {
   raceSnapshot,
   hazardState,
   rollWeapon,
+  AI_PROFILES,
   zoneAt,
   zoneOfKind,
   craftSpeed,
@@ -30,7 +31,7 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, corridorBounds, branchCenterAt, getActiveTrack, getShortcuts, surfaceYAt, trackFrameAt, halfWidthAt } from "../trackCurve";
+import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, corridorBounds, branchCenterAt, getActiveTrack, getShortcuts, surfaceYAt, trackFrameAt, halfWidthAt, trapPhase, trapTransform } from "../trackCurve";
 import { emitParticles, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
 
@@ -88,7 +89,7 @@ interface Racer {
   turboMeter: number;
   hazardCd: number;
   warpCd: number;
-  warp: null | { fromT: number; toT: number; side: number; startOffset: number; t: number; dur: number; heading: number };
+  warp: null | { fromT: number; toT: number; side: number; startOffset: number; t: number; dur: number; heading: number; lift: number };
   magnetTimer: number;
   ghostTimer: number;
   fuseShots: number;
@@ -102,6 +103,10 @@ interface Racer {
   aiLookahead: number;
   aiWeaponDelay: number;
   aiMult: number;
+  /** per-racer personality offset so the field is not a wall of clones */
+  aiQuirk: number;
+  /** seconds of remaining brain-fart: while positive the AI runs wide */
+  aiMistake: number;
   coins: number;
   boostsUsed: number;
   tagSwaps: number;
@@ -264,6 +269,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         aiLookahead: 0.03 + Math.random() * 0.012,
         aiWeaponDelay: 0,
         aiMult: 1,
+        aiQuirk: ((i * 7) % 5) / 12 - 0.16,
+        aiMistake: 0,
         coins: 0,
         boostsUsed: 0,
         tagSwaps: 0,
@@ -345,6 +352,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const raceClock = useRef(0);
   const finishedOnce = useRef(false);
   const frame = useRef(0);
+  const clockRef = useRef(0);
   const camPos = useRef(new THREE.Vector3(0, 6, -14));
   const camLook = useRef(new THREE.Vector3());
   const beamRef = useRef<THREE.Mesh>(null);
@@ -409,6 +417,97 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     return r.shieldActive || r.swapInvuln > 0 || r.ghostTimer > 0;
   }
 
+  /**
+   * Fusion turrets are not one gun recoloured: each character fires their own
+   * weapon with their own signature. Heavier guns trade rate for a bigger payoff.
+   */
+  function fireFusionGun(r: Racer, gun: WeaponId, target: Racer | null) {
+    const meta = WEAPON_META[gun];
+    const muzzle = r.pos.clone().setY(r.y + 1.1);
+    const aim = target && !protectedNow(target) ? target : null;
+    switch (gun) {
+      case "beam": {
+        // hitscan lance: damage now, no projectile to dodge
+        spawnProjectile("beam", r, target ? target.id : null);
+        if (aim) {
+          const p1 = aim.pos.clone().setY(aim.y + 1);
+          for (let i = 0; i < 8; i++) {
+            emitParticles({ position: muzzle.clone().lerp(p1, i / 8), color: meta.color, count: 4, speed: 1.6, spread: 0.35, size: 0.2, life: 0.35, gravity: 0 });
+          }
+          aim.speed *= 0.8;
+          aim.stunTimer = Math.max(aim.stunTimer, 0.5);
+        }
+        break;
+      }
+      case "zap": {
+        spawnProjectile("zap", r, target ? target.id : null);
+        if (aim) {
+          const p1 = aim.pos.clone().setY(aim.y + 1);
+          for (let i = 0; i < 6; i++) {
+            emitParticles({ position: muzzle.clone().lerp(p1, i / 6), color: meta.color, count: 3, speed: 2, spread: 0.5, size: 0.17, life: 0.4, gravity: 0 });
+          }
+          aim.stunTimer = Math.max(aim.stunTimer, 0.75);
+          aim.speed *= 0.72;
+          if (aim.isPlayer) addShake(0.3);
+        }
+        break;
+      }
+      case "wave": {
+        // rear-guard shockwave: punishes whoever is drafting behind you
+        for (let i = -1; i <= 1; i += 2) spawnProjectile("wave", r, null);
+        emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: meta.glow, count: 26, speed: 7, spread: 0.5, size: 0.26, life: 0.6, gravity: 0 });
+        if (r.isPlayer) addShake(0.22);
+        break;
+      }
+      case "orb": {
+        spawnProjectile("orb", r, target ? target.id : null);
+        spawnProjectile("orb", r, null);
+        break;
+      }
+      case "bubble": {
+        spawnProjectile("bubble", r, target ? target.id : null);
+        if (target) spawnProjectile("bubble", r, target.id);
+        break;
+      }
+      case "mine": {
+        spawnProjectile("mine", r, target ? target.id : null);
+        break;
+      }
+      case "quake": {
+        // ground slam right under the turret
+        spawnProjectile("quake", r, target ? target.id : null);
+        emitParticles({ position: r.pos.clone().setY(r.y + 0.2), color: meta.color, count: 30, speed: 6, spread: 1.2, size: 0.24, life: 0.7 });
+        break;
+      }
+      case "slime": {
+        spawnProjectile("slime", r, target ? target.id : null);
+        spawnProjectile("slime", r, target ? target.id : null);
+        spawnProjectile("slime", r, null);
+        break;
+      }
+      case "magnet": {
+        spawnProjectile("magnet", r, target ? target.id : null);
+        break;
+      }
+      case "ghost": {
+        spawnProjectile("ghost", r, target ? target.id : null);
+        if (r.isPlayer) {
+          r.ghostTimer = Math.max(r.ghostTimer, 1.4);
+        }
+        break;
+      }
+      case "swap": {
+        spawnProjectile("swap", r, target ? target.id : null);
+        break;
+      }
+      default: {
+        // every second volley is missile + lightning for the classic fusion feel
+        spawnProjectile("missile", r, target ? target.id : null);
+        if (target && r.fuseShots % 2 === 0) spawnProjectile("zap", r, target.id);
+        break;
+      }
+    }
+  }
   function applyHit(r: Racer, spinner: boolean) {
     if (protectedNow(r)) {
       r.shieldActive = false;
@@ -460,7 +559,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
   }
 
-  function fireWeapon(r: Racer) {
+  function fireWeapon(r: Racer, preferredTarget?: string | null) {
     const w = r.weapon;
     if (!w) return;
     r.weapon = null;
@@ -476,7 +575,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       }
       emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: col, count: 24, speed: 4.5, spread: 0.9, size: 0.22, life: 0.55 });
     } else if (w === "missile") {
-      const target = findTargetAhead(r, 0.3);
+      const auto = findTargetAhead(r, 0.3);
+      const target = preferredTarget && racers.some((x) => x.id === preferredTarget) ? { id: preferredTarget } : auto;
       spawnProjectile("missile", r, target ? target.id : null);
       if (r.isPlayer) {
         r.boostsUsed++;
@@ -669,6 +769,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.bumpCd > 0) r.bumpCd -= dt;
     for (let i = 0; i < r.ringCd.length; i++) if (r.ringCd[i] > 0) r.ringCd[i] -= dt;
     if (r.warpCd > 0) r.warpCd -= dt;
+    if (r.aiMistake > 0) r.aiMistake -= dt;
+    else if (!r.isPlayer && Math.random() < AI_PROFILES[useGame.getState().settings.aiSkill].mistake * dt) r.aiMistake = 0.5 + Math.random();
     if (r.portalCd > 0) r.portalCd -= dt;
     if (r.magnetTimer > 0) r.magnetTimer -= dt;
     if (r.ghostTimer > 0) r.ghostTimer -= dt;
@@ -684,7 +786,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const wNrm = new THREE.Vector3(-wTan.z, 0, wTan.x).normalize();
       const wOff = THREE.MathUtils.lerp(w.startOffset, w.side * (halfWidthAt(r.t) - 3.6), ease);
       r.pos.copy(trackPointAt(r.t)).addScaledVector(wNrm, wOff);
-      r.y = surfaceYAt(r.t) + Math.sin(e * Math.PI) * 9;
+      r.y = surfaceYAt(r.t) + Math.sin(e * Math.PI) * (w.lift || 9);
       r.vy = 0;
       r.airborne = false;
       r.heading += wrapAngle(w.heading - r.heading) * Math.min(1, dt * 6);
@@ -756,26 +858,62 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       turboPressed = controls.turboPressed;
       if (settings.autoGas && throttleIn === 0 && r.stunTimer <= 0) throttleIn = 1;
     } else if (!r.isPlayer) {
-      const look = r.t + r.aiLookahead;
-      const weave = Math.sin(performance.now() * 0.0006 + r.aiPhase) * 0.22;
+      // every opponent runs the skill profile the player picked, with a small
+      // per-racer personality offset so a field of pros is not a mirror clone
+      const ai = AI_PROFILES[useGame.getState().settings.aiSkill];
+      const look = r.t + r.aiLookahead * (ai.lookahead / 0.04);
+      const wobble = Math.sin(clockRef.current * 0.0006 + r.aiPhase);
+      const weave = wobble * ai.weave * (1 + r.aiQuirk);
       const cp = trackPointAt(look);
       const tan = trackTangentAt(look);
       const nrm = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-      const aim = cp.clone().addScaledVector(nrm, weave * TRACK_WIDTH * 0.45);
+      // lower skill runs a wider line and drifts wider on corners
+      const sloppy = r.aiMistake > 0 ? r.aiMistake * 3.2 : 0;
+      const aim = cp.clone().addScaledVector(nrm, weave * TRACK_WIDTH * 0.45 + sloppy * TRACK_WIDTH * 0.12);
       aim.y = r.mode === "plane" ? Math.sin(Math.min(1, Math.max(0, inSky)) * Math.PI) * SKY_ALTITUDE + 1.6 : 0;
       const toAim = new THREE.Vector3().subVectors(aim, r.pos.clone().setY(aim.y));
       const desired = Math.atan2(toAim.x, toAim.z);
-      steerIn = THREE.MathUtils.clamp(wrapAngle(desired - r.heading) * 2.4, -1, 1);
-      throttleIn = r.stunTimer > 0 ? 0 : 1;
+      steerIn = THREE.MathUtils.clamp(wrapAngle(desired - r.heading) * ai.steerGain, -1, 1);
+      // pros lift when they have the room, beginners floor it into the barrier
+      throttleIn = r.stunTimer > 0 ? 0 : Math.abs(wrapAngle(desired - r.heading)) > 0.55 && ai.steerGain < 3 ? 0.55 : 1;
 
       const player = racers[0];
       const gap = player.lap + player.t - (r.lap + r.t);
-      r.aiMult = gap > 0.05 ? 1 + 0.2 * mode.rubberband : gap < -0.1 ? 1 - 0.13 * mode.rubberband : 1;
+      const rb = mode.rubberband * ai.rubberband;
+      r.aiMult = gap > 0.05 ? 1 + 0.2 * rb : gap < -0.1 ? 1 - 0.13 * rb : 1;
+
+      // opportunistic gate usage: skilled drivers actually take the alt routes
+      if (r.warpCd <= 0 && !r.warp && Math.random() < ai.gateUse * dt) {
+        for (const sc of shortcuts) {
+          const dx = sc.entry.x - r.pos.x;
+          const dz = sc.entry.z - r.pos.z;
+          if (dx * dx + dz * dz < 15) {
+            const span = ((sc.t1 - sc.t0) % 1 + 1) % 1;
+            r.warp = {
+              fromT: sc.t0,
+              toT: (sc.t0 + span) % 1,
+              side: sc.side,
+              startOffset: lateralOffsetFrom(r.pos, sc.t0),
+              t: 0,
+              dur: Math.max(0.85, span * 22),
+              heading: sc.heading,
+              lift: sc.lift,
+            };
+            r.warpCd = 3;
+            break;
+          }
+        }
+      }
 
       if (r.weapon) {
-        if (r.aiWeaponDelay <= 0) fireWeapon(r);
-        else r.aiWeaponDelay -= dt;
-      } else if (Math.random() < 0.004 * mode.itemFrequency) {
+        r.aiWeaponDelay -= dt;
+        if (r.aiWeaponDelay <= 0) {
+          // aim for someone in front when the profile is sharp enough to bother
+          const victim = ai.itemDelay < 1 ? findTargetAhead(r, 0.4) : null;
+          fireWeapon(r, victim ? victim.id : null);
+          r.aiWeaponDelay = ai.itemDelay * (0.7 + Math.random() * 0.6);
+        }
+      } else if (Math.random() < 0.02 * mode.itemFrequency) {
         r.aiWeaponDelay = 0.4 + Math.random();
       }
     }
@@ -1034,6 +1172,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
             t: 0,
             dur: Math.max(0.85, span * 22),
             heading: sc.heading,
+            lift: sc.lift,
           };
           r.warpCd = 3;
           emitParticles({ position: r.pos.clone().setY(1.2), color: theme.glow, count: 28, speed: 5, spread: 1.4, size: 0.24, life: 0.7 });
@@ -1147,10 +1286,14 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // ---- moving traps ----
     const trkP2 = getActiveTrack();
     if (r.mode === "land" && r.hazardCd <= 0 && trkP2.traps) {
+      const nowMs = clockRef.current;
       for (const tr of trkP2.traps) {
-        const t = ((tr.t + (performance.now() * 0.0001 * tr.speed + tr.phase)) % 1 + 1) % 1;
+        // same helper the renderer uses, so the spikes you see are the spikes you hit
+        const t = trapPhase(tr, nowMs);
+        const hit = trapTransform(tr, nowMs);
+        const lateral = Math.abs(lateralOffsetFrom(r.pos, t) - tr.side * (halfWidthAt(t) - 2.2));
         const d = Math.abs((t - r.t + 0.5) % 1 - 0.5);
-        if (d < 0.015) {
+        if (d < 0.014 && lateral < 4.2 && Math.abs(r.y - hit.ground) < 3) {
           r.hazardCd = 1.0;
           applyHit(r, false);
           emitParticles({ position: r.pos.clone().setY(r.y + 0.8), color: WEAPON_META.zap.glow, count: 12, speed: 3, spread: 1, size: 0.2, life: 0.45 });
@@ -1160,33 +1303,29 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
 
 
-    // ---- FUSION (Crash Tag Team style): partner mans the turret, auto-fires ----
+    // ---- FUSION (Crash Tag Team style): the partner mans their own turret ----
     if (r.isPlayer && r.fuseTimer > 0) {
       r.fuseTimer -= dt;
       r.fuseGun -= dt;
+      const gunner = r.partner ?? r.main;
+      const gun = gunner.fusion;
+      const rate = gunner.fusionRate || 0.85;
       if (r.fuseGun <= 0) {
-        r.fuseGun = 0.85;
+        r.fuseGun = rate;
         const target = findTargetAhead(r, 0.35);
-        // the gunner alternates: plain missiles and missile + lightning volleys
         r.fuseShots = (r.fuseShots ?? 0) + 1;
-        if (target && r.fuseShots % 2 === 0) {
-          spawnProjectile("missile", r, target.id);
-          if (!protectedNow(target)) {
-            target.stunTimer = Math.max(target.stunTimer, 0.75);
-            target.speed *= 0.72;
-            const p0 = r.pos.clone().setY(r.y + 1.1);
-            const p1 = target.pos.clone().setY(target.y + 1);
-            for (let i = 0; i < 6; i++) {
-              emitParticles({ position: p0.clone().lerp(p1, i / 6), color: WEAPON_META.zap.color, count: 3, speed: 2, spread: 0.5, size: 0.17, life: 0.4, gravity: 0 });
-            }
-            if (target.isPlayer) addShake(0.3);
-          }
-        } else {
-          spawnProjectile("missile", r, target ? target.id : null);
-        }
+        fireFusionGun(r, gun, target);
         sfx.boost();
         const fwd2 = new THREE.Vector3(Math.sin(r.heading), 0, Math.cos(r.heading));
-        emitParticles({ position: r.pos.clone().addScaledVector(fwd2, 1.4).setY(r.y + 1.1), color: WEAPON_META.missile.glow, count: 8, speed: 2.5, spread: 0.5, size: 0.18, life: 0.4 });
+        emitParticles({
+          position: r.pos.clone().addScaledVector(fwd2, 1.4).setY(r.y + 1.1),
+          color: WEAPON_META[gun].glow,
+          count: 8,
+          speed: 2.5,
+          spread: 0.5,
+          size: 0.18,
+          life: 0.4,
+        });
       }
       if (r.fuseTimer <= 0) {
         r.fuseCd = 11;
@@ -1302,6 +1441,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const state = useGame.getState();
     const dt = Math.min(deltaRaw, 1 / 30);
     frame.current++;
+    clockRef.current = performance.now();
     const controls = poll();
 
     if (controls.pausePressed && state.screen === "race" && !state.telemetry.finished) state.setPaused(!state.paused);

@@ -15,7 +15,7 @@ export type ShapeId =
   | "tank" | "wedge" | "sled" | "orbit" | "dune" | "phantom" | "mech" | "board" | "shell" | "winglet" | "pod";
 export type ThemeId =
   | "frutiger" | "aero" | "techno" | "eco" | "aqua" | "sunset"
-  | "y2k" | "liquid" | "win98" | "vapor";
+  | "y2k" | "liquid" | "win98" | "vapor" | "dreamcore" | "cyberpunk" | "noir";
 export type WheelStyle = "classic" | "sporty" | "glow" | "chrome" | "spike";
 export type SpoilerId = "none" | "wing" | "fin";
 export type FinishId = "solid" | "gloss" | "matte" | "chrome" | "glass" | "holo";
@@ -39,6 +39,13 @@ export interface CharacterDef {
   weight: number;
   role: RoleId;
   favorite: WeaponId;
+  /**
+   * Weapon the partner mans while fused. Every character brings a different gun,
+   * so fusion is a pairing choice instead of one universal missile stream.
+   */
+  fusion: WeaponId;
+  /** seconds between fusion shots, tuned per character */
+  fusionRate: number;
 }
 
 // ---- color helpers: boost saturation so every racer pops ----
@@ -95,7 +102,9 @@ function vivid(hex: string, minL: number, maxL: number): string {
   return hslToHex(h, Math.min(1, s * 1.1 + 0.14), Math.min(maxL, Math.max(minL, l)));
 }
 
-const RAW_CHARACTERS: CharacterDef[] = [
+type RawCharacter = Omit<CharacterDef, "fusion" | "fusionRate">;
+
+const RAW_CHARACTERS: RawCharacter[] = [
   { id: "nova", name: "NOVA", form: "drop", eye: "sparkle", primary: "#22d3ee", secondary: "#e0fbff", accent: "#0e7490", speed: 3, accel: 4, handling: 4, weight: 2, role: "balanced", favorite: "orb" },
   { id: "blip", name: "BLIP", form: "star", eye: "sharp", primary: "#fde047", secondary: "#fffbe6", accent: "#f59e0b", speed: 5, accel: 5, handling: 2, weight: 1, role: "speed", favorite: "missile" },
   { id: "mochi", name: "MOCHI", form: "bubble", eye: "sparkle", primary: "#f9a8d4", secondary: "#fff0f7", accent: "#db2777", speed: 2, accel: 5, handling: 4, weight: 1, role: "trickster", favorite: "slime" },
@@ -134,13 +143,35 @@ const fixEarColors: Record<string, { primary?: string; secondary?: string; accen
   magma: { primary: "#ff2d00", secondary: "#ffe6dc", accent: "#8f1500" },
 };
 
-export const CHARACTERS: CharacterDef[] = RAW_CHARACTERS.map((c) => {
+/**
+ * Fusion guns. The list is walked per character so every roster slot gets a
+ * different turret; the rate makes a heavy hitter slower than a glass cannon.
+ */
+const FUSION_GUNS: { w: WeaponId; rate: number }[] = [
+  { w: "missile", rate: 0.85 },
+  { w: "orb", rate: 0.7 },
+  { w: "beam", rate: 1.05 },
+  { w: "zap", rate: 0.95 },
+  { w: "wave", rate: 1.15 },
+  { w: "bubble", rate: 0.8 },
+  { w: "mine", rate: 1.25 },
+  { w: "slime", rate: 1 },
+  { w: "quake", rate: 1.35 },
+  { w: "magnet", rate: 0.9 },
+  { w: "ghost", rate: 1.1 },
+  { w: "swap", rate: 1.2 },
+];
+
+export const CHARACTERS: CharacterDef[] = RAW_CHARACTERS.map((c, i) => {
   const f = fixEarColors[c.id];
+  const gun = FUSION_GUNS[i % FUSION_GUNS.length];
   return {
     ...c,
     primary: f?.primary ?? vivid(c.primary, 0.55, 0.66),
     secondary: f?.secondary ?? c.secondary,
     accent: f?.accent ?? vivid(c.accent, 0.3, 0.44),
+    fusion: gun.w,
+    fusionRate: gun.rate,
   };
 });
 
@@ -175,6 +206,8 @@ export interface ThemeDef {
   particles: string[];
   prop: "palm" | "crystal" | "circuit" | "tree" | "coral" | "cactus" | "y2k" | "win98" | "liquid" | "vapor";
   bloom: number;
+  /** dark themes need light text in menus */
+  dark?: boolean;
 }
 
 export const THEMES: Record<ThemeId, ThemeDef> = {
@@ -248,9 +281,30 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     hemiSky: "#b967ff", hemiGround: "#2a1458", cloud: "#ffb3ec", isle: "#5a2d9e", glow: "#05ffa1",
     particles: ["#ff71ce", "#01cdfe", "#05ffa1", "#b967ff"], prop: "vapor", bloom: 1.5,
   },
+  dreamcore: {
+    id: "dreamcore", name: "DREAMCORE", skyTop: "#c7b9ff", skyBottom: "#f2e6ff", fog: "#e7dcff", fogNear: 70, fogFar: 280,
+    water: "#b9c9ff", ground: "#e6d9ff", road: "#f5eeff", roadLine: "#ffe1f5", roadEdge: "#ffffff",
+    barrierA: "#ffd1ec", barrierB: "#c9e6ff", sun: "#fff0f9", sunIntensity: 1.8, ambient: 1.0, ambientColor: "#ffffff",
+    hemiSky: "#d9c9ff", hemiGround: "#f0e6ff", cloud: "#ffffff", isle: "#d9c9ff", glow: "#ffe1f5",
+    particles: ["#ffffff", "#ffe1f5", "#c9e6ff", "#d9c9ff"], prop: "vapor", bloom: 1.1,
+  },
+  cyberpunk: {
+    id: "cyberpunk", name: "CYBERPUNK", skyTop: "#050510", skyBottom: "#0f102b", fog: "#0b0b24", fogNear: 60, fogFar: 240,
+    water: "#102040", ground: "#101010", road: "#1a1433", roadLine: "#39ff14", roadEdge: "#7c9cff",
+    barrierA: "#ff3366", barrierB: "#39ff14", sun: "#39ff14", sunIntensity: 1.2, ambient: 0.9, ambientColor: "#4d7cff",
+    hemiSky: "#0f102b", hemiGround: "#101010", cloud: "#1a1433", isle: "#1a1433", glow: "#39ff14",
+    particles: ["#39ff14", "#7c9cff", "#ff3366", "#ffffff"], prop: "circuit", bloom: 1.2, dark: true,
+  },
+  noir: {
+    id: "noir", name: "NOIR", skyTop: "#0b0b0b", skyBottom: "#1a1a1a", fog: "#111111", fogNear: 40, fogFar: 220,
+    water: "#0f141f", ground: "#151515", road: "#1f1f1f", roadLine: "#d8d8d8", roadEdge: "#f5f5f5",
+    barrierA: "#d8d8d8", barrierB: "#a0a0a0", sun: "#ffffff", sunIntensity: 0.8, ambient: 0.7, ambientColor: "#ffffff",
+    hemiSky: "#1a1a1a", hemiGround: "#151515", cloud: "#2a2a2a", isle: "#202020", glow: "#ffffff",
+    particles: ["#ffffff", "#d8d8d8", "#a0a0a0", "#f5f5f5"], prop: "tree", bloom: 0.4, dark: true,
+  },
 };
 
-export const THEME_LIST: ThemeId[] = ["frutiger", "eco", "aero", "liquid", "y2k", "win98", "vapor", "techno", "aqua", "sunset"];
+export const THEME_LIST: ThemeId[] = ["frutiger", "eco", "aero", "liquid", "y2k", "win98", "vapor", "techno", "aqua", "sunset", "dreamcore", "cyberpunk", "noir"];
 
 // ---------------------------------------------------------------------------
 // Vehicle customization: 11 shapes, 5 wheels, 3 spoilers, 3 boosters,
@@ -405,7 +459,50 @@ export interface GameMode {
   rubberband: number;
 }
 
-export const MODES: Record<string, GameMode> = {
+// ---------------------------------------------------------------------------
+// AI skill tiers: the opponents are tuned from a rolling beginner up to a
+// rubberband cheat that still brakes for corners.
+// ---------------------------------------------------------------------------
+
+export type AiSkillId = "rookie" | "amateur" | "pro" | "ace";
+
+export interface AiProfile {
+  id: AiSkillId;
+  name: string;
+  /** steering authority, 1 = sloppy, higher = tighter lines */
+  steerGain: number;
+  /** how early they look ahead along the road */
+  lookahead: number;
+  /** lateral weave amplitude while cruising */
+  weave: number;
+  /** top speed multiplier applied to their max speed */
+  pace: number;
+  /** acceleration multiplier */
+  accel: number;
+  /** seconds between item decisions; low means they shoot the moment they can */
+  itemDelay: number;
+  /** chance per second of making a small mistake (wide line, missed boost) */
+  mistake: number;
+  /** how often they gamble on a shortcut gate, per second */
+  gateUse: number;
+  /** drift competence 0..1 */
+  drift: number;
+  /** rubberband strength; ace AI cheats hardest */
+  rubberband: number;
+}
+
+export const AI_PROFILES: Record<AiSkillId, AiProfile> = {
+  rookie: { id: "rookie", name: "ROOKIE", steerGain: 1.5, lookahead: 0.024, weave: 0.4, pace: 0.86, accel: 0.85, itemDelay: 2.4, mistake: 0.12, gateUse: 0.05, drift: 0.2, rubberband: 0.6 },
+  amateur: { id: "amateur", name: "AMATEUR", steerGain: 2, lookahead: 0.03, weave: 0.28, pace: 0.94, accel: 0.93, itemDelay: 1.5, mistake: 0.05, gateUse: 0.16, drift: 0.5, rubberband: 0.85 },
+  pro: { id: "pro", name: "PRO", steerGain: 2.5, lookahead: 0.04, weave: 0.18, pace: 1.01, accel: 1, itemDelay: 0.9, mistake: 0.02, gateUse: 0.3, drift: 0.8, rubberband: 1.05 },
+  ace: { id: "ace", name: "ACE", steerGain: 3.2, lookahead: 0.052, weave: 0.1, pace: 1.07, accel: 1.07, itemDelay: 0.5, mistake: 0.004, gateUse: 0.5, drift: 1, rubberband: 1.35 },
+};
+
+export const AI_SKILL_LIST: AiSkillId[] = ["rookie", "amateur", "pro", "ace"];
+
+export type ModeId = "quick" | "trial" | "chaos" | "sprint" | "duel" | "endurance";
+
+export const MODES: Record<ModeId, GameMode> = {
   quick: { id: "quick", laps: 3, aiCount: 5, itemsEnabled: true, itemFrequency: 1, rubberband: 1 },
   trial: { id: "trial", laps: 3, aiCount: 0, itemsEnabled: false, itemFrequency: 0, rubberband: 0 },
   chaos: { id: "chaos", laps: 4, aiCount: 7, itemsEnabled: true, itemFrequency: 1.7, rubberband: 1.35 },
@@ -431,6 +528,13 @@ export interface ShortcutDef {
   t0: number;
   t1: number;
   side: 1 | -1;
+  /**
+   * How high the alternate route floats above the tarmac at its apex, in world
+   * units. Big values read as a sky bridge, small ones as a low banked ramp, so
+   * every circuit ends up with routes stacked at different heights instead of a
+   * single flat arcade hop.
+   */
+  lift: number;
 }
 
 /** A branch is an alternate ribbon that peels off the main road and rejoins it. */
@@ -532,7 +636,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 14, waves: [[1, 0.7, 0.6], [3, 0.35, 2.1]] }),
     zones: [{ t0: 0.13, t1: 0.27, type: "water" }, { t0: 0.55, t1: 0.68, type: "sky" }],
     forks: [[0.33, 0.44]],
-    shortcuts: [{ t0: 0.72, t1: 0.82, side: 1 }],
+    shortcuts: [{ t0: 0.72, t1: 0.82, side: 1, lift: 12 }],
     branches: [{ t0: 0.72, t1: 0.93, pull: -26 }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
@@ -546,7 +650,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 20, waves: [[2, 0.75, 1.1], [5, 0.3, 0.2]] }),
     zones: [{ t0: 0.3, t1: 0.42, type: "water" }, { t0: 0.66, t1: 0.8, type: "sky" }, { t0: 0.86, t1: 0.95, type: "sub" }],
     forks: [[0.06, 0.18], [0.46, 0.56]],
-    shortcuts: [{ t0: 0.2, t1: 0.27, side: -1 }, { t0: 0.57, t1: 0.64, side: 1 }],
+    shortcuts: [{ t0: 0.2, t1: 0.27, side: -1, lift: 9 }, { t0: 0.57, t1: 0.64, side: 1, lift: 12 }],
     branches: [{ t0: 0.1, t1: 0.26, pull: 30 }, { t0: 0.84, t1: 0.98, pull: -28 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
@@ -562,7 +666,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 26, waves: [[1, 0.8, 2.4], [4, 0.35, 1.4], [7, 0.15, 0.7]] }),
     zones: [{ t0: 0.36, t1: 0.47, type: "water" }, { t0: 0.76, t1: 0.9, type: "sky" }, { t0: 0.26, t1: 0.33, type: "sub" }],
     forks: [[0.1, 0.22], [0.52, 0.64]],
-    shortcuts: [{ t0: 0.66, t1: 0.74, side: -1 }, { t0: 0.56, t1: 0.62, side: 1 }],
+    shortcuts: [{ t0: 0.66, t1: 0.74, side: -1, lift: 9 }, { t0: 0.56, t1: 0.62, side: 1, lift: 12 }],
     branches: [{ t0: 0.02, t1: 0.16, pull: -32 }, { t0: 0.56, t1: 0.72, pull: 30 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
@@ -577,7 +681,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 18, waves: [[3, 0.7, 0.3], [6, 0.3, 2.6]] }),
     zones: [{ t0: 0.18, t1: 0.3, type: "water" }, { t0: 0.48, t1: 0.72, type: "sky" }],
     forks: [[0.78, 0.88]],
-    shortcuts: [{ t0: 0.34, t1: 0.44, side: 1 }],
+    shortcuts: [{ t0: 0.34, t1: 0.44, side: 1, lift: 12 }],
     branches: [{ t0: 0.34, t1: 0.46, pull: 28 }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
@@ -592,7 +696,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 22, waves: [[1, 0.7, 1.9], [3, 0.4, 0.5]] }),
     zones: [{ t0: 0.14, t1: 0.22, type: "water" }, { t0: 0.58, t1: 0.74, type: "sky" }, { t0: 0.3, t1: 0.38, type: "sub" }],
     forks: [[0.04, 0.12], [0.44, 0.54], [0.84, 0.94]],
-    shortcuts: [{ t0: 0.76, t1: 0.83, side: -1 }, { t0: 0.39, t1: 0.43, side: 1 }],
+    shortcuts: [{ t0: 0.76, t1: 0.83, side: -1, lift: 9 }, { t0: 0.39, t1: 0.43, side: 1, lift: 12 }],
     branches: [{ t0: 0.08, t1: 0.24, pull: 34 }, { t0: 0.44, t1: 0.56, pull: -30 }, { t0: 0.86, t1: 0.99, pull: 26 }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
@@ -607,7 +711,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 30, waves: [[2, 0.8, 0.8], [5, 0.35, 2.2]] }),
     zones: [{ t0: 0.28, t1: 0.38, type: "water" }, { t0: 0.55, t1: 0.85, type: "sky" }],
     forks: [[0.08, 0.2], [0.42, 0.5], [0.88, 0.98]],
-    shortcuts: [{ t0: 0.21, t1: 0.27, side: 1 }],
+    shortcuts: [{ t0: 0.21, t1: 0.27, side: 1, lift: 12 }],
     branches: [{ t0: 0.04, t1: 0.2, pull: -34 }, { t0: 0.6, t1: 0.76, pull: 32 }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
@@ -617,7 +721,7 @@ export const TRACKS: TrackDef[] = [
     points: radial(30, 148, [[2, 0.14, 0.3], [3, 0.12, 1.2], [5, 0.09, 2.1]], 1.15, 0.9, { amp: 16, waves: [[4, 0.75, 1.7], [8, 0.25, 0.4]] }),
     zones: [{ t0: 0.22, t1: 0.3, type: "water" }, { t0: 0.62, t1: 0.78, type: "sky" }, { t0: 0.4, t1: 0.48, type: "sub" }],
     forks: [[0.08, 0.16], [0.84, 0.94]],
-    shortcuts: [{ t0: 0.32, t1: 0.38, side: 1 }, { t0: 0.52, t1: 0.6, side: -1 }],
+    shortcuts: [{ t0: 0.32, t1: 0.38, side: 1, lift: 12 }, { t0: 0.52, t1: 0.6, side: -1, lift: 9 }],
     branches: [{ t0: 0.06, t1: 0.2, pull: 36 }, { t0: 0.34, t1: 0.44, pull: -30 }, { t0: 0.74, t1: 0.9, pull: 32 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
@@ -628,7 +732,7 @@ export const TRACKS: TrackDef[] = [
     points: radial(28, 131, [[3, 0.16, 0.8], [4, 0.1, 2.4], [6, 0.06, 0.4]], 1.0, 1.1, { amp: 13, waves: [[3, 0.7, 2.8], [6, 0.3, 1.1]] }),
     zones: [{ t0: 0.1, t1: 0.2, type: "water" }, { t0: 0.68, t1: 0.8, type: "sky" }, { t0: 0.3, t1: 0.42, type: "sub" }],
     forks: [[0.5, 0.62]],
-    shortcuts: [{ t0: 0.22, t1: 0.28, side: -1 }, { t0: 0.84, t1: 0.92, side: 1 }],
+    shortcuts: [{ t0: 0.22, t1: 0.28, side: -1, lift: 9 }, { t0: 0.84, t1: 0.92, side: 1, lift: 12 }],
     branches: [{ t0: 0.02, t1: 0.16, pull: -38 }, { t0: 0.32, t1: 0.46, pull: 34 }, { t0: 0.56, t1: 0.7, pull: -32 }, { t0: 0.82, t1: 0.97, pull: 30 }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
@@ -638,7 +742,7 @@ export const TRACKS: TrackDef[] = [
     points: radial(34, 160, [[2, 0.2, 2], [4, 0.12, 0.6], [7, 0.07, 1.4]], 1.2, 0.95, { amp: 24, waves: [[1, 0.75, 0.2], [3, 0.35, 2.9]] }),
     zones: [{ t0: 0.36, t1: 0.44, type: "water" }, { t0: 0.6, t1: 0.72, type: "sky" }],
     forks: [[0.12, 0.24], [0.78, 0.9]],
-    shortcuts: [{ t0: 0.26, t1: 0.34, side: 1 }, { t0: 0.48, t1: 0.56, side: -1 }],
+    shortcuts: [{ t0: 0.26, t1: 0.34, side: 1, lift: 12 }, { t0: 0.48, t1: 0.56, side: -1, lift: 9 }],
     branches: [{ t0: 0.14, t1: 0.3, pull: -28 }, { t0: 0.66, t1: 0.8, pull: 30 }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
@@ -648,7 +752,7 @@ export const TRACKS: TrackDef[] = [
     points: radial(32, 140, [[4, 0.2, 0], [8, 0.06, 0.5]], 1, 1, { amp: 12, waves: [[2, 0.7, 2.2], [5, 0.3, 0.9]] }),
     zones: [{ t0: 0.2, t1: 0.28, type: "water" }, { t0: 0.58, t1: 0.7, type: "sky" }, { t0: 0.74, t1: 0.82, type: "sub" }],
     forks: [[0.06, 0.14], [0.4, 0.5]],
-    shortcuts: [{ t0: 0.3, t1: 0.37, side: 1 }, { t0: 0.86, t1: 0.93, side: -1 }],
+    shortcuts: [{ t0: 0.3, t1: 0.37, side: 1, lift: 12 }, { t0: 0.86, t1: 0.93, side: -1, lift: 9 }],
     branches: [{ t0: 0.24, t1: 0.38, pull: 26 }, { t0: 0.58, t1: 0.74, pull: -26 }],
     portals: [{ tIn: 0.15, tOut: 0.65, side: (Math.random()<0.5?-1:1), cd: 2.5 }, { tIn: 0.75, tOut: 0.25, side: 1, cd: 3 }],
   },
@@ -705,13 +809,16 @@ for (const trk of TRACKS) {
     trk.zones.some((z) => !(b < z.t0 - 0.02 || a > z.t1 + 0.02)) ||
     trk.forks.some((f) => !(b < f[0] - 0.02 || a > f[1] + 0.02)) ||
     trk.shortcuts.some((s) => !(b < s.t0 - 0.02 || a > s.t1 + 0.02));
-  const want = 7;
+  const want = 12;
+  // stacked heights: low banked ramps, mid skyways and high bridges all at once
+  const LIFTS = [5, 13, 8, 18, 6, 15, 4, 11, 20, 7, 16, 9];
   for (let i = 0; i < want * 5 && trk.shortcuts.length < want; i++) {
-    const t0 = (i * 0.113 + 0.045) % 1;
+    const t0 = (i * 0.0713 + 0.045) % 1;
     const t1 = (t0 + 0.05) % 1;
     if (t1 < t0) continue;
     if (occupied(t0, t1)) continue;
-    trk.shortcuts.push({ t0, t1, side: trk.shortcuts.length % 2 === 0 ? 1 : -1 });
+    const k = trk.shortcuts.length;
+    trk.shortcuts.push({ t0, t1, side: k % 2 === 0 ? 1 : -1, lift: LIFTS[k % LIFTS.length] });
   }
   trk.shortcuts.sort((a, b) => a.t0 - b.t0);
 }

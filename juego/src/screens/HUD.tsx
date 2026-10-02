@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useI18n, ordinal } from "../i18n";
-import { useGame } from "../store";
+import { useGame, type Action, type TouchSlot } from "../store";
 import { WEAPON_META, THEMES, mutateTheme, type WeaponId, type VehicleMode } from "../data";
 import { getActiveTrack } from "../trackCurve";
 import type { UseControlsReturn } from "../controls";
@@ -52,6 +52,19 @@ function TouchButton({
   );
 }
 
+/** Glyph shown on a remappable touch slot. */
+const TOUCH_GLYPH: Record<Action, string> = {
+  left: "\u25C0",
+  right: "\u25B6",
+  gas: "\u25B2",
+  brake: "\u25BC",
+  drift: "\u224B",
+  item: "\u25CF",
+  swap: "\u21C4",
+  fuse: "\u2715",
+  turbo: "\u26A1",
+};
+
 export default function HUD({ controls }: { controls: UseControlsReturn }) {
   const { t } = useI18n();
   const telemetry = useGame((s) => s.telemetry);
@@ -64,6 +77,9 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
   // player can see in the world is the one the HUD reports
   const lapTheme = mutateTheme(THEMES[getActiveTrack().theme], telemetry.lap - 1);
   const [cdKey, setCdKey] = useState(0);
+  const layout = useGame((s) => ({ touchLayout: s.settings.touchLayout, handed: s.settings.handed }));
+  layout.touchLayout = useGame.getState().settings.touchLayout ?? {};
+  layout.handed = useGame.getState().settings.handed;
 
   useEffect(() => setCdKey((k) => k + 1), [telemetry.countdown]);
 
@@ -278,20 +294,37 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         />
       </div>
 
-      {/* ---------- touch steering + pedals (mobile) ---------- */}
-      <div className="pointer-events-auto absolute bottom-3 left-3 flex items-end gap-2 sm:hidden">
-        <TouchButton label="◀" className="h-[70px] w-[70px] text-3xl text-sky-800" onDown={() => controls.setTouch("left", true)} onUp={() => controls.setTouch("left", false)} />
-        <TouchButton label="▶" className="h-[70px] w-[70px] text-3xl text-sky-800" onDown={() => controls.setTouch("right", true)} onUp={() => controls.setTouch("right", false)} />
-        <TouchButton
-          label="≋"
-          className={`h-[58px] w-[58px] text-2xl ${telemetry.boosting ? "text-amber-500" : "text-sky-700"}`}
-          onDown={() => controls.setTouch("drift", true)}
-          onUp={() => controls.setTouch("drift", false)}
-        />
+      {/* ---------- touch steering + pedals: slots are remappable in Options ---------- */}
+      <div className={`pointer-events-auto absolute bottom-3 flex items-end gap-2 sm:hidden ${layout.handed === "left" ? "left-[112px]" : "left-3"}`}>
+        {(["padL", "padR", "drift"] as TouchSlot[]).map((slot) => {
+          const action = layout.touchLayout[slot];
+          const glyph = TOUCH_GLYPH[action] ?? "·";
+          const size = slot === "drift" ? "h-[58px] w-[58px] text-2xl" : "h-[70px] w-[70px] text-3xl";
+          return (
+            <TouchButton
+              key={slot}
+              label={glyph}
+              className={`${size} text-sky-800 ${action === "drift" && telemetry.boosting ? "text-amber-500" : ""}`}
+              onDown={() => controls.setAction(action, true)}
+              onUp={() => controls.setAction(action, false)}
+            />
+          );
+        })}
       </div>
-      <div className="pointer-events-auto absolute bottom-3 right-[112px] flex flex-col items-center gap-2 sm:hidden">
-        <TouchButton label="▲" className="h-[86px] w-[86px] text-4xl text-emerald-600" onDown={() => controls.setTouch("up", true)} onUp={() => controls.setTouch("up", false)} />
-        <TouchButton label="▼" className="h-12 w-12 text-xl text-rose-500" onDown={() => controls.setTouch("down", true)} onUp={() => controls.setTouch("down", false)} />
+      <div className={`pointer-events-auto absolute bottom-3 flex flex-col items-center gap-2 sm:hidden ${layout.handed === "left" ? "right-3" : "right-[112px]"}`}>
+        {(["gas", "brake"] as TouchSlot[]).map((slot) => {
+          const action = layout.touchLayout[slot];
+          const big = slot === "gas";
+          return (
+            <TouchButton
+              key={slot}
+              label={TOUCH_GLYPH[action] ?? "·"}
+              className={`${big ? "h-[86px] w-[86px] text-4xl text-emerald-600" : "h-12 w-12 text-xl text-rose-500"}`}
+              onDown={() => controls.setAction(action, true)}
+              onUp={() => controls.setAction(action, false)}
+            />
+          );
+        })}
       </div>
 
       {/* ---------- desktop hints ---------- */}

@@ -100,6 +100,7 @@ export default function StartScreen() {
                 ▶ {t("play")}
               </PrimaryButton>
               <GlassButton onClick={() => goto("howto")}>? {t("howToPlayTitle")}</GlassButton>
+              <GlassButton onClick={() => goto("options")}>{t("options")}</GlassButton>
             </div>
           </div>
 
