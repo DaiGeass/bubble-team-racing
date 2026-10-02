@@ -12,7 +12,7 @@ export type WeaponId =
 export type ShapeId =
   | "kart" | "hover" | "buggy" | "jet" | "cruiser" | "moto" | "ufo"
   | "coupe" | "van" | "formula" | "bubble" | "rocket" | "mono"
-  | "tank" | "wedge" | "sled" | "orbit" | "dune" | "phantom";
+  | "tank" | "wedge" | "sled" | "orbit" | "dune" | "phantom" | "mech" | "board" | "shell" | "winglet" | "pod";
 export type ThemeId =
   | "frutiger" | "aero" | "techno" | "eco" | "aqua" | "sunset"
   | "y2k" | "liquid" | "win98" | "vapor";
