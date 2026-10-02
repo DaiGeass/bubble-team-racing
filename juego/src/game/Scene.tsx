@@ -414,7 +414,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // While fused, the partner's turret absorbs damage as HP: draining it only
     // causes a LONG paralysis (no brutal speed loss).
     if (r.fuseTimer > 0) {
-      r.fusionHp -= 0.34;
+      r.fusionHp -= 0.55;
       emitParticles({ position: r.pos.clone().setY(r.y + 1.2), color: WEAPON_META.zap.glow, count: 16, speed: 3.6, spread: 1.3, size: 0.2, life: 0.55 });
       if (r.isPlayer) {
         addShake(0.3);
@@ -424,7 +424,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         r.fuseTimer = 0;
         r.fuseCd = 11;
         r.fusionHp = 1;
-        r.stunTimer = 2.2; // longer paralysis only
+        r.stunTimer = 2.6; // longer paralysis only
         r.speed *= 0.82;
         emitParticles({ position: r.pos.clone().setY(r.y + 1), color: WEAPON_META.mine.glow, count: 30, speed: 5, spread: 1.6, size: 0.24, life: 0.8 });
         if (r.isPlayer) {
@@ -1110,7 +1110,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       r.fuseTimer -= dt;
       r.fuseGun -= dt;
       if (r.fuseGun <= 0) {
-        r.fuseGun = 1.05;
+        r.fuseGun = 0.85;
         const target = findTargetAhead(r, 0.35);
         // the gunner alternates: plain missiles and missile + lightning volleys
         r.fuseShots = (r.fuseShots ?? 0) + 1;
@@ -1154,10 +1154,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       }
       if (fusePressed && r.partner && r.fuseTimer <= 0 && r.fuseCd <= 0) {
         r.fusionHp = 1;
-        r.fuseTimer = 7;
+        r.fuseTimer = 9;
         r.fuseGun = 0.35;
         r.shieldActive = true;
-        r.shieldTimer = 7;
+        r.shieldTimer = 9;
         r.turboMeter = Math.min(1, r.turboMeter + 0.5);
         r.boostTimer = Math.max(r.boostTimer, 0.7);
         r.boostMult = Math.max(r.boostMult, 1.3);
