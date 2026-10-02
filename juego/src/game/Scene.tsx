@@ -30,7 +30,7 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, corridorBounds, branchCenterAt, getActiveTrack, getShortcuts, surfaceYAt, trackFrameAt } from "../trackCurve";
+import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, corridorBounds, branchCenterAt, getActiveTrack, getShortcuts, surfaceYAt, trackFrameAt, halfWidthAt } from "../trackCurve";
 import { emitParticles, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
 
@@ -88,7 +88,7 @@ interface Racer {
   turboMeter: number;
   hazardCd: number;
   warpCd: number;
-  warp: null | { from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number; heading: number };
+  warp: null | { fromT: number; toT: number; side: number; startOffset: number; t: number; dur: number; heading: number };
   magnetTimer: number;
   ghostTimer: number;
   fuseShots: number;
@@ -660,8 +660,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       w.t += dt / w.dur;
       const e = Math.min(1, w.t);
       const ease = e * e * (3 - 2 * e);
-      r.pos.lerpVectors(w.from, w.to, ease);
-      r.y = THREE.MathUtils.lerp(w.from.y, w.to.y, ease) + Math.sin(e * Math.PI) * 8;
+      r.t = (w.fromT + ((w.toT - w.fromT + 1) % 1) * ease) % 1;
+      const wTan = trackTangentAt(r.t);
+      const wNrm = new THREE.Vector3(-wTan.z, 0, wTan.x).normalize();
+      const wOff = THREE.MathUtils.lerp(w.startOffset, w.side * (halfWidthAt(r.t) - 3.6), ease);
+      r.pos.copy(trackPointAt(r.t)).addScaledVector(wNrm, wOff);
+      r.y = surfaceYAt(r.t) + Math.sin(e * Math.PI) * 9;
       r.vy = 0;
       r.airborne = false;
       r.heading += wrapAngle(w.heading - r.heading) * Math.min(1, dt * 6);
@@ -670,7 +674,6 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       }
       if (e >= 1) {
         r.warp = null;
-        r.t = nearestT(r.pos);
         r.y = surfaceYAt(r.t);
         r.mode = "land";
         r.boostTimer = Math.max(r.boostTimer, 1.2);
@@ -857,8 +860,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // discontinuity (respawn, warp exit, zone change) can never fling the car upward
       const need = THREE.MathUtils.clamp(dt > 1e-4 ? (rideY - r.y) / dt : 0, -MAX_GLUE, MAX_GLUE);
       const fall = r.vy - GRAVITY * dt;
-      // the ground fell away faster than gravity can follow: we leave it
-      if (!r.airborne && need < fall - 0.5) r.airborne = true;
+      // the ground fell away faster than gravity can follow: we leave it.
+      // Hulls bob a few centimetres above their target height, which would otherwise
+      // flicker the flag every frame, so the launch test needs real separation there.
+      const bobbing = r.mode === "boat" || r.mode === "sub";
+      if (!r.airborne && need < fall - 0.5 && (!bobbing || rideY - r.y > 0.3)) r.airborne = true;
       if (r.airborne) {
         r.vy = fall;
         r.y += r.vy * dt;
@@ -973,9 +979,18 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         const dx = sc.entry.x - r.pos.x;
         const dz = sc.entry.z - r.pos.z;
         if (dx * dx + dz * dz < 15) {
-          const from = r.pos.clone().setY(0);
-          const to = sc.exit.clone();
-          r.warp = { from, to, t: 0, dur: Math.max(0.95, from.distanceTo(to) / 55), heading: sc.heading };
+          // fly along the road between the gates, lifted over the tarmac: a straight
+          // chord would dive through the hill on any circuit with real elevation
+          const span = ((sc.t1 - sc.t0) % 1 + 1) % 1;
+          r.warp = {
+            fromT: sc.t0,
+            toT: (sc.t0 + span) % 1,
+            side: sc.side,
+            startOffset: offset,
+            t: 0,
+            dur: Math.max(0.85, span * 22),
+            heading: sc.heading,
+          };
           r.warpCd = 3;
           emitParticles({ position: r.pos.clone().setY(1.2), color: theme.glow, count: 28, speed: 5, spread: 1.4, size: 0.24, life: 0.7 });
           if (r.isPlayer) {
@@ -1410,6 +1425,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       .setY(player.y)
       .addScaledVector(fwd, -dist - speedKick * 1.4)
       .add(new THREE.Vector3(0, height + speedKick * 0.5, 0));
+    // never let the chase camera sink into a hill: lift it to clear the road
+    // surface behind the car, and never drop it below the car either
+    const behindGround = surfaceYAt(nearestT(desired, player.t));
+    const floor = Math.max(behindGround + 1.8, player.y + 1.4);
+    if (desired.y < floor) desired.y = floor;
     // look at the road ahead, not at the sky above a crest or into the ground on a descent
     const aheadY = surfaceYAt(player.t + 0.022);
     const look = player.pos.clone()

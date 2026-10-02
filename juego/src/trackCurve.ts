@@ -181,6 +181,9 @@ export interface ShortcutGeo {
   heading: number;
   entryHeading: number;
   lift: number;
+  t0: number;
+  t1: number;
+  side: number;
 }
 
 /** Alternative paths: drive into the glowing gate and you fly an arc to the exit gate. */
@@ -196,7 +199,9 @@ export function getShortcuts(): ShortcutGeo[] {
     };
     const a = mk(s.t0);
     const b = mk(s.t1);
-    return { entry: a.p, exit: b.p, heading: b.h, entryHeading: a.h, lift: 9 };
+    // t0/t1 travel with the geometry so a warp can run along the road instead of
+    // cutting a straight chord through a hill
+    return { entry: a.p, exit: b.p, heading: b.h, entryHeading: a.h, lift: 9, t0: s.t0, t1: s.t1, side: s.side };
   });
 }
 
