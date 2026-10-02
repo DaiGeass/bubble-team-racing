@@ -896,6 +896,31 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
     r.groundY = groundY;
 
+    if (r.exploding) {
+      r.explodeTimer -= dt;
+      if (r.group.current) r.group.current.visible = Math.floor(r.explodeTimer * 10) % 2 === 0;
+      r.speed *= 0.2;
+      if (r.explodeTimer <= 0) {
+        r.exploding = false;
+        if (r.group.current) r.group.current.visible = true;
+        r.respawnLock = 1.1;
+        const cb2 = corridorBounds(r.t);
+        const tangent = trackTangentAt(r.t);
+        const nrm = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+        r.pos.addScaledVector(nrm, cb2.min + 3 - lateralOffsetFrom(r.pos, r.t));
+        r.y = surfaceYAt(r.t);
+        r.vy = 0;
+        r.airborne = false;
+        r.speed = Math.min(Math.abs(r.speed), 5);
+        r.heading = Math.atan2(tangent.x, tangent.z);
+        r.stunTimer = 1.2;
+        r.ghostTimer = 2.2;
+        emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: theme.glow, count: 40, speed: 6, spread: 1.8, size: 0.26, life: 0.8 });
+      }
+      // skip normal physics while exploding
+    }
+
+
     // the road slope becomes visual pitch, so hills are felt and not only seen
     const surface = trackFrameAt(r.t);
     const slope = Math.asin(THREE.MathUtils.clamp(surface.tangent.y, -1, 1));
