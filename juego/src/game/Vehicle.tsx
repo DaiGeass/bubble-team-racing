@@ -651,7 +651,14 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
     if (subRef.current) subRef.current.visible = mode === "sub" && vehicle.sub !== "diver";
     // the land chassis is hidden while submerged (the sub hull replaces it)
     if (chassisRef.current) chassisRef.current.visible = mode !== "sub";
-    if (wheelRef.current) wheelRef.current.visible = mode === "land" && vehicle.shape !== "hover" && vehicle.shape !== "ufo";
+    if (wheelRef.current)
+      wheelRef.current.visible =
+        mode === "land" &&
+        vehicle.shape !== "hover" &&
+        vehicle.shape !== "ufo" &&
+        vehicle.shape !== "tank" &&
+        vehicle.shape !== "orbit" &&
+        vehicle.shape !== "phantom";
 
     const usePartner = !!(st?.activeIsPartner && altChar);
     const fused = !!(st?.fused && altChar);

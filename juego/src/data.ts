@@ -11,7 +11,8 @@ export type WeaponId =
   | "swap" | "magnet" | "ghost" | "quake";
 export type ShapeId =
   | "kart" | "hover" | "buggy" | "jet" | "cruiser" | "moto" | "ufo"
-  | "coupe" | "van" | "formula" | "bubble" | "rocket" | "mono";
+  | "coupe" | "van" | "formula" | "bubble" | "rocket" | "mono"
+  | "tank" | "wedge" | "sled" | "orbit" | "dune" | "phantom";
 export type ThemeId =
   | "frutiger" | "aero" | "techno" | "eco" | "aqua" | "sunset"
   | "y2k" | "liquid" | "win98" | "vapor";
@@ -269,6 +270,12 @@ export const SHAPES: { id: ShapeId; bonus: { speed: number; handling: number } }
   { id: "bubble", bonus: { speed: 0.4, handling: 0.8 } },
   { id: "rocket", bonus: { speed: 1.6, handling: -0.8 } },
   { id: "mono", bonus: { speed: 1.3, handling: 0.2 } },
+  { id: "tank", bonus: { speed: -0.6, handling: -1.1 } },
+  { id: "wedge", bonus: { speed: 1.1, handling: 0.9 } },
+  { id: "sled", bonus: { speed: 1.4, handling: 0.4 } },
+  { id: "orbit", bonus: { speed: 0.5, handling: 1.5 } },
+  { id: "dune", bonus: { speed: 0.2, handling: 1.0 } },
+  { id: "phantom", bonus: { speed: 0.8, handling: 1.3 } },
 ];
 
 export const BODY_COLORS = ["#ff4d6d", "#ff9f1c", "#fde047", "#4ade80", "#22d3ee", "#6366f1", "#f472b6", "#ffffff", "#111827", "#a855f7", "#14b8a6"];

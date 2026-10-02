@@ -5,6 +5,7 @@ import { EXTRA2 as EXTRA_WORDS2 } from "./i18n3";
 import { EXTRA2 } from "./i18n4";
 import { EXTRA3 } from "./i18n5";
 import { EXTRA4 } from "./i18n6";
+import { EXTRA5 } from "./i18n7";
 import { useGame } from "./store";
 import { useControls } from "./controls";
 import { bindMuteGetter } from "./sound";
@@ -44,12 +45,14 @@ export default function App() {
       ...EXTRA2.en,
       ...EXTRA3.en,
       ...EXTRA4.en,
+      ...EXTRA5.en,
       ...DICTS[lang],
       ...EXTRA[lang],
       ...EXTRA_WORDS2[lang],
       ...EXTRA2[lang],
       ...EXTRA3[lang],
       ...EXTRA4[lang],
+      ...EXTRA5[lang],
     };
     return {
       lang,

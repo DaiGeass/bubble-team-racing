@@ -178,6 +178,226 @@ export function ExtraShapes({ shape, body, decal, glow }: C & { shape: ShapeId }
         <Underglow color={g} w={2.1} l={2.1} />
       </>
     );
+  if (shape === "tank") {
+    // tracked crawler: two tread blocks, sloped hull, rotating turret
+    const rot = useRef<THREE.Group>(null);
+    useFrame((_, dt) => {
+      if (rot.current) rot.current.rotation.y += dt * 0.7;
+    });
+    return (
+      <>
+        {[-0.86, 0.86].map((x) => (
+          <group key={x}>
+            <mesh position={[x, 0.42, 0]} castShadow>
+              <boxGeometry args={[0.52, 0.72, 2.7]} />
+              <meshStandardMaterial color="#2b2f3a" roughness={0.75} metalness={0.35} />
+            </mesh>
+            {[-1.05, -0.35, 0.35, 1.05].map((z) => (
+              <mesh key={z} position={[x, 0.1, z]} rotation={[0, 0, Math.PI / 2]}>
+                <cylinderGeometry args={[0.2, 0.2, 0.6, 8]} />
+                <meshStandardMaterial color="#3b4250" roughness={0.6} metalness={0.5} />
+              </mesh>
+            ))}
+          </group>
+        ))}
+        <mesh position={[0, 0.62, -0.1]} rotation={[0.12, 0, 0]} castShadow>
+          <boxGeometry args={[1.5, 0.5, 2.5]} />
+          <Paint color={body} metal={0.5} rough={0.32} />
+        </mesh>
+        <mesh position={[0, 0.98, 0.55]} rotation={[0.5, 0, 0]}>
+          <boxGeometry args={[1.32, 0.06, 0.9]} />
+          <Paint color={decal} metal={0.6} />
+        </mesh>
+        <group ref={rot} position={[0, 1.05, -0.35]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.46, 0.56, 0.42, 12]} />
+            <Paint color={decal} metal={0.7} rough={0.18} />
+          </mesh>
+          <mesh position={[0, 0.02, 1.05]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.11, 0.13, 1.7, 10]} />
+            <meshStandardMaterial color="#2b2f3a" roughness={0.4} metalness={0.8} />
+          </mesh>
+          <mesh position={[0, 0.34, -0.1]}>
+            <boxGeometry args={[0.9, 0.16, 0.5]} />
+            <Neon color={g} i={1.4} />
+          </mesh>
+        </group>
+        <Underglow color={g} w={1.6} l={2.6} y={0.05} />
+      </>
+    );
+  }
+  if (shape === "wedge") {
+    // wide flat delta: maximum grip, minimum drag
+    return (
+      <>
+        <mesh position={[0, 0.32, 0]} rotation={[0, 0, 0]} castShadow>
+          <boxGeometry args={[2.7, 0.16, 2.5]} />
+          <Paint color={body} metal={0.68} rough={0.1} />
+        </mesh>
+        <mesh position={[0, 0.44, 0.75]} rotation={[0.22, 0, 0]}>
+          <boxGeometry args={[1.5, 0.1, 1.3]} />
+          <Paint color={decal} metal={0.5} />
+        </mesh>
+        <mesh position={[0, 0.62, -0.25]} scale={[1, 0.42, 1.05]}>
+          <sphereGeometry args={[0.78, 18, 12]} />
+          <Glass opacity={0.3} />
+        </mesh>
+        {[-1.28, 1.28].map((x) => (
+          <mesh key={x} position={[x, 0.42, 0.1]} rotation={[0, 0, x > 0 ? -0.32 : 0.32]}>
+            <boxGeometry args={[0.09, 0.09, 2.2]} />
+            <Neon color={g} i={2.8} />
+          </mesh>
+        ))}
+        <mesh position={[0, 0.26, -1.32]} rotation={[0.5, 0, 0]}>
+          <boxGeometry args={[2.2, 0.08, 0.5]} />
+          <Paint color={decal} metal={0.72} />
+        </mesh>
+        <Underglow color={g} w={2.4} l={2.4} y={0.12} />
+      </>
+    );
+  }
+  if (shape === "sled") {
+    // ice sled: long body, twin skis, exposed engine block
+    return (
+      <>
+        <mesh position={[0, 0.44, -0.1]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <capsuleGeometry args={[0.42, 2.3, 6, 14]} />
+          <Paint color={body} metal={0.72} rough={0.12} />
+        </mesh>
+        {[-0.62, 0.62].map((x) => (
+          <mesh key={x} position={[x, 0.16, 1.15]} rotation={[0.06, 0, 0]}>
+            <boxGeometry args={[0.22, 0.14, 1.5]} />
+            <meshStandardMaterial color="#e8f4ff" roughness={0.25} metalness={0.5} />
+          </mesh>
+        ))}
+        <mesh position={[0, 0.86, -0.72]} rotation={[0.28, 0, 0]}>
+          <boxGeometry args={[0.86, 0.62, 0.7]} />
+          <meshStandardMaterial color="#2b2f3a" roughness={0.45} metalness={0.7} />
+        </mesh>
+        {[-0.24, 0.24].map((x) => (
+          <mesh key={x} position={[x, 1.02, -0.86]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.1, 0.12, 0.34, 8]} />
+            <Neon color={g} i={3} />
+          </mesh>
+        ))}
+        <mesh position={[0, 0.62, 0.55]} scale={[0.7, 0.5, 1]}>
+          <sphereGeometry args={[0.6, 16, 12]} />
+          <Glass opacity={0.42} />
+        </mesh>
+        <Underglow color={g} w={1.3} l={2.7} y={0.1} />
+      </>
+    );
+  }
+  if (shape === "orbit") {
+    // orbital module: sphere core plus two counter-rotating rings
+    const ring1 = useRef<THREE.Mesh>(null);
+    const ring2 = useRef<THREE.Mesh>(null);
+    useFrame((_, dt) => {
+      if (ring1.current) ring1.current.rotation.z += dt * 1.1;
+      if (ring2.current) ring2.current.rotation.x -= dt * 0.8;
+    });
+    return (
+      <>
+        <mesh position={[0, 0.72, 0]} castShadow>
+          <sphereGeometry args={[0.82, 22, 16]} />
+          <meshStandardMaterial color={body} roughness={0.18} metalness={0.6} />
+        </mesh>
+        <mesh ref={ring1} position={[0, 0.72, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[1.28, 0.09, 10, 28]} />
+          <Paint color={decal} metal={0.8} rough={0.1} />
+        </mesh>
+        <mesh ref={ring2} position={[0, 0.72, 0]} rotation={[0, 0, 0.5]}>
+          <torusGeometry args={[1.02, 0.06, 8, 24]} />
+          <Neon color={g} i={3.2} />
+        </mesh>
+        <mesh position={[0, 0.72, 0.72]} scale={[1, 0.6, 0.5]}>
+          <sphereGeometry args={[0.42, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+          <Glass opacity={0.4} />
+        </mesh>
+        <mesh position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <coneGeometry args={[0.5, 0.6, 12, 1, true]} />
+          <Neon color={g} i={2} />
+        </mesh>
+        <Underglow color={g} w={2.2} l={2.2} y={0.14} />
+      </>
+    );
+  }
+  if (shape === "dune") {
+    // desert buggy: open tube cage and a very long rear wing
+    return (
+      <>
+        <mesh position={[0, 0.5, 0]} castShadow>
+          <boxGeometry args={[1.5, 0.42, 2.9]} />
+          <Paint color={body} metal={0.35} rough={0.45} />
+        </mesh>
+        {[-0.66, 0.66].map((x) => (
+          <group key={x}>
+            <mesh position={[x, 1.02, 0.35]} rotation={[0.42, 0, 0]}>
+              <boxGeometry args={[0.09, 1.05, 0.09]} />
+              <meshStandardMaterial color="#2b2f3a" roughness={0.5} metalness={0.6} />
+            </mesh>
+            <mesh position={[x, 1.28, -0.5]}>
+              <boxGeometry args={[0.09, 0.62, 0.09]} />
+              <meshStandardMaterial color="#2b2f3a" roughness={0.5} metalness={0.6} />
+            </mesh>
+            <mesh position={[x, 1.5, -0.16]} rotation={[0, 0, 0]}>
+              <boxGeometry args={[0.09, 0.09, 1.4]} />
+              <Paint color={decal} metal={0.6} />
+            </mesh>
+          </group>
+        ))}
+        <mesh position={[0, 1.28, 0.05]} rotation={[0.42, 0, 0]}>
+          <boxGeometry args={[1.2, 0.06, 1.3]} />
+          <Glass opacity={0.24} />
+        </mesh>
+        <mesh position={[0, 1.05, -1.6]} rotation={[0.22, 0, 0]}>
+          <boxGeometry args={[2.4, 0.1, 0.62]} />
+          <Paint color={decal} metal={0.55} />
+        </mesh>
+        {[-1.1, 1.1].map((x) => (
+          <mesh key={x} position={[x, 0.86, -1.5]}>
+            <boxGeometry args={[0.1, 0.42, 0.5]} />
+            <Neon color={g} i={2.2} />
+          </mesh>
+        ))}
+        <mesh position={[0, 0.72, 1.35]}>
+          <boxGeometry args={[0.9, 0.24, 0.24]} />
+          <Neon color={g} i={3} />
+        </mesh>
+        <Underglow color={g} w={1.9} l={3} y={0.08} />
+      </>
+    );
+  }
+  if (shape === "phantom") {
+    // hover shell: translucent body floating over two light rings
+    return (
+      <>
+        <mesh position={[0, 0.68, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <capsuleGeometry args={[0.6, 1.7, 8, 18]} />
+          <Glass color="#e8fbff" opacity={0.32} />
+        </mesh>
+        <mesh position={[0, 0.68, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[0.82, 0.82, 1.1]}>
+          <capsuleGeometry args={[0.6, 1.7, 6, 14]} />
+          <Paint color={body} metal={0.3} rough={0.5} />
+        </mesh>
+        {[-0.9, 0.9].map((x) => (
+          <mesh key={x} position={[x, 0.36, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.44, 0.08, 8, 20]} />
+            <Neon color={g} i={3.4} />
+          </mesh>
+        ))}
+        <mesh position={[0, 1.24, -0.2]} scale={[0.9, 0.45, 1]}>
+          <sphereGeometry args={[0.6, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+          <Glass opacity={0.36} />
+        </mesh>
+        <mesh position={[0, 0.68, 1.02]} rotation={[0.4, 0, 0]}>
+          <boxGeometry args={[1.3, 0.07, 0.4]} />
+          <Neon color={decal} i={2.4} />
+        </mesh>
+        <Underglow color={g} w={2.3} l={2.1} y={0.24} />
+      </>
+    );
+  }
   return null;
 }
 

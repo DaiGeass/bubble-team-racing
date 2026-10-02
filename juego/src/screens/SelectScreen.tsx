@@ -46,6 +46,7 @@ const MODE_INFO: { id: "quick" | "trial" | "chaos" | "sprint" | "duel"; glyph: s
 const SHAPE_GLYPH: Record<string, string> = {
   kart: "⛟", hover: "◎", buggy: "⛝", jet: "➤", cruiser: "⛴", moto: "⚑", ufo: "⏣",
   coupe: "◢", van: "▣", formula: "⏵", bubble: "◉", rocket: "▲", mono: "◆",
+  tank: "◼", wedge: "▼", sled: "⩕", orbit: "◍", dune: "⬢", phantom: "◇",
 };
 
 /** Tiny SVG preview of a circuit built from its control points. */
