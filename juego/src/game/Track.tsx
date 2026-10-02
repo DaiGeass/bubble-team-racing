@@ -888,6 +888,88 @@ function Shortcuts({ theme }: { theme: ThemeDef }) {
   );
 }
 
+/**
+ * Alternate routes: translucent glass ribbons that peel off the main road and rejoin it.
+ * Shorter lines cut the corner, longer ones carry extra coin bait.
+ */
+function BranchRibbons({ theme }: { theme: ThemeDef }) {
+  const branches = getActiveTrack().branches;
+  const flat = theme.id === "win98";
+  const geos = useMemo(() => {
+    return branches.map((b) => {
+      const N = 64;
+      const pos: number[] = [];
+      const uvs: number[] = [];
+      const idx: number[] = [];
+      for (let i = 0; i <= N; i++) {
+        const t = b.t0 + ((b.t1 - b.t0) * i) / N;
+        const u = i / N;
+        const env = Math.sin(u * Math.PI);
+        const c = trackCurve.getPointAt(((t % 1) + 1) % 1);
+        const tan = trackCurve.getTangentAt(((t % 1) + 1) % 1);
+        const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+        const center = c.clone().addScaledVector(n, b.pull * env);
+        const hw = TRACK_WIDTH / 2 - 0.4;
+        const l = center.clone().addScaledVector(n, hw);
+        const r = center.clone().addScaledVector(n, -hw);
+        pos.push(l.x, 0.06, l.z, r.x, 0.06, r.z);
+        uvs.push(0, u * 14, 1, u * 14);
+      }
+      for (let i = 0; i < N; i++) {
+        const a = i * 2;
+        idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      return g;
+    });
+  }, [branches]);
+
+  const chevrons = useMemo(() => {
+    const out: { pos: THREE.Vector3; angle: number }[] = [];
+    branches.forEach((b) => {
+      for (let k = 0; k < 6; k++) {
+        const u = (k + 0.5) / 6;
+        const t = b.t0 + (b.t1 - b.t0) * u;
+        const env = Math.sin(u * Math.PI);
+        const c = trackCurve.getPointAt(((t % 1) + 1) % 1);
+        const tan = trackCurve.getTangentAt(((t % 1) + 1) % 1);
+        const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+        out.push({ pos: c.clone().addScaledVector(n, b.pull * env), angle: Math.atan2(tan.x, tan.z) });
+      }
+    });
+    return out;
+  }, [branches]);
+
+  return (
+    <group>
+      {geos.map((g, i) => (
+        <mesh key={`br${i}`} geometry={g} receiveShadow>
+          <meshPhysicalMaterial
+            color={theme.glow}
+            transparent
+            opacity={flat ? 0.75 : 0.5}
+            roughness={0.08}
+            metalness={theme.id === "y2k" ? 0.9 : 0.15}
+            clearcoat={1}
+            emissive={theme.glow}
+            emissiveIntensity={flat ? 0.1 : 0.5}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
+      {chevrons.map((c, i) => (
+        <mesh key={`ch${i}`} position={[c.pos.x, 0.14, c.pos.z]} rotation={[-Math.PI / 2, 0, -c.angle]}>
+          <ringGeometry args={[1.5, 2.1, 3]} />
+          <meshBasicMaterial color={theme.barrierB} transparent opacity={0.85} toneMapped={false} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
 export default function Track({ theme }: { theme: ThemeDef }) {
   const roadGeometry = useMemo(() => buildRoadGeometry(), []);
   const roadTexture = useMemo(() => makeRoadTexture(theme), [theme]);
@@ -911,6 +993,7 @@ export default function Track({ theme }: { theme: ThemeDef }) {
       <StartArch theme={theme} />
       <SkyRings theme={theme} />
       <ForkIslands theme={theme} />
+      <BranchRibbons theme={theme} />
       <SubZone theme={theme} />
       <Shortcuts theme={theme} />
       <MovingHazards theme={theme} />

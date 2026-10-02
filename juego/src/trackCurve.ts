@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TRACKS, ZONES, TRACK_WIDTH, type TrackDef } from "./data";
+import { TRACKS, ZONES, TRACK_WIDTH, type TrackDef, type Branch } from "./data";
 
 // Single mutable curve instance shared by the whole game.
 // setActiveTrack() swaps its points in place before a race starts.
@@ -9,6 +9,8 @@ export const trackCurve = new THREE.CatmullRomCurve3(
   "catmullrom",
   0.5
 );
+
+const norm = (t: number) => ((t % 1) + 1) % 1;
 
 const SAMPLES = 800;
 let samplePoints: THREE.Vector3[] = [];
@@ -74,6 +76,58 @@ export function halfWidthAt(t: number) {
   const tt = ((t % 1) + 1) % 1;
   for (const f of def.forks) if (tt >= f[0] && tt <= f[1]) return TRACK_WIDTH / 2 + 7;
   return TRACK_WIDTH / 2;
+}
+
+function branchEnvelope(t: number, b: Branch) {
+  const tt = norm(t);
+  if (tt < b.t0 || tt > b.t1) return 0;
+  const u = (tt - b.t0) / Math.max(1e-5, b.t1 - b.t0);
+  return Math.sin(u * Math.PI);
+}
+
+/**
+ * Drivable lateral bounds at t: forks widen symmetrically, branches peel off to one side.
+ * With no branches it returns halfWidthAt(t) on both sides, so the main road is unchanged.
+ */
+export function corridorBounds(t: number): { min: number; max: number; branch: number } {
+  const def = getActiveTrack();
+  const tt = norm(t);
+  const half = TRACK_WIDTH / 2;
+  let min = -half;
+  let max = half;
+  let branch = 0;
+
+  for (const f of def.forks) {
+    if (tt >= f[0] && tt <= f[1]) {
+      min = -(half + 7);
+      max = half + 7;
+    }
+  }
+  for (const b of def.branches) {
+    const env = branchEnvelope(t, b);
+    if (env > 0.001) {
+      branch = Math.max(branch, env);
+      const off = b.pull * env;
+      if (off > 0) max = Math.max(max, off + half + 1.5);
+      else min = Math.min(min, off - half - 1.5);
+    }
+  }
+  return { min, max, branch };
+}
+
+/** Center of the alternate branch ribbon at t (null when not inside a branch). */
+export function branchCenterAt(t: number): { point: THREE.Vector3; tangent: THREE.Vector3; normal: THREE.Vector3; pull: number } | null {
+  const def = getActiveTrack();
+  for (const b of def.branches) {
+    const env = branchEnvelope(t, b);
+    if (env > 0.001) {
+      const point = trackPointAt(t);
+      const tangent = trackTangentAt(t);
+      const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+      return { point: point.clone().addScaledVector(normal, b.pull * env), tangent, normal, pull: b.pull };
+    }
+  }
+  return null;
 }
 
 export function inFork(t: number) {

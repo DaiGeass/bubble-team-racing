@@ -352,12 +352,20 @@ export interface ShortcutDef {
   side: 1 | -1;
 }
 
+/** A branch is an alternate ribbon that peels off the main road and rejoins it. */
+export interface Branch {
+  t0: number;
+  t1: number;
+  pull: number; // lateral displacement at peak (+ = right of travel direction)
+}
+
 export interface TrackDef {
   id: string;
   points: [number, number, number][];
   zones: Zone[];
   forks: [number, number][];
   shortcuts: ShortcutDef[];
+  branches: Branch[];
   hazards: number;
   difficulty: 1 | 2 | 3;
 }
@@ -391,6 +399,7 @@ export const TRACKS: TrackDef[] = [
     zones: [{ t0: 0.13, t1: 0.27, type: "water" }, { t0: 0.55, t1: 0.68, type: "sky" }],
     forks: [[0.33, 0.44]],
     shortcuts: [{ t0: 0.72, t1: 0.82, side: 1 }],
+    branches: [{ t0: 0.72, t1: 0.93, pull: -26 }],
   },
   {
     id: "vortice", difficulty: 2, hazards: 5,
@@ -402,6 +411,7 @@ export const TRACKS: TrackDef[] = [
     zones: [{ t0: 0.3, t1: 0.42, type: "water" }, { t0: 0.66, t1: 0.8, type: "sky" }, { t0: 0.86, t1: 0.95, type: "sub" }],
     forks: [[0.06, 0.18], [0.46, 0.56]],
     shortcuts: [{ t0: 0.2, t1: 0.27, side: -1 }, { t0: 0.57, t1: 0.64, side: 1 }],
+    branches: [{ t0: 0.1, t1: 0.26, pull: 30 }, { t0: 0.84, t1: 0.98, pull: -28 }],
   },
   {
     id: "canon", difficulty: 3, hazards: 7,
@@ -414,6 +424,7 @@ export const TRACKS: TrackDef[] = [
     zones: [{ t0: 0.36, t1: 0.47, type: "water" }, { t0: 0.76, t1: 0.9, type: "sky" }, { t0: 0.26, t1: 0.33, type: "sub" }],
     forks: [[0.1, 0.22], [0.52, 0.64]],
     shortcuts: [{ t0: 0.66, t1: 0.74, side: -1 }, { t0: 0.56, t1: 0.62, side: 1 }],
+    branches: [{ t0: 0.02, t1: 0.16, pull: -32 }, { t0: 0.56, t1: 0.72, pull: 30 }],
   },
   {
     id: "celeste", difficulty: 2, hazards: 4,
@@ -425,6 +436,7 @@ export const TRACKS: TrackDef[] = [
     zones: [{ t0: 0.18, t1: 0.3, type: "water" }, { t0: 0.48, t1: 0.72, type: "sky" }],
     forks: [[0.78, 0.88]],
     shortcuts: [{ t0: 0.34, t1: 0.44, side: 1 }],
+    branches: [{ t0: 0.34, t1: 0.46, pull: 28 }],
   },
   {
     id: "atlantis", difficulty: 3, hazards: 8,
@@ -437,6 +449,7 @@ export const TRACKS: TrackDef[] = [
     zones: [{ t0: 0.14, t1: 0.22, type: "water" }, { t0: 0.58, t1: 0.74, type: "sky" }, { t0: 0.3, t1: 0.38, type: "sub" }],
     forks: [[0.04, 0.12], [0.44, 0.54], [0.84, 0.94]],
     shortcuts: [{ t0: 0.76, t1: 0.83, side: -1 }, { t0: 0.39, t1: 0.43, side: 1 }],
+    branches: [{ t0: 0.08, t1: 0.24, pull: 34 }, { t0: 0.44, t1: 0.56, pull: -30 }, { t0: 0.86, t1: 0.99, pull: 26 }],
   },
   {
     id: "aether", difficulty: 3, hazards: 6,
@@ -449,6 +462,7 @@ export const TRACKS: TrackDef[] = [
     zones: [{ t0: 0.28, t1: 0.38, type: "water" }, { t0: 0.55, t1: 0.85, type: "sky" }],
     forks: [[0.08, 0.2], [0.42, 0.5], [0.88, 0.98]],
     shortcuts: [{ t0: 0.21, t1: 0.27, side: 1 }],
+    branches: [{ t0: 0.04, t1: 0.2, pull: -34 }, { t0: 0.6, t1: 0.76, pull: 32 }],
   },
   {
     id: "neon", difficulty: 3, hazards: 7,
@@ -456,6 +470,7 @@ export const TRACKS: TrackDef[] = [
     zones: [{ t0: 0.22, t1: 0.3, type: "water" }, { t0: 0.62, t1: 0.78, type: "sky" }, { t0: 0.4, t1: 0.48, type: "sub" }],
     forks: [[0.08, 0.16], [0.84, 0.94]],
     shortcuts: [{ t0: 0.32, t1: 0.38, side: 1 }, { t0: 0.52, t1: 0.6, side: -1 }],
+    branches: [{ t0: 0.06, t1: 0.2, pull: 36 }, { t0: 0.34, t1: 0.44, pull: -30 }, { t0: 0.74, t1: 0.9, pull: 32 }],
   },
   {
     id: "coral", difficulty: 2, hazards: 4,
@@ -463,6 +478,7 @@ export const TRACKS: TrackDef[] = [
     zones: [{ t0: 0.1, t1: 0.2, type: "water" }, { t0: 0.68, t1: 0.8, type: "sky" }, { t0: 0.3, t1: 0.42, type: "sub" }],
     forks: [[0.5, 0.62]],
     shortcuts: [{ t0: 0.22, t1: 0.28, side: -1 }, { t0: 0.84, t1: 0.92, side: 1 }],
+    branches: [{ t0: 0.02, t1: 0.16, pull: -38 }, { t0: 0.32, t1: 0.46, pull: 34 }, { t0: 0.56, t1: 0.7, pull: -32 }, { t0: 0.82, t1: 0.97, pull: 30 }],
   },
   {
     id: "glacier", difficulty: 3, hazards: 6,
@@ -470,6 +486,7 @@ export const TRACKS: TrackDef[] = [
     zones: [{ t0: 0.36, t1: 0.44, type: "water" }, { t0: 0.6, t1: 0.72, type: "sky" }],
     forks: [[0.12, 0.24], [0.78, 0.9]],
     shortcuts: [{ t0: 0.26, t1: 0.34, side: 1 }, { t0: 0.48, t1: 0.56, side: -1 }],
+    branches: [{ t0: 0.14, t1: 0.3, pull: -28 }, { t0: 0.66, t1: 0.8, pull: 30 }],
   },
   {
     id: "retro", difficulty: 2, hazards: 6,
@@ -477,6 +494,7 @@ export const TRACKS: TrackDef[] = [
     zones: [{ t0: 0.2, t1: 0.28, type: "water" }, { t0: 0.58, t1: 0.7, type: "sky" }, { t0: 0.74, t1: 0.82, type: "sub" }],
     forks: [[0.06, 0.14], [0.4, 0.5]],
     shortcuts: [{ t0: 0.3, t1: 0.37, side: 1 }, { t0: 0.86, t1: 0.93, side: -1 }],
+    branches: [{ t0: 0.24, t1: 0.38, pull: 26 }, { t0: 0.58, t1: 0.74, pull: -26 }],
   },
 ];
 
@@ -487,6 +505,7 @@ TRACKS.push(
     zones: [{ t0: 0.16, t1: 0.24, type: "water" }, { t0: 0.52, t1: 0.66, type: "sky" }, { t0: 0.78, t1: 0.88, type: "sub" }],
     forks: [[0.04, 0.13], [0.3, 0.42], [0.68, 0.76]],
     shortcuts: [],
+    branches: [{ t0: 0.08, t1: 0.24, pull: 32 }, { t0: 0.44, t1: 0.58, pull: -30 }, { t0: 0.78, t1: 0.94, pull: 28 }],
   },
   {
     id: "nimbus", difficulty: 2, hazards: 5,
@@ -494,6 +513,7 @@ TRACKS.push(
     zones: [{ t0: 0.26, t1: 0.34, type: "water" }, { t0: 0.5, t1: 0.74, type: "sky" }],
     forks: [[0.08, 0.2], [0.82, 0.94]],
     shortcuts: [],
+    branches: [{ t0: 0.2, t1: 0.34, pull: -24 }, { t0: 0.62, t1: 0.78, pull: 26 }],
   },
   {
     id: "abyss", difficulty: 3, hazards: 7,
@@ -501,6 +521,7 @@ TRACKS.push(
     zones: [{ t0: 0.12, t1: 0.3, type: "sub" }, { t0: 0.44, t1: 0.52, type: "water" }, { t0: 0.66, t1: 0.78, type: "sky" }],
     forks: [[0.34, 0.42], [0.86, 0.96]],
     shortcuts: [],
+    branches: [{ t0: 0.06, t1: 0.22, pull: 34 }, { t0: 0.4, t1: 0.56, pull: -34 }, { t0: 0.72, t1: 0.88, pull: 30 }],
   },
   {
     id: "garden", difficulty: 1, hazards: 4,
@@ -508,6 +529,7 @@ TRACKS.push(
     zones: [{ t0: 0.2, t1: 0.3, type: "water" }, { t0: 0.6, t1: 0.72, type: "sky" }],
     forks: [[0.42, 0.52]],
     shortcuts: [],
+    branches: [{ t0: 0.28, t1: 0.44, pull: 24 }, { t0: 0.66, t1: 0.8, pull: -24 }],
   }
 );
 

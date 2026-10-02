@@ -24,7 +24,7 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, halfWidthAt, getShortcuts } from "../trackCurve";
+import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, corridorBounds, branchCenterAt, getActiveTrack, getShortcuts } from "../trackCurve";
 import { emitParticles, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
 
@@ -278,6 +278,16 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const zone = zoneAt(t);
       const y = zone?.type === "sky" ? 0 : 0;
       coins.push({ pos: center.clone().addScaledVector(normal, (i % 2 === 0 ? 1 : -1) * 1.9).setY(y), active: true, respawn: 0, group: { current: null } });
+    }
+    // coin bait along every alternate branch route
+    for (const b of getActiveTrack().branches) {
+      const N = 9;
+      for (let i = 0; i < N; i++) {
+        const t = b.t0 + ((b.t1 - b.t0) * (i + 0.5)) / N;
+        const bc = branchCenterAt(t);
+        if (!bc) continue;
+        coins.push({ pos: bc.point.clone(), active: true, respawn: 0, group: { current: null } });
+      }
     }
     return coins;
   }, []);
@@ -802,14 +812,20 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // ---- track containment (relaxed while flying) ----
     const newT = nearestT(r.pos, r.t);
     const offset = lateralOffsetFrom(r.pos, newT);
-    const halfW = r.ghostTimer > 0 ? halfWidthAt(newT) + 9 : r.mode === "plane" ? halfWidthAt(newT) + 3 : halfWidthAt(newT) - 0.9;
-    if (Math.abs(offset) > halfW) {
+    // asymmetric corridor: branches open the road to one side only
+    const cb = corridorBounds(newT);
+    const pad = r.ghostTimer > 0 ? 9 : r.mode === "plane" ? 3 : -0.9;
+    const lo = cb.min + pad;
+    const hi = cb.max + pad;
+    if (offset < lo || offset > hi) {
       // Smooth wall slide: clamp position, nudge heading parallel to the wall.
       // Feedback (shake/sound/speed loss) only on FIRST contact — no vibration loop.
-      const center = trackPointAt(newT);
       const tangent = trackTangentAt(newT);
       const nrm = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-      r.pos.copy(center.clone().addScaledVector(nrm, Math.sign(offset) * halfW));
+      // Only cancel the lateral overshoot. Teleporting to the wall line instead would
+      // wipe the forward motion of the frame and freeze the kart against the barrier.
+      const clamped = offset > hi ? hi : lo;
+      r.pos.addScaledVector(nrm, clamped - offset);
       const wallHeading = Math.atan2(tangent.x, tangent.z);
       const diff = wrapAngle(wallHeading - r.heading);
       r.heading += diff * Math.min(1, dt * 5);
@@ -1080,11 +1096,62 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
   }
 
-  useFrame((_, deltaRaw) => {
+  function __tick(deltaRaw: number) {
+
+const __w = window as unknown as Record<string, any>;
+__w.__tick = __tick;
+__w.__ff = (seconds: number, playerInput?: unknown) => {
+  const n = Math.round(seconds * 60);
+  __w.__input = playerInput ?? null;
+  try {
+    for (let k = 0; k < n; k++) __tick(1 / 60);
+  } finally {
+    __w.__input = null;
+  }
+  return __w.__probe ? __w.__probe() : null;
+};
+__w.__probe = () => {
+  const p = racers[0];
+  const sorted = [...racers].sort((a, b) => b.lap + b.t - (a.lap + a.t));
+  return {
+    pos: { x: p.pos.x, y: p.y, z: p.pos.z },
+    heading: p.heading,
+    trackHeading: Math.atan2(trackTangentAt(p.t).x, trackTangentAt(p.t).z),
+    speed: p.speed,
+    t: p.t,
+    lap: p.lap,
+    mode: p.mode,
+    isDrifting: p.isDrifting,
+    driftCharge: p.driftCharge,
+    turboMeter: p.turboMeter,
+    boostTimer: p.boostTimer,
+    boostMult: p.boostMult,
+    steerSmooth: p.steerSmooth,
+    offset: lateralOffsetFrom(p.pos, p.t),
+    fusionHp: p.fusionHp,
+    fuseTimer: p.fuseTimer,
+    weapon: p.weapon,
+    shieldActive: p.shieldActive,
+    position: sorted.indexOf(p) + 1,
+    racers: racers.length,
+    frames: frame.current,
+    finished: p.finished,
+    coins: p.coins,
+    aiTrace: racers.filter((r) => !r.isPlayer).map((r) => ({
+      t: +r.t.toFixed(3),
+      m: r.mode,
+      y: +r.y.toFixed(2),
+      sp: +r.speed.toFixed(1),
+      lap: r.lap,
+    })),
+  };
+};
+
+
     const state = useGame.getState();
     const dt = Math.min(deltaRaw, 1 / 30);
     frame.current++;
-    const controls = poll();
+    const controls = (__w.__input ?? poll()) as ReturnType<typeof poll>;
 
     if (controls.pausePressed && state.screen === "race" && !state.telemetry.finished) state.setPaused(!state.paused);
 
@@ -1269,7 +1336,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     raceSnapshot.camAngle = player.heading;
 
     updateCamera(dt, false);
-  });
+  
+}
+useFrame((_, deltaRaw) => {
+  __tick(deltaRaw);
+});
 
   function updateCamera(dt: number, idle: boolean) {
     const player = racers[0];
