@@ -822,7 +822,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // Feedback (shake/sound/speed loss) only on FIRST contact — no vibration loop.
       const tangent = trackTangentAt(newT);
       const nrm = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-      // Only cancel the lateral overshoot. Teleporting to the wall line instead would
+      // Only cancel the lateral overshoot. Rewriting the whole position here would
       // wipe the forward motion of the frame and freeze the kart against the barrier.
       const clamped = offset > hi ? hi : lo;
       r.pos.addScaledVector(nrm, clamped - offset);
@@ -1096,62 +1096,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
   }
 
-  function __tick(deltaRaw: number) {
-
-const __w = window as unknown as Record<string, any>;
-__w.__tick = __tick;
-__w.__ff = (seconds: number, playerInput?: unknown) => {
-  const n = Math.round(seconds * 60);
-  __w.__input = playerInput ?? null;
-  try {
-    for (let k = 0; k < n; k++) __tick(1 / 60);
-  } finally {
-    __w.__input = null;
-  }
-  return __w.__probe ? __w.__probe() : null;
-};
-__w.__probe = () => {
-  const p = racers[0];
-  const sorted = [...racers].sort((a, b) => b.lap + b.t - (a.lap + a.t));
-  return {
-    pos: { x: p.pos.x, y: p.y, z: p.pos.z },
-    heading: p.heading,
-    trackHeading: Math.atan2(trackTangentAt(p.t).x, trackTangentAt(p.t).z),
-    speed: p.speed,
-    t: p.t,
-    lap: p.lap,
-    mode: p.mode,
-    isDrifting: p.isDrifting,
-    driftCharge: p.driftCharge,
-    turboMeter: p.turboMeter,
-    boostTimer: p.boostTimer,
-    boostMult: p.boostMult,
-    steerSmooth: p.steerSmooth,
-    offset: lateralOffsetFrom(p.pos, p.t),
-    fusionHp: p.fusionHp,
-    fuseTimer: p.fuseTimer,
-    weapon: p.weapon,
-    shieldActive: p.shieldActive,
-    position: sorted.indexOf(p) + 1,
-    racers: racers.length,
-    frames: frame.current,
-    finished: p.finished,
-    coins: p.coins,
-    aiTrace: racers.filter((r) => !r.isPlayer).map((r) => ({
-      t: +r.t.toFixed(3),
-      m: r.mode,
-      y: +r.y.toFixed(2),
-      sp: +r.speed.toFixed(1),
-      lap: r.lap,
-    })),
-  };
-};
-
-
+  useFrame((_, deltaRaw) => {
     const state = useGame.getState();
     const dt = Math.min(deltaRaw, 1 / 30);
     frame.current++;
-    const controls = (__w.__input ?? poll()) as ReturnType<typeof poll>;
+    const controls = poll();
 
     if (controls.pausePressed && state.screen === "race" && !state.telemetry.finished) state.setPaused(!state.paused);
 
@@ -1336,11 +1285,7 @@ __w.__probe = () => {
     raceSnapshot.camAngle = player.heading;
 
     updateCamera(dt, false);
-  
-}
-useFrame((_, deltaRaw) => {
-  __tick(deltaRaw);
-});
+  });
 
   function updateCamera(dt: number, idle: boolean) {
     const player = racers[0];
