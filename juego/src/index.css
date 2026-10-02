@@ -1,0 +1,199 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: "Nunito", "Fredoka", "Noto Sans JP", "Noto Sans SC", "Noto Sans Arabic", "Noto Sans Hebrew", system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: none;
+  overflow: hidden;
+}
+
+[dir="rtl"] .flip-rtl {
+  transform: scaleX(-1);
+}
+
+.glass-panel {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.2) 46%, rgba(255, 255, 255, 0.08) 54%, rgba(255, 255, 255, 0.32) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.45), rgba(190, 235, 255, 0.25));
+  backdrop-filter: blur(22px) saturate(185%);
+  -webkit-backdrop-filter: blur(22px) saturate(185%);
+  border: 1.5px solid rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 10px 36px rgba(31, 85, 140, 0.22),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -8px 18px rgba(130, 200, 255, 0.18);
+}
+
+.glass-btn {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.55) 46%, rgba(230, 248, 255, 0.4) 54%, rgba(255, 255, 255, 0.78) 100%);
+  backdrop-filter: blur(10px) saturate(170%);
+  -webkit-backdrop-filter: blur(10px) saturate(170%);
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 5px 16px rgba(20, 80, 150, 0.26),
+    inset 0 1.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -6px 12px rgba(140, 205, 255, 0.28);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+.glass-btn::after {
+  content: "";
+  position: absolute;
+  top: -60%;
+  left: -80%;
+  width: 55%;
+  height: 220%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.85), transparent);
+  transform: rotate(18deg);
+  transition: left 0.45s ease;
+  pointer-events: none;
+}
+.glass-btn:hover::after {
+  left: 130%;
+}
+.glass-btn:hover {
+  filter: brightness(1.05);
+}
+.glass-btn:active {
+  transform: translateY(2px) scale(0.98);
+  box-shadow: 0 2px 6px rgba(20, 80, 150, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.aero-gradient {
+  background: linear-gradient(
+    158deg,
+    var(--sky-top, #8fd3ff) 0%,
+    var(--sky-mid, #bdeaff) 34%,
+    var(--sky-bottom, #d9fff0) 68%,
+    var(--ground, #e9ffe3) 100%
+  );
+}
+
+.font-display {
+  font-family: "Baloo 2", "Fredoka", "Noto Sans JP", "Noto Sans SC", "Noto Sans Arabic", "Noto Sans Hebrew", system-ui, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+@keyframes floaty {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-14px); }
+}
+.floaty { animation: floaty 4s ease-in-out infinite; }
+.floaty-slow { animation: floaty 7s ease-in-out infinite; }
+
+/* ---------- WINDOWS 98 theme: beveled gray widgets, navy title accents ---------- */
+.theme-win98 {
+  font-family: Tahoma, "MS Sans Serif", "Noto Sans JP", "Noto Sans SC", "Noto Sans Arabic", "Noto Sans Hebrew", system-ui, sans-serif;
+}
+.theme-win98 .font-display {
+  font-family: Tahoma, "MS Sans Serif", "Noto Sans JP", "Noto Sans SC", system-ui, sans-serif;
+  letter-spacing: 0;
+}
+.theme-win98 .glass-panel,
+.theme-win98 .glass-btn {
+  background: #c0c0c0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-radius: 0 !important;
+  border: 2px solid #ffffff !important;
+  border-right-color: #404040 !important;
+  border-bottom-color: #404040 !important;
+  box-shadow: 1px 1px 0 #000, inset -1px -1px 0 #808080, inset 1px 1px 0 #dfdfdf !important;
+}
+.theme-win98 .glass-btn::after { display: none; }
+.theme-win98 .glass-btn:active {
+  border: 2px solid #404040 !important;
+  border-right-color: #ffffff !important;
+  border-bottom-color: #ffffff !important;
+  transform: none;
+}
+.theme-win98 .aero-gradient {
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 3px),
+    #008080;
+}
+.theme-win98 .bubble { display: none; }
+.theme-win98 .rounded-full,
+.theme-win98 .rounded-3xl,
+.theme-win98 .rounded-2xl,
+.theme-win98 .rounded-xl { border-radius: 0 !important; }
+
+/* ---------- Y2K / liquid glass / vaporwave UI tints ---------- */
+.theme-y2k .glass-panel,
+.theme-y2k .glass-btn {
+  border-color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 36px rgba(255, 79, 216, 0.28), inset 0 1.5px 0 #fff, inset 0 -8px 18px rgba(79, 227, 255, 0.28);
+}
+.theme-liquid .glass-panel,
+.theme-liquid .glass-btn {
+  backdrop-filter: blur(30px) saturate(220%) brightness(1.08);
+  -webkit-backdrop-filter: blur(30px) saturate(220%) brightness(1.08);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.1) 40%, rgba(255, 190, 245, 0.25) 70%, rgba(170, 225, 255, 0.4));
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 44px rgba(120, 160, 255, 0.3), inset 0 2px 0 #fff, inset 0 -10px 24px rgba(255, 200, 250, 0.3);
+}
+.theme-vapor { color: #3b0f66; }
+.theme-vapor .glass-panel,
+.theme-vapor .glass-btn {
+  box-shadow: 0 10px 36px rgba(255, 113, 206, 0.35), inset 0 1.5px 0 rgba(255, 255, 255, 0.9), inset 0 -8px 18px rgba(5, 255, 161, 0.18);
+}
+
+@keyframes bubble-rise {
+  0% { transform: translateY(0) scale(1); opacity: 0.6; }
+  100% { transform: translateY(-120vh) scale(1.4); opacity: 0; }
+}
+.bubble {
+  position: absolute;
+  bottom: -10%;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.95), rgba(255,255,255,0.1) 70%);
+  animation: bubble-rise linear infinite;
+  pointer-events: none;
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0.7); opacity: 0; }
+  70% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.pop-in { animation: pop-in 0.35s cubic-bezier(.34,1.56,.64,1) both; }
+
+@keyframes shake-text {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px) rotate(-2deg); }
+  40% { transform: translateX(4px) rotate(2deg); }
+  60% { transform: translateX(-3px) rotate(-1deg); }
+  80% { transform: translateX(3px) rotate(1deg); }
+}
+.shake-text { animation: shake-text 0.5s ease; }
+
+.text-stroke {
+  -webkit-text-stroke: 2px rgba(10, 60, 90, 0.35);
+  paint-order: stroke fill;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(14, 116, 189, 0.4); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+input[type="range"] {
+  accent-color: #0ea5e9;
+}
+
+button, a, [role="button"] {
+  touch-action: manipulation;
+}
