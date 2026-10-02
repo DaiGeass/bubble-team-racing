@@ -766,7 +766,7 @@ export const hazardState: {
   lap: number;
 } = { positions: [], lap: 0 };
 
-export const TRACK_WIDTH = 14;
+export const TRACK_WIDTH = 20;
 export const SKY_ALTITUDE = 9;
 
 // Mutable active zones — rewritten by setActiveTrack() in trackCurve.ts
