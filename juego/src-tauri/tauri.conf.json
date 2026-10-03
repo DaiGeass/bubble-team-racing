@@ -42,7 +42,8 @@
     "category": "Game",
     "shortDescription": "Aero kart racing with 14 circuits, gaps, shortcuts and fusion turrets",
     "longDescription": "Bubble Team Racing: pick a character, a chassis and one of six finishes, then race fourteen circuits that climb, fall through gaps and split into stacked shortcuts while your partner mans the fusion turret.",
-    "copyright": "Bubble Team Racing",
+    "copyright": "Copyright (c) 2026 Bubble Team. Licensed under the GPL-3.0-or-later.",
+    "licenseFile": "../LICENSE",
     "publisher": "Bubble Team",
     "homepage": "https://github.com/DaiGeass/bubble-team-racing",
     "linux": {

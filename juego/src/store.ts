@@ -215,6 +215,7 @@ interface GameState {
   setVehicle: (v: Partial<VehiclePrefs>) => void;
   settings: Settings;
   setSettings: (s: Partial<Settings>) => void;
+  setKeybinds: (kb: Record<Action, string[]>) => void;
   goto: (s: Screen) => void;
   paused: boolean;
   setPaused: (p: boolean) => void;
