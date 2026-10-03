@@ -329,11 +329,11 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     particles: ["#ff71ce", "#01cdfe", "#05ffa1", "#b967ff"], prop: "vapor", bloom: 1.5,
   },
   dreamcore: {
-    id: "dreamcore", name: "DREAMCORE", skyTop: "#c7b9ff", skyBottom: "#f2e6ff", fog: "#e7dcff", fogNear: 70, fogFar: 280,
+    id: "dreamcore", name: "DREAMCORE", skyTop: "#a99bf0", skyBottom: "#e3d2ff", fog: "#cfc0f5", fogNear: 70, fogFar: 280,
     water: "#b9c9ff", ground: "#e6d9ff", road: "#f5eeff", roadLine: "#ffe1f5", roadEdge: "#ffffff",
     barrierA: "#ffd1ec", barrierB: "#c9e6ff", sun: "#fff0f9", sunIntensity: 1.8, ambient: 1.0, ambientColor: "#ffffff",
     hemiSky: "#d9c9ff", hemiGround: "#f0e6ff", cloud: "#ffffff", isle: "#d9c9ff", glow: "#ffe1f5",
-    particles: ["#ffffff", "#ffe1f5", "#c9e6ff", "#d9c9ff"], prop: "vapor", bloom: 1.1,
+    particles: ["#ffffff", "#ffe1f5", "#c9e6ff", "#d9c9ff"], prop: "vapor", bloom: 0.7,
   },
   cyberpunk: {
     id: "cyberpunk", name: "CYBERPUNK", skyTop: "#141a3c", skyBottom: "#2a2466", fog: "#1c1c4a", fogNear: 80, fogFar: 280,
@@ -656,6 +656,8 @@ export interface RouteDef {
   legacy?: Branch;
   /** what the road is, for its colour, its signpost and the map: over, under, a risky cut, a lane beside */
   kind?: RouteKind;
+  /** not a road: a second channel on the sea, flight line in the air or tunnel under water, like the stretch it leaves */
+  afloat?: boolean;
 }
 
 export type RouteKind = "high" | "low" | "cut" | "side";

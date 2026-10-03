@@ -564,36 +564,66 @@ export function sectorMix(t: number) {
   return _mix;
 }
 
-/** How far above the flight line a plane cruises when the pilot does nothing. */
-export const FLY_BASE = 2.6;
-/** How far above and below that the pilot can take it. */
-export const FLY_UP = 8;
-export const FLY_DOWN = -2;
+/**
+ * Free vertical movement. A plane over a flying stretch and a submarine in its
+ * tube are both steered up and down by the pilot: `base` is where the vehicle
+ * rides when left alone, above the line of the track, and `up`/`down` how far
+ * from there it can be taken.
+ */
+export const FLIGHT = {
+  sky: { base: 2.6, up: 8, down: -2, weave: 3.2, clear: 3 },
+  sub: { base: 1.3, up: 4.4, down: -0.9, weave: 1.8, clear: 2.2 },
+} as const;
+export type FlightKind = keyof typeof FLIGHT;
+/** kept for the parts that only ever deal with planes */
+export const FLY_BASE = FLIGHT.sky.base;
 
 export interface SkyRing {
   pos: THREE.Vector3;
   heading: number;
   prog: number;
-  /** height above the flight line, which is what the pilot has to match */
+  /** height above the line of the track, which is what the pilot has to match */
   offset: number;
+  kind: FlightKind;
+  /** ribbon it belongs to: a route through the stretch has its own */
+  path: number;
+}
+
+/** A ribbon carries rings where it is the flight line or the tube: the main loop, and routes that are one too. */
+function flown(p: PathRT, i: number): FlightKind | null {
+  if (!p.main && !p.def?.afloat) return null;
+  const t = p.prog[i];
+  for (const z of getActiveTrack().zones) {
+    if ((z.type === "sky" || z.type === "sub") && t >= z.t0 && t <= z.t1) return z.type;
+  }
+  return null;
 }
 
 /**
- * Boost rings of every flying stretch. They weave up and down, so a flying
- * stretch is flown, not just steered.
+ * Boost rings of every flying and every diving stretch, on the main line and
+ * on each alternative line through it. They weave up and down, so the stretch
+ * is flown, not just steered.
  */
 export function getSkyRings(): SkyRing[] {
   const out: SkyRing[] = [];
-  const main = paths[0];
-  for (const z of getActiveTrack().zones) {
-    if (z.type !== "sky") continue;
-    const span = z.t1 - z.t0;
-    const count = Math.max(3, Math.round((span * main.length) / 48));
-    for (let k = 0; k < count; k++) {
-      const prog = z.t0 + span * (0.12 + (0.76 * (k + 0.5)) / count);
-      const i = mainIndexAt(prog);
-      const offset = FLY_BASE + 3.2 * (1 + Math.sin(k * 1.9 + out.length));
-      out.push({ pos: new THREE.Vector3(main.px[i], main.py[i] + offset, main.pz[i]), heading: Math.atan2(main.tx[i], main.tz[i]), prog, offset });
+  for (const p of paths) {
+    const every = Math.max(1, Math.round(48 / p.ds));
+    let run = 0;
+    let n = 0;
+    for (let i = 0; i < p.n; i++) {
+      const kind = flown(p, i);
+      if (!kind) {
+        run = 0;
+        continue;
+      }
+      run++;
+      // not in the first or last stretch, where the vehicle is still leaving or rejoining the road
+      const ahead = Math.min(p.n - 1, i + Math.round(40 / p.ds));
+      if (run * p.ds < 40 || !flown(p, ahead) || run % every !== 0) continue;
+      const f = FLIGHT[kind];
+      const offset = f.base + f.weave * (1 + Math.sin(n * 1.9 + p.id * 2.3));
+      n++;
+      out.push({ pos: new THREE.Vector3(p.px[i], p.py[i] + offset, p.pz[i]), heading: Math.atan2(p.tx[i], p.tz[i]), prog: p.prog[i], offset, kind, path: p.id });
     }
   }
   return out;
@@ -602,27 +632,39 @@ export function getSkyRings(): SkyRing[] {
 export interface SkyBlock {
   pos: THREE.Vector3;
   prog: number;
+  kind: FlightKind;
 }
 
 /**
- * Things to fly round. One hangs between each pair of rings, at the height the
- * ring before it is not: above a low ring, below a high one, and off to one
+ * Things to go round: blocks in the air, mines under water. One hangs between
+ * each pair of rings, at the height the ring before it is not and off to one
  * side, so the line through the rings is also the line that misses them.
  */
 export function getSkyBlocks(): SkyBlock[] {
   const rings = getSkyRings();
-  const main = paths[0];
   const out: SkyBlock[] = [];
   for (let k = 0; k + 1 < rings.length; k++) {
     const a = rings[k];
     const b = rings[k + 1];
-    if (b.prog - a.prog > 0.05 || b.prog < a.prog) continue;
-    const s = (a.offset - FLY_BASE) / 3.2 - 1;
+    if (a.path !== b.path || a.kind !== b.kind) continue;
+    const p = paths[a.path];
+    const f = FLIGHT[a.kind];
+    const s = (a.offset - f.base) / f.weave - 1;
     if (Math.abs(s) < 0.35) continue;
-    const prog = (a.prog + b.prog) / 2;
-    const i = mainIndexAt(prog);
-    const lat = k % 2 ? 4.5 : -4.5;
-    out.push({ pos: new THREE.Vector3(main.px[i] - main.tz[i] * lat, main.py[i] + FLY_BASE + 3.2 * (1 - s), main.pz[i] + main.tx[i] * lat), prog });
+    // half-way between the two rings, along the ribbon
+    let best = 0;
+    let bd = Infinity;
+    const mx = (a.pos.x + b.pos.x) / 2;
+    const mz = (a.pos.z + b.pos.z) / 2;
+    for (let i = 0; i < p.n; i += 2) {
+      const d = (p.px[i] - mx) ** 2 + (p.pz[i] - mz) ** 2 + (p.py[i] - (a.pos.y + b.pos.y) / 2 + f.base) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    }
+    const lat = (k % 2 ? 1 : -1) * (a.kind === "sky" ? 4.5 : 3.2);
+    out.push({ pos: new THREE.Vector3(p.px[best] - p.tz[best] * lat, p.py[best] + f.base + f.weave * (1 - s), p.pz[best] + p.tx[best] * lat), prog: p.prog[best], kind: a.kind });
   }
   return out;
 }

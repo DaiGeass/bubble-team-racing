@@ -56,6 +56,8 @@ export interface StepOpts {
   /** flying: holds `flyAlt` above the road and ignores gravity */
   fly: boolean;
   flyAlt: number;
+  /** how far past the edge of the road a flying vehicle may stray (negative keeps it inside, as in a tube) */
+  flyMargin: number;
   /** passes through barriers */
   ghost: boolean;
 }
@@ -109,7 +111,7 @@ function wall(b: Body, opts: StepOpts, dt: number, res: StepResult): boolean {
     if (!opts.fly && b.y - W.y < -1.5) return false;
   }
   // flying vehicles are kept in a corridor a little wider than the road
-  const lim = opts.fly ? W.half + 4 : W.half - BODY_RADIUS;
+  const lim = opts.fly ? W.half + opts.flyMargin : W.half - BODY_RADIUS;
   let side = 0;
   if (W.lat > lim && (opts.fly || W.flags & F_WALL_POS)) side = 1;
   else if (W.lat < -lim && (opts.fly || W.flags & F_WALL_NEG)) side = -1;

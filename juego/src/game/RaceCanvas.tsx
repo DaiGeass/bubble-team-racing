@@ -11,7 +11,7 @@ import { sectorMix } from "../trackCurve";
 function PostFX({ intensity }: { intensity: number }) {
   return (
     <EffectComposer multisampling={0}>
-      <Bloom intensity={intensity} luminanceThreshold={0.45} luminanceSmoothing={0.3} mipmapBlur radius={0.75} />
+      <Bloom intensity={intensity} luminanceThreshold={0.72} luminanceSmoothing={0.3} mipmapBlur radius={0.75} />
       <Vignette eskil={false} offset={0.18} darkness={0.55} />
     </EffectComposer>
   );

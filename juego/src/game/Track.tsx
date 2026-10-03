@@ -48,7 +48,8 @@ function makeRoadTexture(theme: ThemeDef) {
  * flying stretch, and the boat lane when the circuit has a real sea to float on.
  */
 function deckless(path: PathRT, i: number) {
-  if (!path.main) return false;
+  // a route is tarmac unless it is itself a channel or a flight line
+  if (!path.main && !path.def?.afloat) return false;
   const t = path.prog[i];
   const sea = getActiveTrack().sea !== undefined;
   for (const z of ZONES) {
@@ -121,14 +122,14 @@ function buildRibbonGeometry(path: PathRT) {
 
 /** Boat lane on the open sea: the barrier there is a line of buoys. */
 function buoyed(path: PathRT, i: number) {
-  if (!path.main || getActiveTrack().sea === undefined) return false;
+  if ((!path.main && !path.def?.afloat) || getActiveTrack().sea === undefined) return false;
   const t = path.prog[i];
   return ZONES.some((z) => z.type === "water" && t >= z.t0 - 0.01 && t <= z.t1 + 0.01);
 }
 
 /** No barrier is drawn along a flight line, inside the submarine tube or beside a lake. */
 function railless(path: PathRT, i: number) {
-  if (!path.main) return false;
+  if (!path.main && !path.def?.afloat) return false;
   const t = path.prog[i];
   return ZONES.some((z) => t >= z.t0 - 0.01 && t <= z.t1 + 0.01);
 }
@@ -354,8 +355,9 @@ function SkyBlocks({ theme }: { theme: ThemeDef }) {
   return (
     <group>
       {blocks.map((b, i) => (
-        <mesh key={i} ref={(el) => (refs.current[i] = el)} position={b.pos.toArray()}>
-          <icosahedronGeometry args={[2.2, 0]} />
+        <mesh key={i} ref={(el) => (refs.current[i] = el)} position={b.pos.toArray()} scale={b.kind === "sky" ? 1 : 0.62}>
+          {/* a block in the air, a spiked mine under water */}
+          {b.kind === "sky" ? <icosahedronGeometry args={[2.2, 0]} /> : <octahedronGeometry args={[2.2, 1]} />}
           <meshStandardMaterial color={theme.barrierA} emissive={theme.barrierA} emissiveIntensity={1.6} roughness={0.2} metalness={0.5} flatShading toneMapped={false} />
         </mesh>
       ))}
@@ -798,8 +800,9 @@ function SkyRings({ theme }: { theme: ThemeDef }) {
     <group>
       {rings.map((r, i) => (
         <mesh key={i} position={r.pos.toArray()} rotation={[0, r.heading, 0]}>
-          <torusGeometry args={[3.6, 0.32, 10, 28]} />
-          <meshStandardMaterial color={theme.glow} emissive={theme.glow} emissiveIntensity={2.6} toneMapped={false} />
+          {/* big rings in the air, bubble hoops in the tube */}
+          <torusGeometry args={r.kind === "sky" ? [3.6, 0.32, 10, 28] : [2.5, 0.22, 10, 24]} />
+          <meshStandardMaterial color={r.kind === "sky" ? theme.glow : "#eaffff"} emissive={r.kind === "sky" ? theme.glow : theme.barrierB} emissiveIntensity={2.6} toneMapped={false} />
         </mesh>
       ))}
     </group>
@@ -1249,83 +1252,53 @@ function AmbientLife({ theme }: { theme: ThemeDef }) {
   );
 }
 
-function zoneRibbon(zone: Zone, halfWidth: number, y: number, pad: number) {
-  const N = 90;
-  const t0 = zone.t0 - pad;
-  const span = zone.t1 - zone.t0 + pad * 2;
-  const positions: number[] = [];
-  const indices: number[] = [];
-  for (let i = 0; i <= N; i++) {
-    const t = (((t0 + (span * i) / N) % 1) + 1) % 1;
-    const c = trackCurve.getPointAt(t);
-    const tan = trackCurve.getTangentAt(t);
-    const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-    const l = c.clone().addScaledVector(n, halfWidth);
-    const r = c.clone().addScaledVector(n, -halfWidth);
-    positions.push(l.x, c.y + y, l.z, r.x, c.y + y, r.z);
-  }
-  for (let i = 0; i < N; i++) {
-    const a = i * 2;
-    indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  g.setIndex(indices);
-  g.computeVertexNormals();
-  return g;
-}
-
 /** Submarine section: translucent water sheet over a sunken road + glowing glass arches. */
 function SubZone({ theme }: { theme: ThemeDef }) {
-  const zone = ZONES.find((z) => z.type === "sub");
-  // water-filled glass tube that swallows the road (aquarium tunnel)
-  const geo = useMemo(() => {
-    if (!zone) return null;
-    const pts: THREE.Vector3[] = [];
-    const N = 40;
-    for (let i = 0; i <= N; i++) {
-      const t = zone.t0 + ((zone.t1 - zone.t0) * i) / N;
-      const p = trackCurve.getPointAt(t);
-      pts.push(new THREE.Vector3(p.x, p.y + 3.2, p.z));
-    }
-    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 90, 8.4, 20, false);
-  }, [zone]);
-  const seabed = useMemo(() => (zone ? zoneRibbon(zone, TRACK_WIDTH / 2 + 3, -9, 0.0) : null), [zone]);
-  const arches = useMemo(() => {
-    if (!zone) return [];
-    const out: { pos: THREE.Vector3; angle: number; i: number }[] = [];
-    const n = 14;
-    for (let i = 0; i < n; i++) {
-      const t = zone.t0 + ((i + 0.5) / n) * (zone.t1 - zone.t0);
-      const p = trackCurve.getPointAt(t);
-      const tan = trackCurve.getTangentAt(t);
-      out.push({ pos: new THREE.Vector3(p.x, p.y + 0.15, p.z), angle: Math.atan2(tan.x, tan.z), i });
+  // Every ribbon that runs through a diving stretch gets its own glass tube:
+  // the main line and each alternative tunnel.
+  const runs = useMemo(() => {
+    const out: { geo: THREE.TubeGeometry; arches: { pos: [number, number, number]; angle: number }[] }[] = [];
+    for (const path of getPaths()) {
+      let pts: THREE.Vector3[] = [];
+      let arches: { pos: [number, number, number]; angle: number }[] = [];
+      const flush = () => {
+        if (pts.length >= 6) out.push({ geo: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), Math.min(220, pts.length * 3), 8.4, 18, false), arches });
+        pts = [];
+        arches = [];
+      };
+      const every = Math.max(1, Math.round(10 / path.ds));
+      for (let i = 0; i < path.n; i += every) {
+        const t = path.prog[i];
+        const inside = ZONES.some((z) => z.type === "sub" && t >= z.t0 && t <= z.t1);
+        if (!inside) {
+          flush();
+          continue;
+        }
+        pts.push(new THREE.Vector3(path.px[i], path.py[i] + 3.2, path.pz[i]));
+        if (pts.length % 3 === 0) arches.push({ pos: [path.px[i], path.py[i] + 0.15, path.pz[i]], angle: Math.atan2(path.tx[i], path.tz[i]) });
+      }
+      flush();
     }
     return out;
-  }, [zone]);
-  if (!zone || !geo || !seabed) return null;
+  }, []);
+  const zone = ZONES.find((z) => z.type === "sub");
+  if (!runs.length) return null;
   return (
     <group>
-      <mesh geometry={seabed}>
-        <meshStandardMaterial color={theme.isle} roughness={1} side={THREE.DoubleSide} />
-      </mesh>
-      <mesh geometry={geo}>
-        <meshPhysicalMaterial color={theme.water} transparent opacity={0.24} roughness={0.03} metalness={0.2} clearcoat={1} iridescence={0.6} side={THREE.DoubleSide} depthWrite={false} />
-      </mesh>
-      {arches.map((a) => (
-        <mesh key={a.i} position={a.pos.toArray()} rotation={[0, a.angle, 0]}>
-          <torusGeometry args={[TRACK_WIDTH / 2 + 0.6, 0.16, 8, 28, Math.PI]} />
-          <meshStandardMaterial color={theme.glow} emissive={a.i % 2 ? theme.barrierA : theme.glow} emissiveIntensity={2.2} transparent opacity={0.75} toneMapped={false} />
-        </mesh>
+      {runs.map((run, r) => (
+        <group key={r}>
+          <mesh geometry={run.geo}>
+            <meshPhysicalMaterial color={theme.water} transparent opacity={0.2} roughness={0.03} metalness={0.2} clearcoat={1} iridescence={0.6} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+          {run.arches.map((a, i) => (
+            <mesh key={i} position={a.pos} rotation={[0, a.angle, 0]}>
+              <torusGeometry args={[TRACK_WIDTH / 2 + 0.6, 0.16, 8, 28, Math.PI]} />
+              <meshStandardMaterial color={theme.glow} emissive={i % 2 ? theme.barrierA : theme.glow} emissiveIntensity={2.2} transparent opacity={0.75} toneMapped={false} />
+            </mesh>
+          ))}
+        </group>
       ))}
-      {/* bubbles rising inside the water tube */}
-      {arches.map((a, i) => (
-        <mesh key={`b${i}`} position={[a.pos.x + Math.sin(i * 2.1) * 4, a.pos.y + 1.2 + (i % 4) * 0.9, a.pos.z + Math.cos(i * 1.7) * 4]}>
-          <sphereGeometry args={[0.28 + (i % 3) * 0.12, 8, 8]} />
-          <meshPhysicalMaterial color="#ffffff" transparent opacity={0.4} roughness={0.05} clearcoat={1} depthWrite={false} />
-        </mesh>
-      ))}
-      <SubFish zone={zone} />
+      {zone && <SubFish zone={zone} />}
     </group>
   );
 }

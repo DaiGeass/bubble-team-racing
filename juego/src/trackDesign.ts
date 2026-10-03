@@ -94,6 +94,20 @@ export class Turtle {
     return this.arc(deg, r, dy, -1);
   }
 
+  /**
+   * A bulge to one side that comes back to the line it left, pointing the same
+   * way: out, across and back. Covers 4 x r x sin(deg) along that line, so it
+   * can stand in for a straight of that length without moving anything else.
+   */
+  weave(side: "L" | "R", deg: number, r: number, dy = 0) {
+    const out = side === "L" ? this.left.bind(this) : this.right.bind(this);
+    const back = side === "L" ? this.right.bind(this) : this.left.bind(this);
+    out(deg, r, dy / 4);
+    back(deg * 2, r, dy / 2);
+    out(deg, r, dy / 4);
+    return this;
+  }
+
   /** Name the current spot, to hang a zone, a jump, a pad or a junction on it. */
   mark(name: string) {
     this.marks[name] = { i: this.pts.length - 1, h: this.h };
@@ -143,6 +157,8 @@ interface RouteSpec {
   walls?: boolean;
   tunnel?: boolean;
   kind?: RouteKind;
+  /** a second channel, flight line or tunnel rather than a road */
+  afloat?: boolean;
   /** [mark on the route, length in units]: a jump on the route */
   holes?: [string, number][];
   /** [mark on the route, kind, power] */
@@ -268,6 +284,7 @@ export function design(spec: DesignSpec): TrackDef {
       walls: r.walls,
       tunnel: r.tunnel,
       kind: r.kind ?? (r.walls === false ? "cut" : undefined),
+      afloat: r.afloat,
       holes: (r.holes ?? []).map(([m, len]) => [frac(m), frac(m, len)] as [number, number]),
     };
   });

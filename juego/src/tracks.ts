@@ -2,7 +2,7 @@ import type { TrackDef } from "./data";
 import { design, BYPASS } from "./trackDesign";
 
 // ---------------------------------------------------------------------------
-// The eight circuits, one per aesthetic. Each is drawn by hand with the turtle
+// The circuits: one per aesthetic, and one built around each kind of vehicle. Each is drawn by hand with the turtle
 // in trackDesign.ts: lengths are in world units (a kart covers about 27 a
 // second), heights are absolute, and a positive turn is a turn to the left.
 // tools/sim.sh check verifies every one of them: closure, bend radius, slopes
@@ -240,6 +240,91 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     routes: [
       { from: "homeA", to: "homeB", draw: (t) => t.bypass("L", 98, 9, 6), kind: "high", pads: [["mid", "boost", 1.5]] },
       { from: "homeA", to: "homeB", draw: (t) => t.bypass("R", 98, -3, 6), kind: "low", pads: [["mid", "boost"]] },
+    ],
+  }),
+
+  // ARCHIPELAGO — the boat circuit. Off the pier onto the open sea, where the
+  // lane splits into two channels and a ramp; across an island; down a tube
+  // that forks into three tunnels; and off the water in a plane over the
+  // last side of the lap.
+  design({
+    id: "archipielago", theme: "aqua", difficulty: 2, sea: 0, start: [0, 4, 0, 0], hazards: 2,
+    draw: (t) =>
+      t.go(50).mark("go").go(110)
+        .right(90, 80, -4).mark("w0")
+        .mark("chA").go(BYPASS + 223).mark("chB")
+        .go(60, 3).mark("w1").go(120).go(60, -3).mark("w2").go(60)
+        .right(90, 80)
+        .go(70).mark("s0").go(100, -22).go(15).mark("tA").go(BYPASS + 23).mark("tB").go(15).go(100, 22).mark("s1")
+        .right(90, 80).mark("k0")
+        .go(250, 30).weave("L", 25, 118).go(250, -26).mark("k1")
+        .right(90, 80)
+        .mark("homeA").go(BYPASS + 153).mark("homeB").go(10),
+    zones: [["w0", "w1", "water"], ["w2", "s0", "water"], ["s0", "s1", "sub"], ["s1", "k0", "water"], ["k0", "k1", "sky"]],
+    sectors: [["w1", "frutiger"], ["s0", "liquid"], ["k0", "aero"], ["k1", "sunset"]],
+    traffic: 2,
+    // waves on the main channel: they throw the boat into the air
+    pads: [["go", "boost"], ["chA", "jump", 12, 150], ["chA", "jump", 12, 300], ["k1", "boost", 1.45, 20], ["homeB", "boost"]],
+    routes: [
+      { from: "chA", to: "chB", draw: (t) => t.bypass("L", 223, 0), afloat: true, kind: "side" },
+      { from: "chA", to: "chB", draw: (t) => t.bypass("R", 223, 7), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
+      { from: "tA", to: "tB", draw: (t) => t.bypass("L", 23, 0), afloat: true, kind: "side" },
+      { from: "tA", to: "tB", draw: (t) => t.bypass("R", 23, 0), afloat: true, kind: "side" },
+      { from: "homeA", to: "homeB", draw: (t) => t.bypass("L", 153, 9), kind: "high", pads: [["mid", "boost", 1.5]] },
+      { from: "homeA", to: "homeB", draw: (t) => t.bypass("R", 153, -3), kind: "low", pads: [["mid", "boost"]] },
+    ],
+  }),
+
+  // JET STREAM — the plane circuit. A runway, and then two thirds of the lap in
+  // the air: a climb of fifty units, a dive, a stretch where the flight line
+  // splits into a high one and a low one, another climb and the glide home.
+  design({
+    id: "corriente", theme: "aero", difficulty: 2, start: [0, 8, 0, 0], hazards: 2,
+    draw: (t) =>
+      t.go(50).mark("go").go(110).mark("k0")
+        .weave("R", 30, 150, 40).left(90, 140, 10)
+        .go(300, -20).mark("skyA").go(BYPASS + 123).mark("skyB")
+        .left(90, 140, -10)
+        .weave("L", 30, 115, 22).mark("dive").weave("R", 30, 115, -30)
+        .left(90, 140, -6)
+        .go(200, -6).mark("k1").mark("runA").go(BYPASS + 223).mark("runB")
+        .left(90, 140),
+    zones: [["k0", "k1", "sky"]],
+    sectors: [["k0", "dreamcore"], ["skyA", "vapor"], ["dive", "sunset"], ["k1", "aero"]],
+    traffic: 2,
+    pads: [["go", "boost", 1.5], ["k1", "boost", 1.45, 20], ["runB", "boost"]],
+    routes: [
+      { from: "skyA", to: "skyB", draw: (t) => t.bypass("L", 123, 12), afloat: true, kind: "high" },
+      { from: "skyA", to: "skyB", draw: (t) => t.bypass("R", 123, -12), afloat: true, kind: "low" },
+      { from: "runA", to: "runB", draw: (t) => t.bypass("L", 223, 9), kind: "high", holes: [["mid", 11]], pads: [["mid", "boost", 1.5]] },
+      { from: "runA", to: "runB", draw: (t) => t.bypass("R", 223, -5), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+    ],
+  }),
+
+  // ABYSSAL TRENCH — the submarine circuit. Forty units under the sea along
+  // two sides of the lap, with the tube forking into a deep tunnel and a
+  // shallow one, then up to the surface and home across an island.
+  design({
+    id: "fosa", theme: "aqua", difficulty: 3, sea: 0, start: [0, 4, 0, 0], hazards: 2,
+    draw: (t) =>
+      t.go(50).mark("go").go(110)
+        .right(90, 80, -4).mark("w0")
+        .go(120).mark("s0").go(160, -30).go(20).mark("tA").go(BYPASS + 123, -6).mark("tB").go(100, -4)
+        .right(90, 80)
+        .weave("L", 30, 100, 10).weave("R", 30, 100, 12).go(100, 18).mark("s1")
+        .right(90, 80)
+        .weave("R", 30, 100).mark("w1").go(60, 4).mark("landA").go(BYPASS + 263).mark("landB")
+        .right(90, 80)
+        .go(340),
+    zones: [["w0", "s0", "water"], ["s0", "s1", "sub"], ["s1", "w1", "water"]],
+    sectors: [["s0", "liquid"], ["tA", "cyberpunk"], ["s1", "aqua"], ["w1", "frutiger"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["w1", "jump", 12, -110], ["landB", "boost"]],
+    routes: [
+      { from: "tA", to: "tB", draw: (t) => t.bypass("L", 123, -10, -6), afloat: true, kind: "low" },
+      { from: "tA", to: "tB", draw: (t) => t.bypass("R", 123, 9, -6), afloat: true, kind: "high" },
+      { from: "landA", to: "landB", draw: (t) => t.bypass("L", 263, 9), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
+      { from: "landA", to: "landB", draw: (t) => t.bypass("R", 263, -3), kind: "low", pads: [["mid", "boost"]] },
     ],
   }),
 ];

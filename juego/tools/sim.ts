@@ -79,7 +79,7 @@ for (const id of ids) {
       const maxS = 27; b.speed += (14 - 14 * b.slopeAlong) * dt; b.speed = Math.min(b.speed, maxS * (Math.abs(diff) > 0.55 ? 0.7 : 1));
       const sf = Math.min(1, b.speed / maxS);
       if (!b.airborne) b.heading += steer * 2.6 * (0.4 + sf * 0.6) * (1 - sf * 0.18) * dt;
-      moveBody(b, Math.sin(b.heading) * b.speed * dt, Math.cos(b.heading) * b.speed * dt, dt, { rideOffset: 0, bobbing: false, fly: false, flyAlt: 0, ghost: false }, res);
+      moveBody(b, Math.sin(b.heading) * b.speed * dt, Math.cos(b.heading) * b.speed * dt, dt, { rideOffset: 0, bobbing: false, fly: false, flyAlt: 0, flyMargin: 4, ghost: false }, res);
       for (const pad of pads) { if (pad.kind !== 'cannon' || b.airborne) continue; const px = pad.pos.x - b.pos.x, pz = pad.pos.z - b.pos.z; if (Math.abs(pad.pos.y - b.y) < 2 && Math.abs(px * Math.sin(pad.heading) + pz * Math.cos(pad.heading)) < 3.5 && px * px + pz * pz < 200) { placeBody(b, 0, pad.toIdx); cannons++; } }
       if (res.fell) { if (process.env.DBG) console.log("FELL t", time.toFixed(1), "pos", b.pos.x.toFixed(0), b.y.toFixed(1), b.pos.z.toFixed(0), "prog", b.prog.toFixed(3), "path", b.path, "groundY", b.groundY.toFixed(1), "air", b.airborne, "vy", b.vy.toFixed(1)); falls++; fallAt.push(`${b.prog.toFixed(3)}@${time.toFixed(0)}s`); respawnBody(b); b.speed = 15; route = 0; }
       if (res.wallImpact > 0) { hits++; maxImpact = Math.max(maxImpact, res.wallImpact); }

@@ -30,14 +30,14 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, sectorMix, plainStretches, FLY_BASE, FLY_UP, FLY_DOWN, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
+import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, sectorMix, plainStretches, FLY_BASE, FLIGHT, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
 import { moveBody, makeResult, placeBody, respawnBody, aimAhead, bendAhead, collideBodies, progDelta, GRAVITY, type Body, type StepOpts } from "../physics";
 import { emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
 
 const TAG_COOLDOWN_MAX = 3.6;
 // scratch objects for the per-frame physics calls, so the loop allocates nothing
-const stepOpts: StepOpts = { rideOffset: 0, bobbing: false, fly: false, flyAlt: 0, ghost: false };
+const stepOpts: StepOpts = { rideOffset: 0, bobbing: false, fly: false, flyAlt: 0, flyMargin: 4, ghost: false };
 const stepRes = makeResult();
 const aimV = new THREE.Vector3();
 const camG = makeGround();
@@ -67,6 +67,8 @@ interface Racer extends Body {
   respawnLock: number;
   /** whole laps completed */
   lapsDone: number;
+  /** direction of travel: the same as the heading except on water, where the hull slides */
+  course: number;
   /** race clock at the last fall, to spot a racer that keeps falling at the same place */
   lastFall: number;
   /** cooldown so one pad fires once */
@@ -240,6 +242,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         noProgressFor: 0,
         respawnLock: 0,
         lapsDone: 0,
+        course: 0,
         lastFall: -1e9,
         padCd: 0,
         aiRoute: 0,
@@ -300,6 +303,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       me.total = me.prog;
       me.bestTotal = me.total;
       me.t = me.prog;
+      me.course = me.heading;
     }
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1000,7 +1004,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         });
       }
     }
-    const inSky = r.mode === "plane" && zone ? (r.t - zone.t0) / (zone.t1 - zone.t0) : 0;
+    // plane and submarine both move freely up and down inside their stretch
+    const flight = r.mode === "plane" ? FLIGHT.sky : r.mode === "sub" ? FLIGHT.sub : null;
+    const inSky = flight && zone ? (r.t - zone.t0) / (zone.t1 - zone.t0) : 0;
 
     // ---- input ----
     let steerIn = 0;
@@ -1022,8 +1028,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       turboPressed = controls.turboPressed;
       if (settings.autoGas && throttleIn === 0 && r.stunTimer <= 0) throttleIn = 1;
       // in the air the pedals fly the plane: up climbs, down dives, the engine runs by itself
-      if (r.mode === "plane") {
-        r.flyOff = THREE.MathUtils.clamp(r.flyOff + controls.throttle * 12 * dt, FLY_DOWN, FLY_UP);
+      if (flight) {
+        r.flyOff = THREE.MathUtils.clamp(r.flyOff + controls.throttle * (r.mode === "plane" ? 12 : 8) * dt, flight.down, flight.up);
         throttleIn = r.stunTimer > 0 ? 0 : 1;
       }
     } else if (!r.isPlayer) {
@@ -1111,15 +1117,16 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // (+lateral is to the right, and steering right is negative)
       steerIn = THREE.MathUtils.clamp(err * 3.4 - (r.aiLat - r.lat) * 0.09, -1, 1);
 
-      // flying: line up with the next ring
-      if (r.mode === "plane") {
+      // flying or diving: line up with the next ring on the line it is on
+      if (flight) {
         let want = 0;
         let next = 0.2;
         for (const ring of skyRings) {
+          if (ring.path !== r.path) continue;
           const d = progDelta(r.prog, ring.prog);
           if (d > 0 && d < next) {
             next = d;
-            want = ring.offset - FLY_BASE;
+            want = ring.offset - flight.base;
           }
         }
         r.flyOff += THREE.MathUtils.clamp(want * (0.7 + 0.3 * ai.line) - r.flyOff, -10 * dt, 10 * dt);
@@ -1244,19 +1251,25 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
     // ---- movement: ground, barriers, gravity and lap progress live in physics.ts ----
     const fwd = new THREE.Vector3(Math.sin(r.heading), 0, Math.cos(r.heading));
-    let mx = fwd.x * r.speed * dt;
-    let mz = fwd.z * r.speed * dt;
+    // a hull has no tyres: on water the boat keeps going the way it was going and
+    // the bow leads it round, so a turn is a slide
+    if (r.mode === "boat") r.course += wrapAngle(r.heading - r.course) * Math.min(1, dt * 3.6);
+    else r.course = r.heading;
+    let mx = Math.sin(r.course) * r.speed * dt;
+    let mz = Math.cos(r.course) * r.speed * dt;
     if (r.isDrifting) {
       const slip = -r.steerSmooth * 0.32 * Math.abs(r.speed) * dt;
       mx += -fwd.z * slip;
       mz += fwd.x * slip;
     }
     const bob = performance.now();
-    stepOpts.fly = r.mode === "plane";
+    stepOpts.fly = !!flight;
+    // a plane may stray a little past the edge of its line; a submarine stays inside its tube
+    stepOpts.flyMargin = r.mode === "sub" ? -2.6 : 4;
     // the plane lifts off as the flying stretch begins and comes back down onto the road at its end
     const lift = THREE.MathUtils.smoothstep(inSky, 0, 0.1) * (1 - THREE.MathUtils.smoothstep(inSky, 0.9, 1));
-    if (r.mode !== "plane") r.flyOff = 0;
-    stepOpts.flyAlt = lift * (FLY_BASE + r.flyOff);
+    if (!flight) r.flyOff = 0;
+    stepOpts.flyAlt = flight ? lift * (flight.base + r.flyOff) : 0;
     stepOpts.bobbing = r.mode === "boat" || r.mode === "sub";
     stepOpts.rideOffset =
       r.mode === "boat" ? -0.12 + Math.sin(bob * 0.004 + r.aiPhase) * 0.09 : r.mode === "sub" ? 0.35 + Math.sin(bob * 0.003 + r.aiPhase) * 0.1 : 0;
@@ -1386,7 +1399,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // ---- pickups ----
     for (const box of itemBoxes) {
       if (!box.active) continue;
-      if (Math.hypot(box.pos.x - r.pos.x, box.pos.z - r.pos.z) < 2.9 && Math.abs(box.pos.y - r.y) < (r.mode === "plane" ? 12 : 3)) {
+      if (Math.hypot(box.pos.x - r.pos.x, box.pos.z - r.pos.z) < 2.9 && Math.abs(box.pos.y - r.y) < (r.mode === "plane" ? 12 : r.mode === "sub" ? 7 : 3)) {
         if (!r.weapon) {
           let ahead = 0;
           for (const o of racers) if (o !== r && o.total > r.total) ahead++;
@@ -1425,12 +1438,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
 
     // ---- sky rings ----
-    if (r.mode === "plane") {
+    if (flight) {
       for (let i = 0; i < skyRings.length; i++) {
         if (r.ringCd[i] > 0) continue;
         const ring = skyRings[i];
         const d = Math.hypot(ring.pos.x - r.pos.x, ring.pos.z - r.pos.z);
-        if (d < 3.8 && Math.abs(ring.pos.y - (r.y + 0.8)) < 3) {
+        if (d < (ring.kind === "sky" ? 3.8 : 3) && Math.abs(ring.pos.y - (r.y + 0.8)) < FLIGHT[ring.kind].clear) {
           r.ringCd[i] = 3;
           r.rings++;
           r.boostTimer = Math.max(r.boostTimer, 0.55);
@@ -1445,12 +1458,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
 
     // ---- things hanging in the flight path ----
-    if (r.mode === "plane" && r.hazardCd <= 0) {
+    if (flight && r.hazardCd <= 0) {
       for (const blk of skyBlocks) {
         const dx = blk.pos.x - r.pos.x;
         const dy = blk.pos.y - (r.y + 0.6);
         const dz = blk.pos.z - r.pos.z;
-        if (dx * dx + dy * dy + dz * dz < 7.5) {
+        if (dx * dx + dy * dy + dz * dz < (blk.kind === "sky" ? 7.5 : 4.4)) {
           r.hazardCd = 1.2;
           applyHit(r, false);
           break;
@@ -1837,7 +1850,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
 
     if (state.paused || !started.current) {
-      updateCamera(dt, true);
+      updateCamera(Math.min(deltaRaw, 0.25), true);
       return;
     }
 
@@ -1924,7 +1937,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }));
     raceSnapshot.camAngle = player.heading;
 
-    updateCamera(dt, false);
+    updateCamera(Math.min(deltaRaw, 0.25), false);
   });
 
   function updateCamera(dt: number, idle: boolean) {
@@ -1953,7 +1966,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const look = player.pos.clone()
       .setY(THREE.MathUtils.lerp(player.y, aheadY, 0.8) + 1.2)
       .addScaledVector(fwd, 7);
-    camPos.current.lerp(desired, idle ? 0.05 : 0.11);
+    // Smoothing by elapsed time, not per frame: at 20 fps the camera used to
+    // trail three times as far behind as at 60.
+    const ease = (rate: number) => 1 - Math.exp(-rate * dt);
+    camPos.current.lerp(desired, ease(idle ? 3 : 7));
     // the smoothed camera lags on a fast descent, so clamp again once it is
     // settled: otherwise it dips through the road surface for a few frames
     const camGround = groundAt(camPos.current.x, camPos.current.z, player.y + 3, camG, 0) ? camG.y : -Infinity;
@@ -1963,13 +1979,13 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const la = themeOnLap(mix.a, aestheticLap - 1);
     const lb = themeOnLap(mix.b, aestheticLap - 1);
     sunTint.set(la.sun).lerp(sunTint2.set(lb.sun), mix.u);
-    sun.color.lerp(sunTint, 0.06);
-    sun.intensity += (THREE.MathUtils.lerp(la.sunIntensity, lb.sunIntensity, mix.u) - sun.intensity) * 0.06;
+    sun.color.lerp(sunTint, ease(3.7));
+    sun.intensity += (THREE.MathUtils.lerp(la.sunIntensity, lb.sunIntensity, mix.u) - sun.intensity) * ease(3.7);
     // the sun travels with the player, so shadows exist all the way round the lap
     sun.position.set(player.pos.x + 45, player.y + 65, player.pos.z - 25);
     sun.target.position.set(player.pos.x, player.y, player.pos.z);
     sun.target.updateMatrixWorld();
-    camLook.current.lerp(look, idle ? 0.05 : 0.13);
+    camLook.current.lerp(look, ease(idle ? 3 : 8.4));
 
     shakeState.trauma = Math.max(0, shakeState.trauma - dt * 1.7);
     const s = shakeState.trauma * shakeState.trauma;
@@ -1982,7 +1998,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // in the HUD and the camera pull together at high speed
     const targetFov = 64 + speedKick * (9 + settings.motionBlur * 14) + s * 10 + (player.boostTimer > 0 ? 5 : 0);
     if (Math.abs(cam.fov - targetFov) > 0.05) {
-      cam.fov = THREE.MathUtils.lerp(cam.fov, targetFov, 0.12);
+      cam.fov = THREE.MathUtils.lerp(cam.fov, targetFov, ease(7.7));
       cam.updateProjectionMatrix();
     }
   }
