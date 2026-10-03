@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TRACKS, ZONES, TRACK_WIDTH, type TrackDef, type Branch } from "./data";
+import { TRACKS, ZONES, TRACK_WIDTH, type TrackDef, type Branch , setBiomeTrack, defaultBiomes } from "./data";
 
 // Single mutable curve instance shared by the whole game.
 // setActiveTrack() swaps its points in place before a race starts.
@@ -36,6 +36,9 @@ export function setActiveTrack(id: string) {
   // swap the shared ZONES array in place so every consumer sees the new zones
   ZONES.length = 0;
   for (const z of def.zones) ZONES.push({ ...z });
+  // a circuit with no scenery of its own inherits a four-stretch chain
+  if (!def.biomes || !def.biomes.length) def.biomes = defaultBiomes(def.theme, TRACKS.indexOf(def));
+  setBiomeTrack(def);
 }
 
 export function nearestT(pos: THREE.Vector3, hintT?: number): number {
@@ -182,34 +185,58 @@ function branchEnvelope(t: number, b: Branch) {
   return Math.sin(u * Math.PI);
 }
 
-/**
- * Drivable lateral bounds at t: forks widen symmetrically, branches peel off to one side.
- * With no branches it returns halfWidthAt(t) on both sides, so the main road is unchanged.
- */
-export function corridorBounds(t: number): { min: number; max: number; branch: number } {
-  const def = getActiveTrack();
-  const tt = norm(t);
-  const half = TRACK_WIDTH / 2;
-  let min = -half;
-  let max = half;
-  let branch = 0;
 
-  for (const f of def.forks) {
-    if (tt >= f[0] && tt <= f[1]) {
-      min = -(half + 7);
-      max = half + 7;
-    }
-  }
+/** Width of the side roads that peel off the main carriageway. */
+export const SIDE_HALF = TRACK_WIDTH / 2 - 1.1;
+
+export interface Lane {
+  /** lateral bounds relative to the racing line */
+  min: number;
+  max: number;
+  /** height of this lane's tarmac at t */
+  y: number;
+  kind: "main" | "side";
+  /** which side of the racing line this side road sits on */
+  side: 1 | -1 | 0;
+}
+
+/**
+ * Every drivable surface at t, left to right. The main carriageway plus one lane
+ * per side road, so a car knows what it is standing on: the old model widened a
+ * single corridor, which meant side roads were drivable but had no surface of
+ * their own (cars floated over them) and the verge between road and side road was
+ * drivable too.
+ */
+export function lanesAt(t: number): Lane[] {
+  const def = getActiveTrack();
+  const lanes: Lane[] = [];
+  const road = surfaceYAt(t);
+  const main = halfWidthAt(t);
+  lanes.push({ min: -main, max: main, y: road, kind: "main", side: 0 });
   for (const b of def.branches) {
     const env = branchEnvelope(t, b);
-    if (env > 0.001) {
-      branch = Math.max(branch, env);
-      const off = b.pull * env;
-      if (off > 0) max = Math.max(max, off + half + 1.5);
-      else min = Math.min(min, off - half - 1.5);
+    if (env <= 0.001) continue;
+    const centre = b.pull * env;
+    lanes.push({ min: centre - SIDE_HALF, max: centre + SIDE_HALF, y: road + (b.rise ?? 0) * env, kind: "side", side: centre >= 0 ? 1 : -1 });
+  }
+  lanes.sort((a, b) => a.min - b.min);
+  return lanes;
+}
+
+/** The lane a lateral offset belongs to, and how far outside it is when it does not. */
+export function laneAt(t: number, offset: number): { lane: Lane; inside: boolean; outBy: number } {
+  const lanes = lanesAt(t);
+  for (const l of lanes) if (offset >= l.min && offset <= l.max) return { lane: l, inside: true, outBy: 0 };
+  let best = lanes[0];
+  let bestD = Infinity;
+  for (const l of lanes) {
+    const d = offset < l.min ? l.min - offset : offset - l.max;
+    if (d < bestD) {
+      bestD = d;
+      best = l;
     }
   }
-  return { min, max, branch };
+  return { lane: best, inside: false, outBy: bestD };
 }
 
 /** Center of the alternate branch ribbon at t (null when not inside a branch). */
@@ -233,60 +260,42 @@ export function inFork(t: number) {
   return def.forks.some((f) => tt >= f[0] && tt <= f[1]);
 }
 
-export interface ShortcutGeo {
+export interface SideRoadGeo {
+  /** where it leaves the main carriageway and where it merges back */
   entry: THREE.Vector3;
   exit: THREE.Vector3;
-  heading: number;
-  entryHeading: number;
-  lift: number;
   t0: number;
   t1: number;
-  side: number;
-  /** centre line of the alternate route, hugging the terrain plus `lift` */
+  pull: number;
+  rise: number;
+  side: 1 | -1;
+  /** centre line of the side road, one sample every few metres */
   path: THREE.Vector3[];
 }
 
-/** Alternative paths: drive into the glowing gate and you fly an arc to the exit gate. */
-export function getShortcuts(): ShortcutGeo[] {
-  const def = getActiveTrack();
-  return def.shortcuts.map((s) => {
-    const mk = (t: number) => {
-      const c = trackPointAt(t);
-      const tan = trackTangentAt(t);
-      const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-      const p = c.clone().addScaledVector(n, s.side * (halfWidthAt(t) - 3.6));
-      return { p, h: Math.atan2(tan.x, tan.z) };
-    };
-    const a = mk(s.t0);
-    const b = mk(s.t1);
-    const span = ((s.t1 - s.t0) % 1 + 1) % 1;
-    // The alternate route is sampled straight off the circuit so it climbs and
-    // dives with the relief instead of cutting a chord through a hillside, and so
-    // the drawn ribbon matches exactly the line the warp follows.
+/**
+ * Side roads as real geometry. Unlike the old jump ribbons these are not arcs
+ * hung above the track: the centre line stays on the racing surface, only
+ * `rise` lifts it in the middle, so a car can simply drive onto them.
+ */
+export function getSideRoads(): SideRoadGeo[] {
+  return getActiveTrack().branches.map((b) => {
+    const span = ((b.t1 - b.t0) % 1 + 1) % 1;
     const path: THREE.Vector3[] = [];
-    const STEPS = 26;
+    const STEPS = Math.max(12, Math.round(span * 220));
     for (let i = 0; i <= STEPS; i++) {
       const e = i / STEPS;
-      const t = (s.t0 + span * e) % 1;
+      const t = (b.t0 + span * e) % 1;
+      const env = Math.sin(e * Math.PI);
       const c = trackPointAt(t);
       const tan = trackTangentAt(t);
       const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-      const off = s.side * (halfWidthAt(t) - 3.6);
-      const p = c.clone().addScaledVector(n, off);
-      p.y = surfaceYAt(t) + Math.sin(e * Math.PI) * s.lift;
+      const p = c.clone().addScaledVector(n, b.pull * env);
+      p.y = surfaceYAt(t) + (b.rise ?? 0) * env;
       path.push(p);
     }
-    return {
-      entry: a.p,
-      exit: b.p,
-      heading: b.h,
-      entryHeading: a.h,
-      lift: s.lift,
-      t0: s.t0,
-      t1: s.t1,
-      side: s.side,
-      path,
-    };
+    const side: 1 | -1 = b.pull >= 0 ? 1 : -1;
+    return { entry: path[0], exit: path[path.length - 1], t0: b.t0, t1: b.t1, pull: b.pull, rise: b.rise ?? 0, side, path };
   });
 }
 
@@ -330,3 +339,5 @@ export function portalTransform(pr: { tIn: number; side: number }, which: "in" |
   const p = c.clone().addScaledVector(n, side * (halfWidthAt(t) - 2.6));
   return { t, p, ground: surfaceYAt(t), heading: Math.atan2(tan.x, tan.z) };
 }
+
+/** Debug hook used by the harness to catch a car standing on nothing. */

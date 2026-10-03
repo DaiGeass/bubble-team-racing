@@ -12,23 +12,23 @@ in a native window.
 
 | Platform | File on the release | Size |
 |---|---|---|
-| Windows installer | `Bubble.Team.Racing_1.1.0_x64-setup.exe` (NSIS, English/Spanish selector) | ~2.3 MB |
-| Windows MSI | `Bubble.Team.Racing_1.1.0_x64_en-US.msi` or `_x64_es-ES.msi` (WiX) | ~3.3 MB |
-| Linux package | `Bubble.Team.Racing_1.1.0_amd64.deb` | ~3.3 MB |
-| Linux portable | `Bubble.Team.Racing_1.1.0_amd64.AppImage` | ~82 MB |
+| Windows installer | `Bubble.Team.Racing_1.1.1_x64-setup.exe` (NSIS, English/Spanish selector) | ~2.3 MB |
+| Windows MSI | `Bubble.Team.Racing_1.1.1_x64_en-US.msi` or `_x64_es-ES.msi` (WiX) | ~3.3 MB |
+| Linux package | `Bubble.Team.Racing_1.1.1_amd64.deb` | ~3.3 MB |
+| Linux portable | `Bubble.Team.Racing_1.1.1_amd64.AppImage` | ~82 MB |
 
 Grab them from the [Releases page](https://github.com/DaiGeass/bubble-team-racing/releases).
 The AppImage runs straight away:
 
 ```sh
-chmod +x Bubble.Team.Racing_1.1.0_amd64.AppImage
-./Bubble.Team.Racing_1.1.0_amd64.AppImage
+chmod +x Bubble.Team.Racing_1.1.1_amd64.AppImage
+./Bubble.Team.Racing_1.1.1_amd64.AppImage
 ```
 
 Or install the package:
 
 ```sh
-sudo apt install ./Bubble.Team.Racing_1.1.0_amd64.deb
+sudo apt install ./Bubble.Team.Racing_1.1.1_amd64.deb
 ```
 
 ## Run it in a browser
@@ -75,12 +75,17 @@ Options, with three control presets that install a full layout at once.
 
 ## What's in the game
 
-- **14 circuits** of roughly 2000 units, normalised so an AI lap lands between 60 and 90
+- **17 circuits** of roughly 2000 units, normalised so an AI lap lands between 60 and 90
   seconds, each with vertical relief, a palette that mutates every lap and a themed sky.
+  Three of them are committed circuits: one is submarine from the lights to the flag, one
+  is all aircraft and one is all water.
+- **A lap that changes place**: every circuit crosses three or four biomes, and the
+  ground, what grows on it, the haze and the light follow the stretch you are on.
 - **Real gaps**: a driveable ramp, a lip, a pit and a far wall, with the physics and the
   road mesh sharing one profile. Fall in and you get fished back to the far lip.
-- **Stacked routes**: eleven to fourteen shortcuts per lap, from low barriers to raised
-  skyways, plus two portals that throw you a short hop ahead.
+- **Real side roads**: four alternative routes per lap that leave the carriageway, run
+  alongside it and merge back in, each with its own deck, kerbs and barriers. They are
+  tarmac you drive on, not teleports. Two portals still throw you a short hop ahead.
 - **28 characters**, each with its own fusion turret signature: cadence, salvo size, fan
   angle and hit weight.
 - **24 chassis**, **7 + 7 + 7 water, air and sub craft** with real stats, and **6 finishes**

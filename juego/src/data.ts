@@ -558,7 +558,7 @@ export const MODES: Record<ModeId, GameMode> = {
 
 // ---------------------------------------------------------------------------
 // Tracks: 10 circuits. zones order is always [water, sky, sub?].
-// forks = two-lane sections, shortcuts = alternative jump-paths.
+// forks = two-lane sections, branches = real side roads that peel off and rejoin.
 // ---------------------------------------------------------------------------
 
 export interface Zone {
@@ -569,24 +569,16 @@ export interface Zone {
 
 export type ZoneKind = "water" | "sky" | "sub";
 
-export interface ShortcutDef {
-  t0: number;
-  t1: number;
-  side: 1 | -1;
-  /**
-   * How high the alternate route floats above the tarmac at its apex, in world
-   * units. Big values read as a sky bridge, small ones as a low banked ramp, so
-   * every circuit ends up with routes stacked at different heights instead of a
-   * single flat arcade hop.
-   */
-  lift: number;
-}
 
 /** A branch is an alternate ribbon that peels off the main road and rejoins it. */
 export interface Branch {
   t0: number;
   t1: number;
   pull: number; // lateral displacement at peak (+ = right of travel direction)
+  /** how much the side road climbs at its peak; it merges level with the main road */
+  rise?: number;
+  /** scenery flavour of this side road; defaults to the circuit's biome */
+  biome?: string;
 }
 
 /**
@@ -618,18 +610,60 @@ export interface PortalDef {
   cd: number;
 }
 
+/** Landscape flavour of a stretch of circuit. A lap changes scenery as it goes. */
+export type BiomeId =
+  | "meadow" | "forest" | "desert" | "snow" | "coast"
+  | "volcano" | "city" | "ruins" | "reef" | "cloud";
+
+export interface BiomeStyle {
+  name: string;
+  /** ground colour right beside the road */
+  ground: string;
+  /** ground colour out at the horizon */
+  far: string;
+  /** what grows here */
+  prop: "rock" | "tuft" | "crystal" | "tree" | "pine" | "cactus" | "coral" | "tower";
+  propColor: string;
+  /** 0..1, how busy the verge is */
+  density: number;
+  /** fog and horizon tint for this stretch */
+  fog: string;
+}
+
+export const BIOMES: Record<BiomeId, BiomeStyle> = {
+  meadow: { name: "Pradera", ground: "#6fbf4a", far: "#3f8f34", prop: "tuft", propColor: "#8fd85f", density: 0.7, fog: "#bfe6a8" },
+  forest: { name: "Bosque", ground: "#3d7a34", far: "#20491f", prop: "tree", propColor: "#2f6b2a", density: 1, fog: "#9ec98d" },
+  desert: { name: "Desierto", ground: "#dcb46a", far: "#b98b45", prop: "cactus", propColor: "#4f8f4a", density: 0.5, fog: "#f0d9a6" },
+  snow: { name: "Nieve", ground: "#e8f2f8", far: "#b9cede", prop: "pine", propColor: "#2f6b52", density: 0.6, fog: "#dcecf7" },
+  coast: { name: "Costa", ground: "#e8d7a8", far: "#c9b384", prop: "rock", propColor: "#b9a37c", density: 0.6, fog: "#cfe9f2" },
+  volcano: { name: "Volcán", ground: "#4a3b38", far: "#241b1a", prop: "rock", propColor: "#6b4a42", density: 0.8, fog: "#8a5a48" },
+  city: { name: "Ciudad", ground: "#8e97a8", far: "#5c6474", prop: "tower", propColor: "#7b8698", density: 0.9, fog: "#b9c6d8" },
+  ruins: { name: "Ruinas", ground: "#a99b86", far: "#7b7160", prop: "crystal", propColor: "#9ad6d0", density: 0.7, fog: "#c9bda6" },
+  reef: { name: "Arrecife", ground: "#2f7f96", far: "#14566b", prop: "coral", propColor: "#ff8fb1", density: 1, fog: "#4fb3c9" },
+  cloud: { name: "Nubes", ground: "#dfe9f7", far: "#b9c9e6", prop: "crystal", propColor: "#ffffff", density: 0.4, fog: "#e6eefc" },
+};
+
+export interface BiomeDef {
+  id: BiomeId;
+  t0: number;
+  t1: number;
+}
+
 export interface TrackDef {
   id: string;
   points: [number, number, number][];
   zones: Zone[];
   forks: [number, number][];
-  shortcuts: ShortcutDef[];
   branches: Branch[];
   hazards: number;
   difficulty: 1 | 2 | 3;
   relief?: ReliefDef;
   /** aesthetic this circuit is built around; the garage pick can still override it */
   theme: ThemeId;
+  /** stretches of landscape; a lap changes place as it goes */
+  biomes?: BiomeDef[];
+  /** nothing under the circuit: a sky or open-water circuit with no terrain ribbon */
+  noGround?: boolean;
   portals?: PortalDef[];
   traps?: TrapDef[];
   gaps?: GapDef[];
@@ -685,6 +719,65 @@ function radial(
 
 const K = 1.75; // classic circuits are stretched to be much longer
 
+/** Default scenery chain per aesthetic: every lap crosses four different places. */
+const THEME_BIOMES: Record<ThemeId, BiomeId[]> = {
+  frutiger: ["meadow", "forest", "coast", "meadow"],
+  eco: ["forest", "meadow", "snow", "forest"],
+  aero: ["cloud", "city", "meadow", "cloud"],
+  techno: ["city", "ruins", "volcano", "city"],
+  aqua: ["coast", "reef", "meadow", "coast"],
+  sunset: ["desert", "coast", "meadow", "desert"],
+  y2k: ["city", "meadow", "desert", "city"],
+  liquid: ["coast", "reef", "cloud", "coast"],
+  win98: ["city", "meadow", "city", "desert"],
+  vapor: ["city", "ruins", "cloud", "city"],
+  dreamcore: ["cloud", "meadow", "ruins", "cloud"],
+  cyberpunk: ["city", "volcano", "ruins", "city"],
+  noir: ["city", "ruins", "snow", "city"],
+};
+
+/** Biome of the stretch at t, and how far we are into the next one. */
+export function biomeMix(t: number): { a: BiomeStyle; b: BiomeStyle; u: number } {
+  const trk = getActiveTrackForBiomes();
+  const tt = ((t % 1) + 1) % 1;
+  const list = trk.biomes ?? [];
+  if (!list.length) {
+    const one = BIOMES.meadow;
+    return { a: one, b: one, u: 0 };
+  }
+  for (let i = 0; i < list.length; i++) {
+    const z = list[i];
+    if (tt < z.t0 || tt > z.t1) continue;
+    const next = list[(i + 1) % list.length];
+    const span = Math.max(1e-4, z.t1 - z.t0);
+    // the last 12% of a stretch is the hand-over to the next one
+    const u = tt > z.t1 - span * 0.12 ? Math.min(1, (tt - (z.t1 - span * 0.12)) / (span * 0.12)) : 0;
+    return { a: BIOMES[z.id], b: BIOMES[next.id], u };
+  }
+  return { a: BIOMES[list[0].id], b: BIOMES[list[0].id], u: 0 };
+}
+
+let biomeTrack: TrackDef | null = null;
+/** biomeMix needs the live track; the scene sets it when a circuit loads */
+export function setBiomeTrack(trk: TrackDef) {
+  biomeTrack = trk;
+}
+function getActiveTrackForBiomes(): TrackDef {
+  if (biomeTrack && !biomeTrack.biomes) biomeTrack.biomes = defaultBiomes(biomeTrack.theme);
+  return biomeTrack ?? { biomes: [], theme: "eco" } as unknown as TrackDef;
+}
+
+/** Four stretches of scenery from the circuit's aesthetic, rotated per circuit. */
+export function defaultBiomes(theme: ThemeId, phase = 0): BiomeDef[] {
+  const chain = THEME_BIOMES[theme] ?? THEME_BIOMES.eco;
+  const n = chain.length;
+  return chain.map((_, i) => {
+    const k = (i + phase) % n;
+    const t0 = (k / n + phase * 0.07) % 1;
+    return { id: chain[k], t0, t1: (t0 + 1 / n) % 1 || 1 };
+  }).sort((a, b) => a.t0 - b.t0);
+}
+
 export const TRACKS: TrackDef[] = [
   {
     id: "laguna", difficulty: 1, hazards: 3, theme: "aqua",
@@ -695,8 +788,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 14, waves: [[1, 0.7, 0.6], [3, 0.35, 2.1]] }),
     zones: [{ t0: 0.13, t1: 0.27, type: "water" }, { t0: 0.55, t1: 0.68, type: "sky" }],
     forks: [[0.33, 0.44]],
-    shortcuts: [{ t0: 0.72, t1: 0.82, side: 1, lift: 12 }],
-    branches: [{ t0: 0.72, t1: 0.93, pull: -26 }],
+    branches: [{ t0: 0.72, t1: 0.82, pull: 30, rise: 5 }, { t0: 0.72, t1: 0.93, pull: -26 }],
   },
   {
     id: "vortice", difficulty: 2, hazards: 5, theme: "aero",
@@ -708,8 +800,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 20, waves: [[2, 0.75, 1.1], [5, 0.3, 0.2]] }),
     zones: [{ t0: 0.3, t1: 0.42, type: "water" }, { t0: 0.66, t1: 0.8, type: "sky" }, { t0: 0.86, t1: 0.95, type: "sub" }],
     forks: [[0.06, 0.18], [0.46, 0.56]],
-    shortcuts: [{ t0: 0.2, t1: 0.27, side: -1, lift: 9 }, { t0: 0.57, t1: 0.64, side: 1, lift: 12 }],
-    branches: [{ t0: 0.1, t1: 0.26, pull: 30 }, { t0: 0.84, t1: 0.98, pull: -28 }],
+    branches: [{ t0: 0.2, t1: 0.27, pull: -28, rise: 3 }, { t0: 0.57, t1: 0.64, pull: 30, rise: 6 }, { t0: 0.1, t1: 0.26, pull: 30}, { t0: 0.84, t1: 0.98, pull: -28 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
   },
   {
@@ -723,8 +814,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 26, waves: [[1, 0.8, 2.4], [4, 0.35, 1.4], [7, 0.15, 0.7]] }),
     zones: [{ t0: 0.36, t1: 0.47, type: "water" }, { t0: 0.76, t1: 0.9, type: "sky" }, { t0: 0.26, t1: 0.33, type: "sub" }],
     forks: [[0.1, 0.22], [0.52, 0.64]],
-    shortcuts: [{ t0: 0.66, t1: 0.74, side: -1, lift: 9 }, { t0: 0.56, t1: 0.62, side: 1, lift: 12 }],
-    branches: [{ t0: 0.02, t1: 0.16, pull: -32 }, { t0: 0.56, t1: 0.72, pull: 30 }],
+    branches: [{ t0: 0.66, t1: 0.74, pull: -28, rise: 4 }, { t0: 0.56, t1: 0.62, pull: 28, rise: 7 }, { t0: 0.02, t1: 0.16, pull: -32}, { t0: 0.56, t1: 0.72, pull: 30 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
   },
   {
@@ -737,8 +827,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 18, waves: [[3, 0.7, 0.3], [6, 0.3, 2.6]] }),
     zones: [{ t0: 0.18, t1: 0.3, type: "water" }, { t0: 0.48, t1: 0.72, type: "sky" }],
     forks: [[0.78, 0.88]],
-    shortcuts: [{ t0: 0.34, t1: 0.44, side: 1, lift: 12 }],
-    branches: [{ t0: 0.34, t1: 0.46, pull: 28 }],
+    branches: [{ t0: 0.34, t1: 0.44, pull: 30, rise: 4 }, { t0: 0.34, t1: 0.46, pull: 28 }],
   },
   {
     id: "atlantis", difficulty: 3, hazards: 8, theme: "aqua",
@@ -751,8 +840,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 22, waves: [[1, 0.7, 1.9], [3, 0.4, 0.5]] }),
     zones: [{ t0: 0.14, t1: 0.22, type: "water" }, { t0: 0.58, t1: 0.74, type: "sky" }, { t0: 0.3, t1: 0.38, type: "sub" }],
     forks: [[0.04, 0.12], [0.44, 0.54], [0.84, 0.94]],
-    shortcuts: [{ t0: 0.76, t1: 0.83, side: -1, lift: 9 }, { t0: 0.39, t1: 0.43, side: 1, lift: 12 }],
-    branches: [{ t0: 0.08, t1: 0.24, pull: 34 }, { t0: 0.44, t1: 0.56, pull: -30 }, { t0: 0.86, t1: 0.99, pull: 26 }],
+    branches: [{ t0: 0.76, t1: 0.83, pull: -27, rise: 3 }, { t0: 0.39, t1: 0.43, pull: 26, rise: 8 }, { t0: 0.08, t1: 0.24, pull: 34}, { t0: 0.44, t1: 0.56, pull: -30}, { t0: 0.86, t1: 0.99, pull: 26 }],
   },
   {
     id: "aether", difficulty: 3, hazards: 6, theme: "vapor",
@@ -765,8 +853,7 @@ export const TRACKS: TrackDef[] = [
     ], K, { amp: 30, waves: [[2, 0.8, 0.8], [5, 0.35, 2.2]] }),
     zones: [{ t0: 0.28, t1: 0.38, type: "water" }, { t0: 0.55, t1: 0.85, type: "sky" }],
     forks: [[0.08, 0.2], [0.42, 0.5], [0.88, 0.98]],
-    shortcuts: [{ t0: 0.21, t1: 0.27, side: 1, lift: 12 }],
-    branches: [{ t0: 0.04, t1: 0.2, pull: -34 }, { t0: 0.6, t1: 0.76, pull: 32 }],
+    branches: [{ t0: 0.21, t1: 0.27, pull: 29, rise: 4 }, { t0: 0.04, t1: 0.2, pull: -34}, { t0: 0.6, t1: 0.76, pull: 32 }],
   },
   {
     id: "neon", difficulty: 3, hazards: 7, theme: "techno",
@@ -774,8 +861,7 @@ export const TRACKS: TrackDef[] = [
     points: radial(30, 148, [[2, 0.14, 0.3], [3, 0.12, 1.2], [5, 0.09, 2.1]], 1.15, 0.9, { amp: 16, waves: [[4, 0.75, 1.7], [8, 0.25, 0.4]] }),
     zones: [{ t0: 0.22, t1: 0.3, type: "water" }, { t0: 0.62, t1: 0.78, type: "sky" }, { t0: 0.4, t1: 0.48, type: "sub" }],
     forks: [[0.08, 0.16], [0.84, 0.94]],
-    shortcuts: [{ t0: 0.32, t1: 0.38, side: 1, lift: 12 }, { t0: 0.52, t1: 0.6, side: -1, lift: 9 }],
-    branches: [{ t0: 0.06, t1: 0.2, pull: 36 }, { t0: 0.34, t1: 0.44, pull: -30 }, { t0: 0.74, t1: 0.9, pull: 32 }],
+    branches: [{ t0: 0.32, t1: 0.38, pull: 30, rise: 5 }, { t0: 0.52, t1: 0.6, pull: -28, rise: 3 }, { t0: 0.06, t1: 0.2, pull: 36}, { t0: 0.34, t1: 0.44, pull: -30}, { t0: 0.74, t1: 0.9, pull: 32 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
   },
   {
@@ -784,8 +870,7 @@ export const TRACKS: TrackDef[] = [
     points: radial(28, 131, [[3, 0.16, 0.8], [4, 0.1, 2.4], [6, 0.06, 0.4]], 1.0, 1.1, { amp: 13, waves: [[3, 0.7, 2.8], [6, 0.3, 1.1]] }),
     zones: [{ t0: 0.1, t1: 0.2, type: "water" }, { t0: 0.68, t1: 0.8, type: "sky" }, { t0: 0.3, t1: 0.42, type: "sub" }],
     forks: [[0.5, 0.62]],
-    shortcuts: [{ t0: 0.22, t1: 0.28, side: -1, lift: 9 }, { t0: 0.84, t1: 0.92, side: 1, lift: 12 }],
-    branches: [{ t0: 0.02, t1: 0.16, pull: -38 }, { t0: 0.32, t1: 0.46, pull: 34 }, { t0: 0.56, t1: 0.7, pull: -32 }, { t0: 0.82, t1: 0.97, pull: 30 }],
+    branches: [{ t0: 0.22, t1: 0.28, pull: -29, rise: 4 }, { t0: 0.84, t1: 0.92, pull: 28, rise: 5 }, { t0: 0.02, t1: 0.16, pull: -38}, { t0: 0.32, t1: 0.46, pull: 34}, { t0: 0.56, t1: 0.7, pull: -32}, { t0: 0.82, t1: 0.97, pull: 30 }],
   },
   {
     id: "glacier", difficulty: 3, hazards: 6, theme: "aqua",
@@ -793,8 +878,7 @@ export const TRACKS: TrackDef[] = [
     points: radial(34, 160, [[2, 0.2, 2], [4, 0.12, 0.6], [7, 0.07, 1.4]], 1.2, 0.95, { amp: 24, waves: [[1, 0.75, 0.2], [3, 0.35, 2.9]] }),
     zones: [{ t0: 0.36, t1: 0.44, type: "water" }, { t0: 0.6, t1: 0.72, type: "sky" }],
     forks: [[0.12, 0.24], [0.78, 0.9]],
-    shortcuts: [{ t0: 0.26, t1: 0.34, side: 1, lift: 12 }, { t0: 0.48, t1: 0.56, side: -1, lift: 9 }],
-    branches: [{ t0: 0.14, t1: 0.3, pull: -28 }, { t0: 0.66, t1: 0.8, pull: 30 }],
+    branches: [{ t0: 0.26, t1: 0.34, pull: 30, rise: 4 }, { t0: 0.48, t1: 0.56, pull: -28, rise: 6 }, { t0: 0.14, t1: 0.3, pull: -28}, { t0: 0.66, t1: 0.8, pull: 30 }],
   },
   {
     id: "retro", difficulty: 2, hazards: 6, theme: "win98",
@@ -802,8 +886,7 @@ export const TRACKS: TrackDef[] = [
     points: radial(32, 140, [[4, 0.2, 0], [8, 0.06, 0.5]], 1, 1, { amp: 12, waves: [[2, 0.7, 2.2], [5, 0.3, 0.9]] }),
     zones: [{ t0: 0.2, t1: 0.28, type: "water" }, { t0: 0.58, t1: 0.7, type: "sky" }, { t0: 0.74, t1: 0.82, type: "sub" }],
     forks: [[0.06, 0.14], [0.4, 0.5]],
-    shortcuts: [{ t0: 0.3, t1: 0.37, side: 1, lift: 12 }, { t0: 0.86, t1: 0.93, side: -1, lift: 9 }],
-    branches: [{ t0: 0.24, t1: 0.38, pull: 26 }, { t0: 0.58, t1: 0.74, pull: -26 }],
+    branches: [{ t0: 0.3, t1: 0.37, pull: 29, rise: 5 }, { t0: 0.86, t1: 0.93, pull: -27, rise: 4 }, { t0: 0.24, t1: 0.38, pull: 26}, { t0: 0.58, t1: 0.74, pull: -26 }],
   },
 ];
 
@@ -814,8 +897,7 @@ TRACKS.push(
     points: radial(36, 165, [[2, 0.18, 1.1], [3, 0.13, 2.6], [5, 0.08, 0.2], [8, 0.05, 1.8]], 1.1, 1.0, { amp: 28, waves: [[1, 0.8, 1.5], [4, 0.4, 0.3], [7, 0.2, 2.5]] }),
     zones: [{ t0: 0.16, t1: 0.24, type: "water" }, { t0: 0.52, t1: 0.66, type: "sky" }, { t0: 0.78, t1: 0.88, type: "sub" }],
     forks: [[0.04, 0.13], [0.3, 0.42], [0.68, 0.76]],
-    shortcuts: [],
-    branches: [{ t0: 0.08, t1: 0.24, pull: 32 }, { t0: 0.44, t1: 0.58, pull: -30 }, { t0: 0.78, t1: 0.94, pull: 28 }],
+    branches: [{ t0: 0.08, t1: 0.24, pull: 32}, { t0: 0.44, t1: 0.58, pull: -30}, { t0: 0.78, t1: 0.94, pull: 28 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
   },
   {
@@ -824,8 +906,7 @@ TRACKS.push(
     points: radial(30, 150, [[3, 0.17, 1.9], [6, 0.09, 0.7]], 1.25, 0.88, { amp: 32, waves: [[2, 0.8, 2.6], [5, 0.35, 1.2]] }),
     zones: [{ t0: 0.26, t1: 0.34, type: "water" }, { t0: 0.5, t1: 0.74, type: "sky" }],
     forks: [[0.08, 0.2], [0.82, 0.94]],
-    shortcuts: [],
-    branches: [{ t0: 0.2, t1: 0.34, pull: -24 }, { t0: 0.62, t1: 0.78, pull: 26 }],
+    branches: [{ t0: 0.2, t1: 0.34, pull: -24}, { t0: 0.62, t1: 0.78, pull: 26 }],
   },
   {
     id: "abyss", difficulty: 3, hazards: 7, theme: "techno",
@@ -833,8 +914,7 @@ TRACKS.push(
     points: radial(34, 158, [[2, 0.22, 0.4], [5, 0.1, 2.2], [7, 0.06, 1.1]], 0.95, 1.2, { amp: 20, waves: [[3, 0.7, 0.9], [6, 0.3, 2.2]] }),
     zones: [{ t0: 0.12, t1: 0.3, type: "sub" }, { t0: 0.44, t1: 0.52, type: "water" }, { t0: 0.66, t1: 0.78, type: "sky" }],
     forks: [[0.34, 0.42], [0.86, 0.96]],
-    shortcuts: [],
-    branches: [{ t0: 0.06, t1: 0.22, pull: 34 }, { t0: 0.4, t1: 0.56, pull: -34 }, { t0: 0.72, t1: 0.88, pull: 30 }],
+    branches: [{ t0: 0.06, t1: 0.22, pull: 34}, { t0: 0.4, t1: 0.56, pull: -34}, { t0: 0.72, t1: 0.88, pull: 30 }],
     traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
   },
   {
@@ -843,13 +923,43 @@ TRACKS.push(
     points: radial(28, 135, [[4, 0.15, 2.8], [2, 0.1, 0.9]], 1.05, 1.05, { amp: 15, waves: [[1, 0.7, 2.9], [3, 0.3, 1.4]] }),
     zones: [{ t0: 0.2, t1: 0.3, type: "water" }, { t0: 0.6, t1: 0.72, type: "sky" }],
     forks: [[0.42, 0.52]],
-    shortcuts: [],
-    branches: [{ t0: 0.28, t1: 0.44, pull: 24 }, { t0: 0.66, t1: 0.8, pull: -24 }],
+    branches: [{ t0: 0.28, t1: 0.44, pull: 24}, { t0: 0.66, t1: 0.8, pull: -24 }],
+  },
+
+  // Three circuits that are one thing all the way round. The rest mix land,
+  // water and sky; these are committed, so a submarine circuit is a submarine
+  // circuit from the lights to the flag and the scenery follows the vehicle.
+  {
+    id: "abismo", difficulty: 3, hazards: 4, theme: "aqua", noGround: true,
+    relief: { amp: 16, waves: [[1, 0.7, 1.2], [3, 0.4, 2.4]] },
+    points: radial(32, 152, [[2, 0.2, 0.6], [3, 0.12, 2.2], [5, 0.07, 1.1]], 1.12, 0.92, { amp: 16, waves: [[1, 0.7, 1.2], [3, 0.4, 2.4]] }),
+    zones: [{ t0: 0, t1: 1, type: "sub" }],
+    biomes: [{ id: "reef", t0: 0, t1: 0.3 }, { id: "ruins", t0: 0.3, t1: 0.58 }, { id: "reef", t0: 0.58, t1: 0.78 }, { id: "ruins", t0: 0.78, t1: 1 }],
+    forks: [[0.12, 0.24], [0.66, 0.78]],
+    branches: [{ t0: 0.28, t1: 0.44, pull: 30, rise: 3 }, { t0: 0.6, t1: 0.76, pull: -30, rise: 4 }]
+  },
+  {
+    id: "nubes", difficulty: 2, hazards: 3, theme: "aero", noGround: true,
+    relief: { amp: 26, waves: [[2, 0.7, 0.4], [4, 0.35, 1.9]] },
+    points: radial(30, 158, [[2, 0.19, 1.7], [3, 0.11, 0.6], [6, 0.06, 2.7]], 1.2, 0.9, { amp: 26, waves: [[2, 0.7, 0.4], [4, 0.35, 1.9]] }),
+    zones: [{ t0: 0, t1: 1, type: "sky" }],
+    biomes: [{ id: "cloud", t0: 0, t1: 0.34 }, { id: "ruins", t0: 0.34, t1: 0.66 }, { id: "cloud", t0: 0.66, t1: 1 }],
+    forks: [[0.18, 0.3], [0.62, 0.74]],
+    branches: [{ t0: 0.32, t1: 0.5, pull: 28, rise: 6 }, { t0: 0.7, t1: 0.86, pull: -28, rise: 5 }]
+  },
+  {
+    id: "oceano", difficulty: 2, hazards: 5, theme: "aqua", noGround: true,
+    relief: { amp: 10, waves: [[1, 0.8, 2.1], [2, 0.4, 0.5]] },
+    points: radial(34, 148, [[3, 0.16, 1.2], [4, 0.1, 2.8], [7, 0.05, 0.3]], 1.08, 1.02, { amp: 10, waves: [[1, 0.8, 2.1], [2, 0.4, 0.5]] }),
+    zones: [{ t0: 0, t1: 1, type: "water" }],
+    biomes: [{ id: "coast", t0: 0, t1: 0.26 }, { id: "reef", t0: 0.26, t1: 0.54 }, { id: "coast", t0: 0.54, t1: 0.8 }, { id: "reef", t0: 0.8, t1: 1 }],
+    forks: [[0.14, 0.26], [0.6, 0.72]],
+    branches: [{ t0: 0.3, t1: 0.48, pull: 28, rise: 2 }, { t0: 0.74, t1: 0.9, pull: -28, rise: 3 }]
   }
 );
 
-// Every circuit gets many alternative routes so the finish can be reached in
-// different ways: explicit gates plus auto-generated ones, dodging the zones.
+// Every circuit gets alternative routes so the finish can be reached in
+// different ways: hand-written side roads plus generated ones, dodging the zones.
 // Every circuit is normalised to the same lap length. Lap time is basically
 // length / average speed, so without this the short oval finished a lap in 20 s
 // while the long one took 45. Everything else (zones, shortcuts, portals, gaps,
@@ -887,13 +997,13 @@ for (const trk of TRACKS) {
   const hit = (a: number, b: number, c: number, d: number, pad: number) =>
     !(b < c - pad || a > d + pad);
   const overGap = (a: number, b: number, pad = 0.008) => trk.gaps!.some((g) => hit(a, b, g.t0, g.t1, pad));
-  const used = (a: number, b: number, pad = 0.008) => trk.shortcuts.some((s) => hit(a, b, s.t0, s.t1, pad));
+  const used = (a: number, b: number, pad = 0.008) => trk.branches.some((br) => hit(a, b, br.t0, br.t1, pad));
 
   // Two real holes per circuit, kept far apart so no lap has all its drama in
   // one corner. The span is short enough to leave room for the route network and
   // long enough to be a real jump.
   const GAP_SPAN = 0.08;
-  for (let i = 0; i < 120 && trk.gaps!.length < 2; i++) {
+  for (let i = 0; i < 120 && !trk.noGround && trk.gaps!.length < 2; i++) {
     const t0 = (i * 0.217 + 0.12 + phase * 0.031) % 1;
     const t1 = t0 + GAP_SPAN;
     if (t1 > 1) continue;
@@ -904,26 +1014,43 @@ for (const trk of TRACKS) {
     trk.gaps!.push({ t0, t1, ramp: 1.7 + (i % 3) * 0.25, pit: 6.5 + (i % 2) * 2 });
   }
 
-  // The route network: up to twelve stacked warps per lap cycling low banked
-  // ramps, mid skyways and high bridges. Each one is a teleport that follows the
-  // drawn ribbon, so a short span is plenty. Slots are evenly spread around the
-  // lap and only nudged when a hole or an earlier warp is in the way.
-  const want = 12;
-  const LIFTS = [5, 13, 8, 18, 6, 15, 4, 11, 20, 7, 16, 9];
-  const SPAN = 0.034;
-  const SLOT = 0.0793; // 12 evenly spaced slots, gap between the ribbons
+  // The route network: real side roads, four per lap, alternating sides. They
+  // leave the carriageway, run alongside it and merge back in, so a lap can be
+  // driven four different ways without touching a single teleport.
+  const want = 4;
+  const PULLS = [30, -28, 26, -30];
+  const RISES = [4, 6, 3, 5];
+  const SPAN = 0.075;
+  const SLOT = 0.21;
   for (let k = 0; k < want; k++) {
     let placed = false;
     for (let nudge = 0; nudge < 24 && !placed; nudge++) {
-      const t0 = (k * SLOT + 0.031 + phase * 0.013 + nudge * 0.008) % 1;
+      const t0 = (k * SLOT + 0.055 + phase * 0.017 + nudge * 0.011) % (1 - SPAN);
       const t1 = t0 + SPAN;
-      if (t1 > 1) continue;
       if (overGap(t0, t1) || used(t0, t1)) continue;
-      trk.shortcuts.push({ t0, t1, side: k % 2 === 0 ? 1 : -1, lift: LIFTS[k % LIFTS.length] });
+      trk.branches.push({ t0, t1, pull: PULLS[(k + phase) % PULLS.length], rise: RISES[k % RISES.length] });
       placed = true;
     }
   }
-  trk.shortcuts.sort((a, b) => a.t0 - b.t0);
+  // Two side roads on the same side of the same stretch would fight over the same
+  // tarmac: their decks would overlap and the physics would offer two surfaces to
+  // stand on. Keep the longer one, drop the shorter.
+  for (let pass = 0; pass < 4; pass++) {
+    const drop = new Set<Branch>();
+    for (let i = 0; i < trk.branches.length; i++) {
+      for (let j = i + 1; j < trk.branches.length; j++) {
+        const a = trk.branches[i];
+        const b = trk.branches[j];
+        if (Math.sign(a.pull) !== Math.sign(b.pull)) continue;
+        if (Math.abs(Math.abs(a.pull) - Math.abs(b.pull)) >= 17) continue;
+        if (Math.min(a.t1, b.t1) - Math.max(a.t0, b.t0) <= 0) continue;
+        drop.add(a.t1 - a.t0 < b.t1 - b.t0 ? a : b);
+      }
+    }
+    if (!drop.size) break;
+    trk.branches = trk.branches.filter((b) => !drop.has(b));
+  }
+  trk.branches.sort((a, b) => a.t0 - b.t0);
 
   // Portals last: they only need a couple of metres at the barrier, so they can
   // always find a home. They throw you FORWARD by a short hop; a portal that
@@ -1051,7 +1178,7 @@ export function zoneProgress(t: number, z: Zone) {
 
 // Live snapshot consumed by the minimap (written by the sim each frame).
 export const raceSnapshot: {
-  racers: { x: number; y: number; z: number; color: string; isPlayer: boolean; mode: VehicleMode }[];
+  racers: { x: number; y: number; z: number; color: string; isPlayer: boolean; mode: VehicleMode; t: number }[];
   camAngle: number;
   theme: ThemeDef;
 } = { racers: [], camAngle: 0, theme: THEMES.frutiger };

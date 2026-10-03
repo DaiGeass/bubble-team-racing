@@ -1,8 +1,9 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { trackCurve, halfWidthAt, getActiveTrack, getShortcuts, nearestT, trackPointAt, trackTangentAt, surfaceYAt, trapTransform, portalTransform, gapOffsetAt } from "../trackCurve";
-import { TRACK_WIDTH, ZONES, SKY_ALTITUDE, hazardState, zoneAt, zoneOfKind, type ThemeDef, type Zone, type ZoneKind } from "../data";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { trackCurve, halfWidthAt, getActiveTrack, getSideRoads, SIDE_HALF, lanesAt, nearestT, trackPointAt, trackTangentAt, surfaceYAt, trapTransform, portalTransform, gapOffsetAt } from "../trackCurve";
+import { TRACK_WIDTH, ZONES, SKY_ALTITUDE, hazardState, zoneAt, zoneOfKind, raceSnapshot, biomeMix, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
 const SEGMENTS = 760;
 
@@ -462,6 +463,51 @@ function groundDrop(d: number, t: number) {
   return -1.2 - Math.min(17, d * 0.085) + wobble * Math.min(1, d / 26);
 }
 
+/**
+ * Sky and fog follow the biome of the stretch the player is in, tinted towards the
+ * circuit's aesthetic so the identity of the track still reads. Driving from a
+ * snowy stretch into a reef changes the light without changing the game's mood.
+ */
+function BiomeSky({ theme }: { theme: ThemeDef }) {
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  const dome = useRef<THREE.Mesh>(null);
+  const skyA = useMemo(() => new THREE.Color(theme.skyTop), [theme.skyTop]);
+  const skyB = useMemo(() => new THREE.Color(theme.skyBottom), [theme.skyBottom]);
+  const cur = useMemo(() => new THREE.Color(theme.fog), [theme.fog]);
+  const target = useMemo(() => new THREE.Color(), []);
+
+  useFrame((state, dt) => {
+    const t = raceSnapshot.racers[0]?.t ?? 0;
+    const { a, b, u } = biomeMix(t);
+    // biome haze over the circuit palette: recognisable, but the place changes
+    const tint = new THREE.Color(a.fog).lerp(new THREE.Color(b.fog), u);
+    target.copy(skyA).lerp(skyB, 0.45).lerp(tint, 0.55);
+    const k = Math.min(1, dt * 1.6);
+    cur.lerp(target, k);
+    if (mat.current) mat.current.color.copy(cur);
+    const fog = state.scene.fog as THREE.Fog | null;
+    if (fog) fog.color.lerp(cur, k);
+    // the dome rides with the camera so it never clips
+    if (dome.current) dome.current.position.copy(state.camera.position);
+  });
+
+  return (
+    <mesh ref={dome} renderOrder={-1} frustumCulled={false}>
+      <sphereGeometry args={[2600, 24, 16]} />
+      <meshBasicMaterial ref={mat} color={theme.fog} side={THREE.BackSide} depthWrite={false} toneMapped={false} />
+    </mesh>
+  );
+}
+
+/** Biome colour at t, blended across the hand-over between two stretches. */
+function biomeColourAt(t: number): { near: string; far: string } {
+  const { a, b, u } = biomeMix(t);
+  return {
+    near: new THREE.Color(a.ground).lerp(new THREE.Color(b.ground), u).getStyle(),
+    far: new THREE.Color(a.far).lerp(new THREE.Color(b.far), u).getStyle(),
+  };
+}
+
 function buildGround() {
   const STEPS = 420; // samples around the lap
   // distance out from the road edge, both sides
@@ -482,6 +528,7 @@ function buildGround() {
     trackCurve.getTangentAt(t, tan);
     nrm.set(-tan.z, 0, tan.x).normalize();
     const { reach, edge } = groundReach(t);
+    const bio = biomeColourAt(t);
 
     for (const side of [1, -1]) {
       const rowStart = ground.length / 3;
@@ -491,10 +538,14 @@ function buildGround() {
         const y = c.y + groundDrop(lat - edge, t);
         ground.push(pos.x, y, pos.z);
         const shade = Math.min(1, (lat - edge) / (reach - edge || 1));
-        // verge near the road, darker as it runs away
+        // verge near the road is lighter, and the colour itself belongs to the
+        // biome of this stretch, so the ground changes as the circuit goes on
         const near = 1 - Math.min(1, (lat - edge) / 16);
-        const v = 1 + near * 0.22 - shade * 0.34;
-        cols.push(v, v * (0.99 - near * 0.02), v * (0.96 + near * 0.06));
+        const near2 = new THREE.Color(bio.near);
+        const far2 = new THREE.Color(bio.far);
+        const c2 = near2.clone().lerp(far2, shade);
+        c2.multiplyScalar(1 + near * 0.16);
+        cols.push(c2.r, c2.g, c2.b);
       }
       // cliff from the road edge down to the ground band
       const sRow = skirt.length / 3;
@@ -818,7 +869,7 @@ function zoneRibbon(zone: Zone, halfWidth: number, y: number, pad: number) {
     const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
     const l = c.clone().addScaledVector(n, halfWidth);
     const r = c.clone().addScaledVector(n, -halfWidth);
-    positions.push(l.x, y, l.z, r.x, y, r.z);
+    positions.push(l.x, c.y + y, l.z, r.x, c.y + y, r.z);
   }
   for (let i = 0; i < N; i++) {
     const a = i * 2;
@@ -842,11 +893,11 @@ function SubZone({ theme }: { theme: ThemeDef }) {
     for (let i = 0; i <= N; i++) {
       const t = zone.t0 + ((zone.t1 - zone.t0) * i) / N;
       const p = trackCurve.getPointAt(t);
-      pts.push(new THREE.Vector3(p.x, 2.4, p.z));
+      pts.push(new THREE.Vector3(p.x, p.y + 3.2, p.z));
     }
     return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 90, 8.4, 20, false);
   }, [zone]);
-  const seabed = useMemo(() => (zone ? zoneRibbon(zone, TRACK_WIDTH / 2 + 3, 0.0, 0.0) : null), [zone]);
+  const seabed = useMemo(() => (zone ? zoneRibbon(zone, TRACK_WIDTH / 2 + 3, -9, 0.0) : null), [zone]);
   const arches = useMemo(() => {
     if (!zone) return [];
     const out: { pos: THREE.Vector3; angle: number; i: number }[] = [];
@@ -855,7 +906,7 @@ function SubZone({ theme }: { theme: ThemeDef }) {
       const t = zone.t0 + ((i + 0.5) / n) * (zone.t1 - zone.t0);
       const p = trackCurve.getPointAt(t);
       const tan = trackCurve.getTangentAt(t);
-      out.push({ pos: new THREE.Vector3(p.x, 0.1, p.z), angle: Math.atan2(tan.x, tan.z), i });
+      out.push({ pos: new THREE.Vector3(p.x, p.y + 0.15, p.z), angle: Math.atan2(tan.x, tan.z), i });
     }
     return out;
   }, [zone]);
@@ -876,7 +927,7 @@ function SubZone({ theme }: { theme: ThemeDef }) {
       ))}
       {/* bubbles rising inside the water tube */}
       {arches.map((a, i) => (
-        <mesh key={`b${i}`} position={[a.pos.x + Math.sin(i * 2.1) * 4, 1.2 + (i % 4) * 0.9, a.pos.z + Math.cos(i * 1.7) * 4]}>
+        <mesh key={`b${i}`} position={[a.pos.x + Math.sin(i * 2.1) * 4, a.pos.y + 1.2 + (i % 4) * 0.9, a.pos.z + Math.cos(i * 1.7) * 4]}>
           <sphereGeometry args={[0.28 + (i % 3) * 0.12, 8, 8]} />
           <meshPhysicalMaterial color="#ffffff" transparent opacity={0.4} roughness={0.05} clearcoat={1} depthWrite={false} />
         </mesh>
@@ -1184,30 +1235,54 @@ function buildRouteRoad(path: THREE.Vector3[], halfW: number) {
   return { deckGeo, kerbGeo, railGeo, pillars };
 }
 
-function Shortcuts({ theme }: { theme: ThemeDef }) {
-  const shortcuts = useMemo(() => getShortcuts(), []);
-  const roads = useMemo(() => shortcuts.map((s) => buildRouteRoad(s.path, 3.6)), [shortcuts]);
-  const gateRefs = useRef<(THREE.Group | null)[]>([]);
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-    gateRefs.current.forEach((g, i) => {
-      if (!g) return;
-      const s = 1 + Math.sin(t * 3 + i) * 0.07;
-      g.scale.setScalar(s);
-      g.rotation.z = t * 0.9;
-    });
-  });
+/**
+ * Side roads: real carriageways that peel off the main circuit, run alongside it
+ * and merge back. They are drawn exactly as wide as the physics lane that drives
+ * them, on their own deck at their own height, so what you see is what you drive.
+ */
+function SideRoads({ theme }: { theme: ThemeDef }) {
+  const roads = useMemo(() => getSideRoads(), []);
+  const built = useMemo(() => roads.map((r) => buildRouteRoad(r.path, SIDE_HALF)), [roads]);
+  const arrows = useMemo(() => {
+    const out: { pos: THREE.Vector3; angle: number }[] = [];
+    for (const r of roads) {
+      for (let k = 1; k <= 3; k++) {
+        const p = r.path[Math.min(r.path.length - 1, Math.round((k / 4) * (r.path.length - 1)))];
+        out.push({ pos: p.clone(), angle: Math.atan2(r.exit.x - r.entry.x, r.exit.z - r.entry.z) });
+      }
+    }
+    return out;
+  }, [roads]);
+
+  // Pillars and road arrows used to be a mesh each: five side roads meant three
+  // hundred draw calls for scenery that never moves. They are instanced now, so
+  // the whole set costs two calls whatever the circuit looks like.
+  const pillars = useMemo(() => {
+    const dummy = new THREE.Object3D();
+    const out: THREE.Matrix4[] = [];
+    for (const b of built) {
+      for (const pl of b.pillars) {
+        dummy.position.set(pl.x, (pl.top + pl.bottom) / 2, pl.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, Math.max(0.5, pl.top - pl.bottom), 1);
+        dummy.updateMatrix();
+        out.push(dummy.matrix.clone());
+      }
+    }
+    return out;
+  }, [built]);
+
   return (
     <group>
-      {shortcuts.map((s, i) => (
+      {built.map((b, i) => (
         <group key={i}>
-          <mesh geometry={roads[i].deckGeo} receiveShadow>
+          <mesh geometry={b.deckGeo} receiveShadow>
             <meshStandardMaterial color={theme.road} roughness={0.85} metalness={0.05} />
           </mesh>
-          <mesh geometry={roads[i].kerbGeo}>
+          <mesh geometry={b.kerbGeo}>
             <meshStandardMaterial color={theme.roadEdge} roughness={0.6} side={THREE.DoubleSide} />
           </mesh>
-          <mesh geometry={roads[i].railGeo}>
+          <mesh geometry={b.railGeo}>
             <meshStandardMaterial
               color={theme.glow}
               emissive={theme.glow}
@@ -1216,125 +1291,45 @@ function Shortcuts({ theme }: { theme: ThemeDef }) {
               side={THREE.DoubleSide}
             />
           </mesh>
-          {roads[i].pillars.map((pl, k) => (
-            <mesh key={k} position={[pl.x, (pl.top + pl.bottom) / 2, pl.z]}>
-              <boxGeometry args={[0.5, pl.top - pl.bottom, 0.5]} />
-              <meshStandardMaterial color={theme.ground} roughness={1} />
-            </mesh>
-          ))}
-          <mesh geometry={roads[i].deckGeo} position={[0, 0.05, 0]}>
-            <meshStandardMaterial
-              color={theme.glow}
-              emissive={theme.glow}
-              emissiveIntensity={0.9}
-              transparent
-              opacity={0.18}
-              toneMapped={false}
-              depthWrite={false}
-            />
-          </mesh>
-          {[
-            { p: s.path[0], h: s.entryHeading, k: 0 },
-            { p: s.path[s.path.length - 1], h: s.heading, k: 1 },
-          ].map((g) => (
-            <group key={g.k} position={[g.p.x, g.p.y + 2.2, g.p.z]} rotation={[0, g.h, 0]}>
-              <group ref={(el) => (gateRefs.current[i * 2 + g.k] = el)}>
-                <mesh>
-                  <torusGeometry args={[2.5, 0.22, 10, 32]} />
-                  <meshBasicMaterial color={g.k === 0 ? theme.barrierA : theme.barrierB} toneMapped={false} />
-                </mesh>
-                <mesh>
-                  <circleGeometry args={[2.3, 28]} />
-                  <meshBasicMaterial color={theme.glow} transparent opacity={0.22} side={THREE.DoubleSide} toneMapped={false} depthWrite={false} />
-                </mesh>
-              </group>
-            </group>
-          ))}
         </group>
       ))}
-    </group>
-  );
-}
-
-/**
- * Alternate routes: translucent glass ribbons that peel off the main road and rejoin it.
- * Shorter lines cut the corner, longer ones carry extra coin bait.
- */
-function BranchRibbons({ theme }: { theme: ThemeDef }) {
-  const branches = getActiveTrack().branches;
-  const flat = theme.id === "win98";
-  const geos = useMemo(() => {
-    return branches.map((b) => {
-      const N = 64;
-      const pos: number[] = [];
-      const uvs: number[] = [];
-      const idx: number[] = [];
-      for (let i = 0; i <= N; i++) {
-        const t = b.t0 + ((b.t1 - b.t0) * i) / N;
-        const u = i / N;
-        const env = Math.sin(u * Math.PI);
-        const c = trackCurve.getPointAt(((t % 1) + 1) % 1);
-        const tan = trackCurve.getTangentAt(((t % 1) + 1) % 1);
-        const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-        const center = c.clone().addScaledVector(n, b.pull * env);
-        const hw = TRACK_WIDTH / 2 - 0.4;
-        const l = center.clone().addScaledVector(n, hw);
-        const r = center.clone().addScaledVector(n, -hw);
-        pos.push(l.x, 0.06, l.z, r.x, 0.06, r.z);
-        uvs.push(0, u * 14, 1, u * 14);
-      }
-      for (let i = 0; i < N; i++) {
-        const a = i * 2;
-        idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-      }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-      g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-      g.setIndex(idx);
-      g.computeVertexNormals();
-      return g;
-    });
-  }, [branches]);
-
-  const chevrons = useMemo(() => {
-    const out: { pos: THREE.Vector3; angle: number }[] = [];
-    branches.forEach((b) => {
-      for (let k = 0; k < 6; k++) {
-        const u = (k + 0.5) / 6;
-        const t = b.t0 + (b.t1 - b.t0) * u;
-        const env = Math.sin(u * Math.PI);
-        const c = trackCurve.getPointAt(((t % 1) + 1) % 1);
-        const tan = trackCurve.getTangentAt(((t % 1) + 1) % 1);
-        const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-        out.push({ pos: c.clone().addScaledVector(n, b.pull * env), angle: Math.atan2(tan.x, tan.z) });
-      }
-    });
-    return out;
-  }, [branches]);
-
-  return (
-    <group>
-      {geos.map((g, i) => (
-        <mesh key={`br${i}`} geometry={g} receiveShadow>
-          <meshPhysicalMaterial
-            color={theme.glow}
-            transparent
-            opacity={flat ? 0.75 : 0.5}
-            roughness={0.08}
-            metalness={theme.id === "y2k" ? 0.9 : 0.15}
-            clearcoat={1}
-            emissive={theme.glow}
-            emissiveIntensity={flat ? 0.1 : 0.5}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      ))}
-      {chevrons.map((c, i) => (
-        <mesh key={`ch${i}`} position={[c.pos.x, 0.14, c.pos.z]} rotation={[-Math.PI / 2, 0, -c.angle]}>
-          <ringGeometry args={[1.5, 2.1, 3]} />
-          <meshBasicMaterial color={theme.barrierB} transparent opacity={0.85} toneMapped={false} side={THREE.DoubleSide} />
-        </mesh>
-      ))}
+      {pillars.length > 0 && (
+        <instancedMesh
+          ref={(el) => {
+            if (!el) return;
+            pillars.forEach((m, k) => el.setMatrixAt(k, m));
+            el.instanceMatrix.needsUpdate = true;
+            el.computeBoundingSphere();
+          }}
+          args={[undefined, undefined, pillars.length]}
+          castShadow={false}
+          receiveShadow
+        >
+          <boxGeometry args={[0.5, 1, 0.5]} />
+          <meshStandardMaterial color={theme.ground} roughness={1} />
+        </instancedMesh>
+      )}
+      {arrows.length > 0 && (
+        <instancedMesh
+          ref={(el) => {
+            if (!el) return;
+            const dummy = new THREE.Object3D();
+            arrows.forEach((a, k) => {
+              dummy.position.set(a.pos.x, a.pos.y + 0.12, a.pos.z);
+              dummy.rotation.set(-Math.PI / 2, 0, -a.angle);
+              dummy.scale.setScalar(1);
+              dummy.updateMatrix();
+              el.setMatrixAt(k, dummy.matrix);
+            });
+            el.instanceMatrix.needsUpdate = true;
+            el.computeBoundingSphere();
+          }}
+          args={[undefined, undefined, arrows.length]}
+        >
+          <ringGeometry args={[1.4, 2.0, 3, 1, 0, Math.PI * 1.4]} />
+          <meshBasicMaterial color={theme.barrierA} transparent opacity={0.5} side={THREE.DoubleSide} depthWrite={false} />
+        </instancedMesh>
+      )}
     </group>
   );
 }
@@ -1368,11 +1363,11 @@ function RoadMarks({ theme }: { theme: ThemeDef }) {
         turn,
       });
     };
-    // branch entries: three arrows stepping towards the side the route leaves on
-    for (const sc of getShortcuts()) {
+    // side-road entries: three arrows stepping towards the side the road leaves on
+    for (const b of getActiveTrack().branches) {
       for (let k = 0; k < 3; k++) {
-        const t = (sc.t0 - 0.03 + k * 0.008 + 1) % 1;
-        put(t, sc.side * (2 + k * 2.4), 0, sc.side);
+        const t = (b.t0 - 0.026 + k * 0.007 + 1) % 1;
+        put(t, Math.sign(b.pull) * (2 + k * 2.4), 0, Math.sign(b.pull));
       }
     }
     // gap approaches: hazard bars across the full width
@@ -1495,66 +1490,165 @@ function SectorBoards({ theme }: { theme: ThemeDef }) {
  * props within 16 units of the road, so everything past the verge was bare; this
  * fills the ground out to ~100 units with instanced rocks, tufts and shards.
  */
-function Scatter({ theme }: { theme: ThemeDef }) {
-  const COUNT = 430;
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-  const rocks = useMemo(() => new THREE.IcosahedronGeometry(1, 0), []);
-  const tufts = useMemo(() => new THREE.ConeGeometry(0.7, 2.4, 5), []);
-  const shards = useMemo(() => new THREE.OctahedronGeometry(1, 0), []);
+/**
+ * What grows beside the road. The kind and the colour come from the biome of the
+ * stretch, so a lap crosses forest, rock, snow and reef instead of seeing one
+ * repeated bush the whole way round. Props are also kept off every lane: side
+ * roads are real road now, and a tree standing in the tarmac is a wall you never
+ * saw.
+ */
+/**
+ * Merge prop parts into one geometry. The primitives do not agree on indexing:
+ * boxes and cylinders carry an index, polyhedra do not, and mergeGeometries
+ * refuses a mixture, so everything is flattened first.
+ */
+function mergeParts(parts: THREE.BufferGeometry[]) {
+  return mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)));
+}
 
-  const sets = useMemo(() => {
-    const buckets: { m: THREE.Matrix4; kind: number }[] = [];
+function Scatter() {
+  const PER_KIND = 150;
+  const voidCircuit = !!getActiveTrack().noGround;
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const geo = useMemo(
+    () => ({
+      rock: new THREE.IcosahedronGeometry(1, 0),
+      tuft: new THREE.ConeGeometry(0.7, 2.4, 5),
+      crystal: new THREE.OctahedronGeometry(1, 0),
+      tree: (() => {
+        const trunk = new THREE.CylinderGeometry(0.28, 0.4, 3.2, 5);
+        trunk.translate(0, 1.6, 0);
+        const crown = new THREE.IcosahedronGeometry(2.1, 0);
+        crown.translate(0, 4.1, 0);
+        return mergeParts([trunk, crown]);
+      })(),
+      pine: (() => {
+        const trunk = new THREE.CylinderGeometry(0.22, 0.34, 2.2, 5);
+        trunk.translate(0, 1.1, 0);
+        const a = new THREE.ConeGeometry(2.2, 3.4, 6);
+        a.translate(0, 3.6, 0);
+        const b = new THREE.ConeGeometry(1.5, 2.6, 6);
+        b.translate(0, 5.4, 0);
+        return mergeParts([trunk, a, b]);
+      })(),
+      cactus: (() => {
+        const body = new THREE.CapsuleGeometry(0.7, 3.2, 3, 7);
+        body.translate(0, 2.4, 0);
+        const armL = new THREE.CapsuleGeometry(0.36, 1.4, 3, 6);
+        armL.rotateZ(0.9);
+        armL.translate(-1, 3.1, 0);
+        const armR = armL.clone();
+        armR.rotateZ(1.8);
+        armR.translate(2, -0.3, 0);
+        return mergeParts([body, armL, armR]);
+      })(),
+      coral: (() => {
+        const parts: THREE.BufferGeometry[] = [];
+        for (let i = 0; i < 5; i++) {
+          const br = new THREE.CapsuleGeometry(0.22, 1.8 + i * 0.35, 3, 6);
+          br.rotateZ((i - 2) * 0.34);
+          br.rotateX(0.2 * (i % 2 ? 1 : -1));
+          br.translate((i - 2) * 0.42, 1.4 + i * 0.22, (i % 2) * 0.3);
+          parts.push(br);
+        }
+        return mergeParts(parts);
+      })(),
+      tower: (() => {
+        const base = new THREE.BoxGeometry(2.4, 5.4, 2.4);
+        base.translate(0, 2.7, 0);
+        const top = new THREE.BoxGeometry(1.5, 1.6, 1.5);
+        top.translate(0, 6.2, 0);
+        const mast = new THREE.CylinderGeometry(0.14, 0.14, 2.2, 4);
+        mast.translate(0, 8, 0);
+        return mergeParts([base, top, mast]);
+      })(),
+    }),
+    []
+  );
+
+  const kinds = ["rock", "tuft", "crystal", "tree", "pine", "cactus", "coral", "tower"] as const;
+
+  const buckets = useMemo(() => {
+    const lists = new Map<string, { m: THREE.Matrix4; colour: THREE.Color }[]>();
+    kinds.forEach((k) => lists.set(k, []));
     const tan = new THREE.Vector3();
     const nrm = new THREE.Vector3();
-    for (let i = 0; i < COUNT; i++) {
+    let placed = 0;
+    for (let i = 0; i < PER_KIND * kinds.length && placed < PER_KIND * 5; i++) {
       const t = (i * 0.61803398875) % 1;
       const c = trackCurve.getPointAt(t);
       trackCurve.getTangentAt(t, tan);
       nrm.set(-tan.z, 0, tan.x).normalize();
       const side = i % 2 === 0 ? 1 : -1;
-      const out = 4 + ((i * 37) % 84);
+      const out = 5 + ((i * 37) % 84);
       const g = groundReach(t);
-      const lateral = g.edge + Math.min(out, g.reach - 4);
-      const p = c.clone().addScaledVector(nrm, side * lateral);
-      p.y = groundYAt(t, lateral - g.edge) + 0.2;
-      // keep clear of the carriageway and of water/sky zones
+      const lateral = g.edge + Math.min(out, Math.max(0, g.reach - 5));
+      // never on a lane: main carriageway or any side road
+      const off = side * lateral;
+      if (lanesAt(t).some((l) => off > l.min - 3.5 && off < l.max + 3.5)) continue;
+      const p = c.clone().addScaledVector(nrm, off);
+      p.y = groundYAt(t, lateral - g.edge);
+      const { a, b, u } = biomeMix(t);
+      const style = u > 0.5 ? b : a;
       const z = zoneAt(t);
-      if (z) continue;
-      const s = 0.5 + ((i * 17) % 100) / 100 * (out > 40 ? 3.4 : 1.7);
+      let kind = style.prop;
+      if (z) {
+        // A circuit with no land under it still needs dressing: coral on the
+        // seabed, rocks under the surface, islets hanging below the skyway. Where
+        // there is land the zone dressing is the job of the zone itself.
+        if (!voidCircuit) continue;
+        kind = z.type === "sub" ? "coral" : "rock";
+        p.y -= z.type === "sub" ? 11 : z.type === "sky" ? 34 : 5;
+      }
+      const list = lists.get(kind);
+      if (!list || list.length >= PER_KIND) continue;
+      const scale = 0.55 + ((i * 17) % 100) / 100 * (out > 40 ? 2.6 : 1.3);
       dummy.position.copy(p);
-      dummy.rotation.set(((i * 13) % 10) / 10, (i * 0.7) % Math.PI, ((i * 7) % 10) / 10);
-      dummy.scale.setScalar(s);
+      dummy.rotation.set(0, (i * 0.7) % (Math.PI * 2), 0);
+      dummy.scale.set(scale * (style.prop === "tower" ? 1.3 : 1), scale, scale);
       dummy.updateMatrix();
-      buckets.push({ m: dummy.matrix.clone(), kind: i % 3 });
+      list.push({ m: dummy.matrix.clone(), colour: new THREE.Color(style.propColor) });
+      placed++;
     }
-    return buckets;
-  }, [dummy]);
-
-  const byKind = (k: number) => sets.filter((x) => x.kind === k);
-  const apply = (mesh: THREE.InstancedMesh | null, list: { m: THREE.Matrix4 }[]) => {
-    if (!mesh) return;
-    list.forEach((x, i) => mesh.setMatrixAt(i, x.m));
-    mesh.instanceMatrix.needsUpdate = true;
-  };
+    return lists;
+  }, [dummy, voidCircuit]);
 
   return (
     <group>
-      <instancedMesh ref={(el) => apply(el, byKind(0))} args={[rocks, undefined, byKind(0).length]}>
-        <meshStandardMaterial color={theme.ground} roughness={1} flatShading />
-      </instancedMesh>
-      <instancedMesh ref={(el) => apply(el, byKind(1))} args={[tufts, undefined, byKind(1).length]}>
-        <meshStandardMaterial color={theme.isle} roughness={0.85} flatShading />
-      </instancedMesh>
-      <instancedMesh ref={(el) => apply(el, byKind(2))} args={[shards, undefined, byKind(2).length]}>
-        <meshStandardMaterial
-          color={theme.glow}
-          emissive={theme.glow}
-          emissiveIntensity={0.5}
-          roughness={0.3}
-          flatShading
-        />
-      </instancedMesh>
+      {kinds.map((k) => {
+        const list = buckets.get(k) ?? [];
+        if (!list.length) return null;
+        return <InstancedProp key={k} geometry={geo[k]} list={list} />;
+      })}
     </group>
+  );
+}
+
+/** One instanced mesh plus its per-instance colour, which is the biome's plant. */
+function InstancedProp({
+  geometry,
+  list,
+}: {
+  geometry: THREE.BufferGeometry;
+  list: { m: THREE.Matrix4; colour: THREE.Color }[];
+}) {
+  return (
+    <instancedMesh
+      ref={(el) => {
+        if (!el) return;
+        list.forEach((x, i) => {
+          el.setMatrixAt(i, x.m);
+          el.setColorAt(i, x.colour);
+        });
+        el.instanceMatrix.needsUpdate = true;
+        if (el.instanceColor) el.instanceColor.needsUpdate = true;
+        el.computeBoundingSphere();
+      }}
+      args={[geometry, undefined, list.length]}
+      receiveShadow
+    >
+      <meshStandardMaterial roughness={0.92} flatShading />
+    </instancedMesh>
   );
 }
 
@@ -1564,18 +1658,24 @@ export default function Track({ theme }: { theme: ThemeDef }) {
   const barriers = useMemo(() => buildBarriers(), []);
   const ground = useMemo(() => buildGround(), []);
 
+  const voidCircuit = !!getActiveTrack().noGround;
+
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -26, 0]}>
-        <circleGeometry args={[2600, 72]} />
-        <meshStandardMaterial color={theme.water} roughness={0.15} metalness={0.3} />
-      </mesh>
-      <mesh geometry={ground.skirt}>
-        <meshStandardMaterial color={theme.ground} roughness={1} side={THREE.DoubleSide} />
-      </mesh>
-      <mesh geometry={ground.terrain} receiveShadow>
-        <meshStandardMaterial vertexColors color={theme.ground} roughness={1} />
-      </mesh>
+      {!voidCircuit && (
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -26, 0]}>
+            <circleGeometry args={[2600, 72]} />
+            <meshStandardMaterial color={theme.water} roughness={0.15} metalness={0.3} />
+          </mesh>
+          <mesh geometry={ground.skirt}>
+            <meshStandardMaterial color={theme.ground} roughness={1} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh geometry={ground.terrain} receiveShadow>
+            <meshStandardMaterial vertexColors color={theme.ground} roughness={1} />
+          </mesh>
+        </>
+      )}
       <Lake theme={theme} />
       <mesh geometry={roadGeometry} receiveShadow>
         <meshStandardMaterial map={roadTexture} roughness={theme.id === "techno" ? 0.4 : 0.8} metalness={theme.id === "techno" ? 0.4 : 0.05} />
@@ -1584,16 +1684,17 @@ export default function Track({ theme }: { theme: ThemeDef }) {
       <StartArch theme={theme} />
       <SkyRings theme={theme} />
       <ForkIslands theme={theme} />
-      <BranchRibbons theme={theme} />
+      <SideRoads theme={theme} />
       <SubZone theme={theme} />
-      <Shortcuts theme={theme} />
+
       <MovingTraps theme={theme} />
       <GapMarkers theme={theme} />
       <Portals theme={theme} />
       <MovingHazards theme={theme} />
       <RoadMarks theme={theme} />
       <SectorBoards theme={theme} />
-      <Scatter theme={theme} />
+      <BiomeSky theme={theme} />
+      <Scatter />
       <Props theme={theme} />
       <Clouds theme={theme} />
       <AmbientLife theme={theme} />

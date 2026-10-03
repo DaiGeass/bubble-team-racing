@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { trackCurve, getShortcuts, getActiveTrack, trackFrameAt, halfWidthAt } from "../trackCurve";
+import { trackCurve, getActiveTrack, trackFrameAt, halfWidthAt } from "../trackCurve";
 import { raceSnapshot, ZONES } from "../data";
 
 const SIZE = 168;
@@ -28,7 +28,14 @@ export default function Minimap() {
   useEffect(() => {
     // project track once
     const pts: { x: number; y: number; h: number; zone: "water" | "sky" | "sub" | null }[] = [];
-    scRef.current = getShortcuts().map((s) => ({ ax: s.entry.x, ay: s.entry.z, bx: s.exit.x, by: s.exit.z }));
+    scRef.current = getActiveTrack().branches.map((b) => {
+      const a = trackFrameAt(b.t0 + 0.012);
+      const z = trackFrameAt(b.t1 - 0.012);
+      const off = (f: typeof a, pull: number) => f.point.clone().addScaledVector(f.normal, pull * 0.92);
+      const pa = off(a, b.pull);
+      const pb = off(z, b.pull);
+      return { ax: pa.x, ay: pa.z, bx: pb.x, by: pb.z };
+    });
     let minX = Infinity;
     let maxX = -Infinity;
     let minZ = Infinity;
@@ -171,11 +178,19 @@ export default function Minimap() {
       });
       ctx.stroke();
 
-      // alternative paths (dashed arcs)
+      // side roads: they are tarmac now, so they are drawn as roads
       ctx.save();
-      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = shade(theme.road, 0.35);
+      ctx.lineWidth = 4;
+      ctx.lineCap = "round";
+      for (const sc of scRef.current) {
+        ctx.beginPath();
+        ctx.moveTo(toX(sc.ax), toY(sc.ay));
+        ctx.lineTo(toX(sc.bx), toY(sc.by));
+        ctx.stroke();
+      }
       ctx.strokeStyle = theme.barrierA;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.2;
       for (const sc of scRef.current) {
         ctx.beginPath();
         ctx.moveTo(toX(sc.ax), toY(sc.ay));

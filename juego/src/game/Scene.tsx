@@ -32,7 +32,7 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, corridorBounds, branchCenterAt, getActiveTrack, getShortcuts, surfaceYAt, trackFrameAt, halfWidthAt, trapPhase, trapTransform, inGapPit, gapExitT } from "../trackCurve";
+import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, branchCenterAt, lanesAt, laneAt, getActiveTrack, surfaceYAt, trackFrameAt, halfWidthAt, trapPhase, trapTransform, inGapPit, gapExitT } from "../trackCurve";
 import { emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
 
@@ -107,6 +107,8 @@ interface Racer {
   isDrifting: boolean;
   mode: VehicleMode;
   aiPhase: number;
+  /** side of the side road this driver committed to, 0 while on the main road */
+  routeLane: 1 | -1 | 0;
   aiLookahead: number;
   aiWeaponDelay: number;
   aiMult: number;
@@ -179,7 +181,6 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const theme = useMemo(() => mutateTheme(THEMES[getActiveTrack().theme], aestheticLap - 1), [aestheticLap]);
   const mode = MODES[modeId];
 
-  const shortcuts = useMemo(() => getShortcuts(), []);
 
   const skyRings = useMemo(() => {
     const z = zoneOfKind("sky");
@@ -276,6 +277,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         isDrifting: false,
         mode: "land",
         aiPhase: Math.random() * Math.PI * 2,
+        routeLane: 0,
         aiLookahead: 0.03 + Math.random() * 0.012,
         aiWeaponDelay: 0,
         aiMult: 1,
@@ -904,7 +906,18 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const nrm = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
       // lower skill runs a wider line and drifts wider on corners
       const sloppy = r.aiMistake > 0 ? r.aiMistake * 3.2 : 0;
-      const aim = cp.clone().addScaledVector(nrm, weave * TRACK_WIDTH * 0.45 + sloppy * TRACK_WIDTH * 0.12);
+      // Aim at the middle of the lane it is on, never past its edge: the old
+      // weave was ±9 plus the mistake term, which is outside the tarmac on a
+      // narrow stretch, so the field spent the race grinding the barrier.
+      const wantLane = laneAt(look, weave * TRACK_WIDTH * 0.45 + sloppy * TRACK_WIDTH * 0.12).lane;
+      const laneMid = (wantLane.min + wantLane.max) / 2;
+      const laneRoom = (wantLane.max - wantLane.min) / 2 - 2.5;
+      const aimOffset = THREE.MathUtils.clamp(
+        wantLane.kind === "side" && r.routeLane === wantLane.side ? laneMid + weave * 2.2 : laneMid + weave * laneRoom,
+        wantLane.min + 2.5,
+        wantLane.max - 2.5
+      );
+      const aim = cp.clone().addScaledVector(nrm, aimOffset);
       aim.y = r.mode === "plane" ? Math.sin(Math.min(1, Math.max(0, inSky)) * Math.PI) * SKY_ALTITUDE + 1.6 : 0;
       const toAim = new THREE.Vector3().subVectors(aim, r.pos.clone().setY(aim.y));
       const desired = Math.atan2(toAim.x, toAim.z);
@@ -917,27 +930,16 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const rb = mode.rubberband * ai.rubberband;
       r.aiMult = gap > 0.05 ? 1 + 0.2 * rb : gap < -0.1 ? 1 - 0.13 * rb : 1;
 
-      // opportunistic gate usage: skilled drivers actually take the alt routes
-      if (r.warpCd <= 0 && !r.warp && Math.random() < ai.gateUse * dt) {
-        for (const sc of shortcuts) {
-          const dx = sc.entry.x - r.pos.x;
-          const dz = sc.entry.z - r.pos.z;
-          if (dx * dx + dz * dz < 15) {
-            const span = ((sc.t1 - sc.t0) % 1 + 1) % 1;
-            r.warp = {
-              fromT: sc.t0,
-              toT: (sc.t0 + span) % 1,
-              side: sc.side,
-              startOffset: lateralOffsetFrom(r.pos, sc.t0),
-              t: 0,
-              dur: Math.max(0.85, span * 22),
-              heading: sc.heading,
-              lift: sc.lift,
-            };
-            r.warpCd = 3;
-            break;
-          }
-        }
+      // route choice: a driver commits to a side road while one is open and
+      // merges back on its own, because the lane centre returns to the racing
+      // line at both ends of the envelope
+      const openHere = lanesAt(r.t);
+      if (r.routeLane) {
+        const still = openHere.some((l) => l.kind === "side" && l.side === r.routeLane);
+        if (!still) r.routeLane = 0;
+      } else if (Math.random() < ai.gateUse * dt * 3) {
+        const option = openHere.find((l) => l.kind === "side" && l.side !== r.routeLane);
+        if (option) r.routeLane = option.side;
       }
 
       if (r.weapon) {
@@ -1031,8 +1033,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       r.pos.addScaledVector(nrm, -r.steerSmooth * 0.32 * Math.abs(r.speed) * dt);
     }
 
-    // ---- vertical: every mode rides the road surface, and crests launch the vehicle ----
-    const groundY = surfaceYAt(r.t);
+    // ---- vertical: every mode rides the lane it is on, and crests launch the vehicle ----
+    // The lane matters: side roads have their own deck, so riding surfaceYAt would
+    // leave a car floating over them or buried under them.
+    const laneInfo = laneAt(r.t, lateralOffsetFrom(r.pos, r.t));
+    const groundY = laneInfo.lane.y;
     let rideY = groundY;
     if (r.mode === "plane") {
       rideY = groundY + Math.sin(Math.min(1, Math.max(0, inSky)) * Math.PI) * SKY_ALTITUDE;
@@ -1080,11 +1085,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         r.exploding = false;
         if (r.group.current) r.group.current.visible = true;
         r.respawnLock = 1.1;
-        const cb2 = corridorBounds(r.t);
+        const lane = laneAt(r.t, lateralOffsetFrom(r.pos, r.t)).lane;
         const tangent = trackTangentAt(r.t);
         const nrm = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-        r.pos.addScaledVector(nrm, cb2.min + 3 - lateralOffsetFrom(r.pos, r.t));
-        r.y = surfaceYAt(r.t);
+        r.pos.addScaledVector(nrm, (lane.min + lane.max) / 2 - lateralOffsetFrom(r.pos, r.t));
+        r.y = lane.y;
         r.vy = 0;
         r.airborne = false;
         r.speed = Math.min(Math.abs(r.speed), 5);
@@ -1105,12 +1110,13 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // ---- track containment (relaxed while flying) ----
     const newT = nearestT(r.pos, r.t);
     const offset = lateralOffsetFrom(r.pos, newT);
-    // asymmetric corridor: branches open the road to one side only
-    const cb = corridorBounds(newT);
+    // Lane walls: the main carriageway and each side road are separate surfaces,
+    // so the verge between them is a barrier instead of free space.
+    const here = laneAt(newT, offset);
     const pad = r.ghostTimer > 0 ? 9 : r.mode === "plane" ? 3 : -0.9;
-    const lo = cb.min + pad;
-    const hi = cb.max + pad;
-    if (offset < lo || offset > hi) {
+    const lo = here.lane.min + pad;
+    const hi = here.lane.max + pad;
+    if (!here.inside) {
       // Smooth wall slide: clamp position, nudge heading parallel to the wall.
       // Feedback (shake/sound/speed loss) only on FIRST contact — no vibration loop.
       const tangent = trackTangentAt(newT);
@@ -1138,8 +1144,21 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
     // ---- rescue: nobody stays stranded off the road ----
     if (r.respawnLock > 0) r.respawnLock -= dt;
-    const cb2 = corridorBounds(newT);
-    const outsideBy = offset < cb2.min ? cb2.min - offset : offset > cb2.max ? offset - cb2.max : 0;
+    // stranded means outside every lane, not merely outside the main road: a car
+    // wedged in the verge between the carriageway and a side road used to sit
+    // there forever because the old corridor test considered it legal ground
+    const lanes = lanesAt(newT);
+    let outsideBy = 0;
+    let nearest = lanes[0];
+    let nearestD = Infinity;
+    for (const l of lanes) {
+      const d = offset < l.min ? l.min - offset : offset > l.max ? offset - l.max : 0;
+      if (d < nearestD) {
+        nearestD = d;
+        nearest = l;
+      }
+      outsideBy = Math.max(outsideBy, d);
+    }
     if (r.mode !== "plane" && (outsideBy > 4 || r.y < groundY - 8)) {
       r.stuckFor += dt;
       // three seconds of drifting off the road puts you back on the tarmac
@@ -1149,9 +1168,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         r.t = newT;
         const tangent = trackTangentAt(newT);
         const nrm = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-        const back = offset > cb2.max ? cb2.max - 3 : cb2.min + 3;
-        r.pos.addScaledVector(nrm, back - offset);
-        r.y = surfaceYAt(newT);
+        const centre = (nearest.min + nearest.max) / 2;
+        r.pos.addScaledVector(nrm, centre - offset);
+        r.y = nearest.y;
         r.vy = 0;
         r.airborne = false;
         r.speed = Math.min(r.speed, 6);
@@ -1243,37 +1262,6 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         r.pos.addScaledVector(pull, 9 * dt);
         if (frame.current % 3 === 0) {
           emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: WEAPON_META.magnet.glow, count: 2, speed: 1.2, spread: 0.4, size: 0.16, life: 0.35, gravity: 0 });
-        }
-      }
-    }
-
-    // ---- shortcut gates ----
-    if (r.mode === "land" && r.warpCd <= 0 && !r.warp) {
-      for (const sc of shortcuts) {
-        const dx = sc.entry.x - r.pos.x;
-        const dz = sc.entry.z - r.pos.z;
-        if (dx * dx + dz * dz < 15) {
-          // fly along the road between the gates, lifted over the tarmac: a straight
-          // chord would dive through the hill on any circuit with real elevation
-          const span = ((sc.t1 - sc.t0) % 1 + 1) % 1;
-          r.warp = {
-            fromT: sc.t0,
-            toT: (sc.t0 + span) % 1,
-            side: sc.side,
-            startOffset: offset,
-            t: 0,
-            dur: Math.max(0.85, span * 22),
-            heading: sc.heading,
-            lift: sc.lift,
-          };
-          r.warpCd = 3;
-          emitParticles({ position: r.pos.clone().setY(1.2), color: theme.glow, count: 28, speed: 5, spread: 1.4, size: 0.24, life: 0.7 });
-          if (r.isPlayer) {
-            addShake(0.28);
-            sfx.swap();
-            useGame.getState().setTelemetry({ shortcutFlash: Date.now() });
-          }
-          break;
         }
       }
     }
@@ -1725,6 +1713,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       color: r.isPlayer ? "#ffffff" : r.vehicle.body,
       isPlayer: r.isPlayer,
       mode: r.mode,
+      t: r.t,
     }));
     raceSnapshot.camAngle = player.heading;
 

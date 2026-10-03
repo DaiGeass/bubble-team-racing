@@ -155,16 +155,19 @@ así que el rendimiento hay que comprobarlo en un navegador con GPU.
 - [x] **Fase 4 — Completar según la visión**
   - [x] Modelos: 24 carrocerías y 7 + 7 + 7 artefactos con stats e i18n
   - [x] Estéticas mutables: la paleta, la luz y la vegetación cambian en cada vuelta
+  - [x] Biomas por tramo: el suelo, la vegetación, la bruma y el cielo cambian al largo de la vuelta
+  - [x] 3 circuitos dedicados: uno 100% submarino, uno 100% avión y uno 100% barco
   - [x] Acabados del garaje: 6 (sólido, brillante, mate, cromo, cristal, holográfico)
   - [x] Reasignación real de teclado y de los 8 huecos táctiles, con presets que instalan su asignación
   - [x] Opciones conectadas: IA, gas automático, asistencia, sacudida, vibración de velocidad, volumen, bloom, telemetría, idioma, mano, tamaño de botones
   - [x] Fusión con torreta propia para los 28 personajes (cadencia, ráfaga, dispersión e impacto)
   - [x] IA por niveles: rookie, amateur, pro y ace
-  - [x] 12 atajos apilados por vuelta (barrera baja, calzadas y puentes), 2 huecos y 2 portales por pista
+  - [x] Carreteras laterales reales: 3–7 por pista, con su propia calzada, bordillos y quitamiedos
+  - [x] 2 huecos y 2 portales por pista de tierra; los circuitos sin tierra no llevan huecos
   - [x] Huecos de verdad: rampa, labio, foso y pared; la física y la carretera comparten la misma curva
   - [x] Reaparición por atasco:contramuro y por falta de progreso
   - [x] Destrucción con chasis: las explosiones sueltan paneles que caen, rebotan y quedan en la calzada
-  - [x] Vueltas de 60–90 s: las 14 pistas normalizadas a ~2000 unidades
+  - [x] Vueltas de 60–90 s: las 17 pistas normalizadas a ~2000 unidades
 
 ### Lo que tienes que probar tú
 
@@ -172,6 +175,8 @@ Al final de cada fase te doy una lista corta. Para esta fase:
 
 1. Abre el juego en Chrome y Firefox.
 2. Mide fps en escritorio: objetivo **60 fps**.
-3. Salta los dos huecos de cada pista a tope: si el foso te traga, el rescate te devuelve a la pista.
-4. En Opciones → Táctil, reasigna un hueco y comprueba que el botón cambia de dibujo y de acción.
-5. Explota a un rival y mira los paneles: deberían quedarse tumbados en la calzada.
+3. Salta los dos huecos de cada pista de tierra a tope: si el foso te traga, el rescate te devuelve a la pista.
+4. En Tramo Abisal, Ruta Nubes y Circuito Océano comprueba que el vehículo nunca cambia de medio: submarino, avión y barco, respectivamente, de la primera curva a la meta.
+5. En Opciones → Táctil, reasigna un hueco y comprueba que el botón cambia de dibujo y de acción.
+6. Explota a un rival y mira los paneles: deberían quedarse tumbados en la calzada.
+7. En una pista de tierra, entra en una carretera lateral y sigue la calzada: sales de la carretera principal, la bordeas y vuelves a entrar sin teletransportarte.
