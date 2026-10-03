@@ -628,19 +628,23 @@ export interface BiomeStyle {
   density: number;
   /** fog and horizon tint for this stretch */
   fog: string;
+  fogNear?: number;
+  fogFar?: number;
+  skyTop?: string;
+  skyBottom?: string;
 }
 
 export const BIOMES: Record<BiomeId, BiomeStyle> = {
-  meadow: { name: "Pradera", ground: "#6fbf4a", far: "#3f8f34", prop: "tuft", propColor: "#8fd85f", density: 0.7, fog: "#bfe6a8" },
-  forest: { name: "Bosque", ground: "#3d7a34", far: "#20491f", prop: "tree", propColor: "#2f6b2a", density: 1, fog: "#9ec98d" },
-  desert: { name: "Desierto", ground: "#dcb46a", far: "#b98b45", prop: "cactus", propColor: "#4f8f4a", density: 0.5, fog: "#f0d9a6" },
-  snow: { name: "Nieve", ground: "#e8f2f8", far: "#b9cede", prop: "pine", propColor: "#2f6b52", density: 0.6, fog: "#dcecf7" },
-  coast: { name: "Costa", ground: "#e8d7a8", far: "#c9b384", prop: "rock", propColor: "#b9a37c", density: 0.6, fog: "#cfe9f2" },
-  volcano: { name: "Volcán", ground: "#4a3b38", far: "#241b1a", prop: "rock", propColor: "#6b4a42", density: 0.8, fog: "#8a5a48" },
-  city: { name: "Ciudad", ground: "#8e97a8", far: "#5c6474", prop: "tower", propColor: "#7b8698", density: 0.9, fog: "#b9c6d8" },
-  ruins: { name: "Ruinas", ground: "#a99b86", far: "#7b7160", prop: "crystal", propColor: "#9ad6d0", density: 0.7, fog: "#c9bda6" },
-  reef: { name: "Arrecife", ground: "#2f7f96", far: "#14566b", prop: "coral", propColor: "#ff8fb1", density: 1, fog: "#4fb3c9" },
-  cloud: { name: "Nubes", ground: "#dfe9f7", far: "#b9c9e6", prop: "crystal", propColor: "#ffffff", density: 0.4, fog: "#e6eefc" },
+  meadow: { name: "Pradera", ground: "#6fbf4a", far: "#3f8f34", prop: "tuft", propColor: "#8fd85f", density: 0.7, fog: "#bfe6a8", fogNear: 80, fogFar: 290, skyTop: "#8fe0a8", skyBottom: "#f4ffe0" },
+  forest: { name: "Bosque", ground: "#3d7a34", far: "#20491f", prop: "tree", propColor: "#2f6b2a", density: 1, fog: "#9ec98d", fogNear: 70, fogFar: 280, skyTop: "#7fb87f", skyBottom: "#e2f2e0" },
+  desert: { name: "Desierto", ground: "#dcb46a", far: "#b98b45", prop: "cactus", propColor: "#4f8f4a", density: 0.5, fog: "#f0d9a6", fogNear: 90, fogFar: 320, skyTop: "#f3c07a", skyBottom: "#ffe6c2" },
+  snow: { name: "Nieve", ground: "#e8f2f8", far: "#b9cede", prop: "pine", propColor: "#2f6b52", density: 0.6, fog: "#dcecf7", fogNear: 90, fogFar: 340, skyTop: "#d9eaff", skyBottom: "#f5fbff" },
+  coast: { name: "Costa", ground: "#e8d7a8", far: "#c9b384", prop: "rock", propColor: "#b9a37c", density: 0.6, fog: "#cfe9f2", fogNear: 80, fogFar: 290, skyTop: "#a9d8e8", skyBottom: "#e6f4f8" },
+  volcano: { name: "Volcán", ground: "#4a3b38", far: "#241b1a", prop: "rock", propColor: "#6b4a42", density: 0.8, fog: "#8a5a48", fogNear: 60, fogFar: 240, skyTop: "#5a403a", skyBottom: "#8a5848" },
+  city: { name: "Ciudad", ground: "#8e97a8", far: "#5c6474", prop: "tower", propColor: "#7b8698", density: 0.9, fog: "#b9c6d8", fogNear: 70, fogFar: 280, skyTop: "#c9d6e6", skyBottom: "#eef3f8" },
+  ruins: { name: "Ruinas", ground: "#a99b86", far: "#7b7160", prop: "crystal", propColor: "#9ad6d0", density: 0.7, fog: "#c9bda6", fogNear: 80, fogFar: 290, skyTop: "#d8ccc2", skyBottom: "#f0eae2" },
+  reef: { name: "Arrecife", ground: "#2f7f96", far: "#14566b", prop: "coral", propColor: "#ff8fb1", density: 1, fog: "#4fb3c9", fogNear: 70, fogFar: 250, skyTop: "#4fd8e8", skyBottom: "#d9fbff" },
+  cloud: { name: "Nubes", ground: "#dfe9f7", far: "#b9c9e6", prop: "crystal", propColor: "#ffffff", density: 0.4, fog: "#e6eefc", fogNear: 90, fogFar: 340, skyTop: "#f2f7ff", skyBottom: "#ffffff" },
 };
 
 export interface BiomeDef {
