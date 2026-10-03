@@ -829,45 +829,72 @@ for (const trk of TRACKS) {
 }
 
 for (const trk of TRACKS) {
+  // every circuit gets its own phase so the holes, warps and portals never land
+  // on exactly the same fraction of the lap from one track to the next
+  const phase = TRACKS.indexOf(trk);
   if (!trk.gaps) trk.gaps = [];
   if (!trk.portals) trk.portals = [];
-  const occupied = (a: number, b: number) =>
-    trk.zones.some((z) => !(b < z.t0 - 0.02 || a > z.t1 + 0.02)) ||
-    trk.forks.some((f) => !(b < f[0] - 0.02 || a > f[1] + 0.02)) ||
-    trk.shortcuts.some((s) => !(b < s.t0 - 0.02 || a > s.t1 + 0.02));
-  // Two portals per circuit. They always throw you FORWARD by a short hop: a
-  // portal that skips half the lap would wreck the lap count and the pacing.
-  for (let i = 0; i < 2; i++) {
-    const tIn = (0.19 + i * 0.44 + trk.shortcuts.length * 0.003) % 0.9;
-    const tOut = (tIn + 0.075 + i * 0.02) % 1;
-    if (occupied(tIn, tIn + 0.01)) continue;
-    trk.portals!.push({ tIn, tOut, side: i === 0 ? 1 : -1, cd: 3.5 + i });
-  }
 
-  // two real gaps per circuit, placed where nothing else already claims the road
-  const wantGaps = 2;
-  for (let i = 0; i < 60 && trk.gaps!.length < wantGaps; i++) {
-    const t0 = (i * 0.331 + 0.09) % 1;
-    const t1 = t0 + 0.105;
-    if (occupied(t0, t1)) continue;
-    // keep clear of the shortcut gates so a ramp never fights a skyway
-    if (trk.shortcuts.some((sc) => !(t1 < sc.t0 - 0.01 || t0 > sc.t1 + 0.01))) continue;
+  // Only a hole in the road is a hard block. Zones and forks are not: a skyway
+  // flies straight over a boat section or a fork ribbon, because the lanes are
+  // stacked in height rather than laid out side by side. Blocking them as well
+  // left barely 20% of each lap free, which starved the route network.
+  const hit = (a: number, b: number, c: number, d: number, pad: number) =>
+    !(b < c - pad || a > d + pad);
+  const overGap = (a: number, b: number, pad = 0.008) => trk.gaps!.some((g) => hit(a, b, g.t0, g.t1, pad));
+  const used = (a: number, b: number, pad = 0.008) => trk.shortcuts.some((s) => hit(a, b, s.t0, s.t1, pad));
+
+  // Two real holes per circuit, kept far apart so no lap has all its drama in
+  // one corner. The span is short enough to leave room for the route network and
+  // long enough to be a real jump.
+  const GAP_SPAN = 0.08;
+  for (let i = 0; i < 120 && trk.gaps!.length < 2; i++) {
+    const t0 = (i * 0.217 + 0.12 + phase * 0.031) % 1;
+    const t1 = t0 + GAP_SPAN;
+    if (t1 > 1) continue;
+    if (overGap(t0, t1) || used(t0, t1)) continue;
+    // too close to the hole we already placed?
+    if (trk.gaps!.some((g) => Math.abs(g.t0 - t0) < 0.3)) continue;
     // a drivable ramp: too steep and the kart simply stalls at the bottom
     trk.gaps!.push({ t0, t1, ramp: 1.7 + (i % 3) * 0.25, pit: 6.5 + (i % 2) * 2 });
   }
 
+  // The route network: up to twelve stacked warps per lap cycling low banked
+  // ramps, mid skyways and high bridges. Each one is a teleport that follows the
+  // drawn ribbon, so a short span is plenty. Slots are evenly spread around the
+  // lap and only nudged when a hole or an earlier warp is in the way.
   const want = 12;
-  // stacked heights: low banked ramps, mid skyways and high bridges all at once
   const LIFTS = [5, 13, 8, 18, 6, 15, 4, 11, 20, 7, 16, 9];
-  for (let i = 0; i < want * 5 && trk.shortcuts.length < want; i++) {
-    const t0 = (i * 0.0713 + 0.045) % 1;
-    const t1 = (t0 + 0.05) % 1;
-    if (t1 < t0) continue;
-    if (occupied(t0, t1)) continue;
-    const k = trk.shortcuts.length;
-    trk.shortcuts.push({ t0, t1, side: k % 2 === 0 ? 1 : -1, lift: LIFTS[k % LIFTS.length] });
+  const SPAN = 0.034;
+  const SLOT = 0.0793; // 12 evenly spaced slots, gap between the ribbons
+  for (let k = 0; k < want; k++) {
+    let placed = false;
+    for (let nudge = 0; nudge < 24 && !placed; nudge++) {
+      const t0 = (k * SLOT + 0.031 + phase * 0.013 + nudge * 0.008) % 1;
+      const t1 = t0 + SPAN;
+      if (t1 > 1) continue;
+      if (overGap(t0, t1) || used(t0, t1)) continue;
+      trk.shortcuts.push({ t0, t1, side: k % 2 === 0 ? 1 : -1, lift: LIFTS[k % LIFTS.length] });
+      placed = true;
+    }
   }
   trk.shortcuts.sort((a, b) => a.t0 - b.t0);
+
+  // Portals last: they only need a couple of metres at the barrier, so they can
+  // always find a home. They throw you FORWARD by a short hop; a portal that
+  // skipped half the lap would wreck the lap count and the pacing.
+  for (let i = 0; i < 300 && trk.portals!.length < 2; i++) {
+    const tIn = (i * 0.00311 + 0.19 + phase * 0.043) % 0.93;
+    // never stacked on top of each other or on a warp gate
+    if (overGap(tIn, tIn + 0.006) || used(tIn, tIn + 0.006)) continue;
+    if (trk.portals!.some((p) => Math.abs(p.tIn - tIn) < 0.18)) continue;
+    const k = trk.portals!.length;
+    // the exit must not drop the car into a hole
+    let tOut = (tIn + 0.075 + k * 0.02) % 1;
+    for (let f = 0; f < 3 && overGap(tOut, tOut + 0.01); f++) tOut = (tOut + 0.09) % 1;
+    trk.portals!.push({ tIn, tOut, side: k === 0 ? 1 : -1, cd: 3.5 + k });
+  }
+
 }
 
 /**
