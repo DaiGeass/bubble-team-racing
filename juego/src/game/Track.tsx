@@ -460,7 +460,15 @@ export function groundYAt(t: number, lateral: number) {
 
 function groundDrop(d: number, t: number) {
   const wobble = Math.sin(t * 260 + d * 0.31) * 0.5 + Math.sin(t * 90 - d * 0.17) * 1.15 + Math.sin(t * 517 + d * 0.07) * 0.8;
-  return -1.2 - Math.min(17, d * 0.085) + wobble * Math.min(1, d / 26);
+  // fill in the slope from the very edge outward: the terrain used to drop a
+  // straight metre two away from the road and read as the tarmac floating over a
+  // valley, even on straight flats
+  // the ground should meet the roadbed, not float a metre away: ramp down gently
+  // for the first few metres, then slope into the wider terrain
+  const blend = Math.min(1, Math.max(0, d / 8));
+  const near = -0.05 - d * 0.04 + wobble * Math.min(0.15, d / 16);
+  const farDrop = -1.2 - Math.min(17, d * 0.085) + wobble * Math.min(1, d / 26);
+  return THREE.MathUtils.lerp(near, farDrop, blend);
 }
 
 /**
