@@ -1,3 +1,5 @@
+import { DESIGNED_TRACKS } from "./tracks";
+
 // ---------------------------------------------------------------------------
 // Core game data: characters, aesthetics, tracks, vehicle parts, weapons
 // ---------------------------------------------------------------------------
@@ -635,9 +637,12 @@ export interface PadDef {
   route?: number;
   /** metres off the centre line */
   lat?: number;
-  kind: "boost" | "jump";
+  kind: "boost" | "jump" | "cannon";
   /** boost: speed multiplier. jump: upward speed in units per second */
   power?: number;
+  /** cannon: lap progress on the main loop where it sets you down, and how high the shot arcs */
+  toT?: number;
+  lift?: number;
 }
 
 export interface PortalDef {
@@ -725,6 +730,8 @@ export interface TrackDef {
   designed?: boolean;
   /** height of a flat floor under an elevated circuit; the road stands on pillars */
   floor?: number;
+  /** height of the sea. Boat stretches ride on it, submarine stretches go under it */
+  sea?: number;
 }
 
 /** Vertical profile of a circuit, written as harmonics of the loop angle. */
@@ -743,39 +750,6 @@ export function reliefY(th: number, relief?: ReliefDef): number {
   const clamped = Math.min(1, Math.max(-1, sum));
   return relief.amp * (0.5 + 0.5 * clamped);
 }
-
-function scaled(
-  pts: [number, number, number][],
-  k: number,
-  relief?: ReliefDef
-): [number, number, number][] {
-  return pts.map((p) => {
-    const th = Math.atan2(p[0], -p[2]);
-    return [p[0] * k, reliefY(th, relief), p[2] * k] as [number, number, number];
-  });
-}
-
-/** Star-shaped closed loop with harmonic wobble: long, winding and never self-crossing. */
-function radial(
-  n: number,
-  R: number,
-  harm: [number, number, number][],
-  sx = 1,
-  sz = 1,
-  relief?: ReliefDef
-): [number, number, number][] {
-  const pts: [number, number, number][] = [];
-  for (let i = 0; i < n; i++) {
-    const th = (i / n) * Math.PI * 2;
-    let k = 1;
-    for (const [f, a, p] of harm) k += a * Math.sin(f * th + p);
-    const r = R * k;
-    pts.push([Math.sin(th) * r * sx, reliefY(th, relief), -Math.cos(th) * r * sz]);
-  }
-  return pts;
-}
-
-const K = 1.75; // classic circuits are stretched to be much longer
 
 /** Default scenery chain per aesthetic: every lap crosses four different places. */
 const THEME_BIOMES: Record<ThemeId, BiomeId[]> = {
@@ -836,342 +810,8 @@ export function defaultBiomes(theme: ThemeId, phase = 0): BiomeDef[] {
   }).sort((a, b) => a.t0 - b.t0);
 }
 
-/** Points of a spiral ramp: `turns` laps around (cx, cz), climbing from y0 to y1. */
-function helix(cx: number, cz: number, r: number, a0: number, turns: number, y0: number, y1: number, flat = 0): [number, number, number][] {
-  const steps = Math.max(2, Math.round(Math.abs(turns) * 8));
-  const out: [number, number, number][] = [];
-  for (let k = 0; k <= steps; k++) {
-    const u = k / steps;
-    const a = a0 + turns * Math.PI * 2 * u;
-    // `flat` keeps the first part level, so a road can split off before the climb starts
-    const rise = Math.max(0, (u - flat) / (1 - flat));
-    out.push([cx + Math.sin(a) * r, y0 + (y1 - y0) * rise, cz + Math.cos(a) * r]);
-  }
-  return out;
-}
-
-export const TRACKS: TrackDef[] = [
-  // Built by hand in real 3D: a spiral tower, a bridge that crosses over the
-  // start straight, a jump on the way down and a low road that goes round instead.
-  {
-    id: "torre", difficulty: 2, hazards: 0, theme: "y2k", designed: true, noGround: true, floor: -1.2,
-    points: [
-      [-300, 0, -200], [-180, 0, -200], [-60, 0, -200], [60, 0, -200], [180, 0, -200],
-      [270, 1, -175], [318, 3, -110], [330, 6, -30], [318, 10, 50], [275, 13, 120], [205, 15, 170],
-      ...helix(120, 130, 60, 0, -1, 16, 42, 0.125),
-      [40, 41, 195], [-50, 39, 180], [-130, 34, 140], [-185, 29, 80], [-205, 24, 10], [-205, 19, -70],
-      [-200, 15, -140], [-200, 13, -200], [-205, 10, -260],
-      [-235, 7, -315], [-290, 4, -345], [-350, 2, -330], [-390, 1, -270], [-372, 0, -222], [-335, 0, -203],
-    ],
-    zones: [],
-    forks: [],
-    branches: [],
-    holes: [[0.62, 0.626]],
-    kick: 2.6,
-    routes: [
-      {
-        t0: 0.424, t1: 0.769, width: 13,
-        points: [[40, 15, 232], [-80, 14, 262], [-200, 14, 240], [-290, 15, 170], [-322, 17, 80], [-292, 19, 0]],
-      },
-    ],
-    pads: [
-      { t: 0.045, kind: "boost" }, { t: 0.3, kind: "boost" }, { t: 0.5, kind: "boost" }, { t: 0.607, kind: "boost", power: 1.5 },
-      { t: 0.5, route: 0, kind: "boost" },
-    ],
-  },
-  {
-    id: "laguna", difficulty: 1, hazards: 3, theme: "aqua",
-    relief: { amp: 14, waves: [[1, 0.7, 0.6], [3, 0.35, 2.1]] },
-    points: scaled([
-      [0, 0, -46], [26, 0, -40], [46, 0, -18], [50, 0, 8], [34, 0, 32], [10, 0, 28],
-      [-6, 0, 8], [-28, 0, 10], [-46, 0, 32], [-62, 0, 12], [-56, 0, -18], [-30, 0, -36], [-12, 0, -26],
-    ], K, { amp: 14, waves: [[1, 0.7, 0.6], [3, 0.35, 2.1]] }),
-    zones: [{ t0: 0.13, t1: 0.27, type: "water" }, { t0: 0.55, t1: 0.68, type: "sky" }],
-    forks: [[0.33, 0.44]],
-    branches: [{ t0: 0.72, t1: 0.82, pull: 30, rise: 5 }, { t0: 0.72, t1: 0.93, pull: -26 }],
-  },
-  {
-    id: "vortice", difficulty: 2, hazards: 5, theme: "aero",
-    relief: { amp: 20, waves: [[2, 0.75, 1.1], [5, 0.3, 0.2]] },
-    points: scaled([
-      [0, 0, -62], [30, 0, -58], [52, 0, -44], [40, 0, -22], [56, 0, -4], [64, 0, 20],
-      [52, 0, 46], [26, 0, 52], [6, 0, 34], [-8, 0, 20], [-20, 0, 38], [-44, 0, 50],
-      [-66, 0, 36], [-58, 0, 8], [-34, 0, -4], [-48, 0, -26], [-38, 0, -52], [-12, 0, -50],
-    ], K, { amp: 20, waves: [[2, 0.75, 1.1], [5, 0.3, 0.2]] }),
-    zones: [{ t0: 0.3, t1: 0.42, type: "water" }, { t0: 0.66, t1: 0.8, type: "sky" }, { t0: 0.86, t1: 0.95, type: "sub" }],
-    forks: [[0.06, 0.18], [0.46, 0.56]],
-    branches: [{ t0: 0.2, t1: 0.27, pull: -28, rise: 3 }, { t0: 0.57, t1: 0.64, pull: 30, rise: 6 }, { t0: 0.1, t1: 0.26, pull: 30}, { t0: 0.84, t1: 0.98, pull: -28 }],
-    traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
-  },
-  {
-    id: "canon", difficulty: 3, hazards: 7, theme: "eco",
-    relief: { amp: 26, waves: [[1, 0.8, 2.4], [4, 0.35, 1.4], [7, 0.15, 0.7]] },
-    points: scaled([
-      [0, 0, -70], [26, 0, -66], [34, 0, -46], [58, 0, -42], [72, 0, -18], [56, 0, 0],
-      [68, 0, 20], [58, 0, 46], [30, 0, 40], [22, 0, 62], [-8, 0, 70], [-28, 0, 52],
-      [-14, 0, 32], [-38, 0, 18], [-62, 0, 30], [-78, 0, 8], [-62, 0, -18], [-36, 0, -22],
-      [-50, 0, -48], [-22, 0, -62], [-4, 0, -52],
-    ], K, { amp: 26, waves: [[1, 0.8, 2.4], [4, 0.35, 1.4], [7, 0.15, 0.7]] }),
-    zones: [{ t0: 0.36, t1: 0.47, type: "water" }, { t0: 0.76, t1: 0.9, type: "sky" }, { t0: 0.26, t1: 0.33, type: "sub" }],
-    forks: [[0.1, 0.22], [0.52, 0.64]],
-    branches: [{ t0: 0.66, t1: 0.74, pull: -28, rise: 4 }, { t0: 0.56, t1: 0.62, pull: 28, rise: 7 }, { t0: 0.02, t1: 0.16, pull: -32}, { t0: 0.56, t1: 0.72, pull: 30 }],
-    traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
-  },
-  {
-    id: "celeste", difficulty: 2, hazards: 4, theme: "aero",
-    relief: { amp: 18, waves: [[3, 0.7, 0.3], [6, 0.3, 2.6]] },
-    points: scaled([
-      [0, 0, -58], [34, 0, -54], [62, 0, -32], [68, 0, 2], [52, 0, 30], [30, 0, 52],
-      [0, 0, 54], [-22, 0, 44], [-26, 0, 18], [-10, 0, 2], [-34, 0, -12], [-62, 0, 0],
-      [-72, 0, -28], [-50, 0, -54], [-20, 0, -50],
-    ], K, { amp: 18, waves: [[3, 0.7, 0.3], [6, 0.3, 2.6]] }),
-    zones: [{ t0: 0.18, t1: 0.3, type: "water" }, { t0: 0.48, t1: 0.72, type: "sky" }],
-    forks: [[0.78, 0.88]],
-    branches: [{ t0: 0.34, t1: 0.44, pull: 30, rise: 4 }, { t0: 0.34, t1: 0.46, pull: 28 }],
-  },
-  {
-    id: "atlantis", difficulty: 3, hazards: 8, theme: "aqua",
-    relief: { amp: 22, waves: [[1, 0.7, 1.9], [3, 0.4, 0.5]] },
-    points: scaled([
-      [0, 0, -74], [34, 0, -70], [56, 0, -56], [44, 0, -34], [70, 0, -22], [80, 0, 4],
-      [62, 0, 18], [72, 0, 44], [48, 0, 60], [20, 0, 52], [12, 0, 28], [-6, 0, 16],
-      [-18, 0, 36], [-44, 0, 56], [-72, 0, 52], [-88, 0, 28], [-76, 0, 2], [-56, 0, -12],
-      [-72, 0, -38], [-58, 0, -62], [-28, 0, -70], [-8, 0, -58],
-    ], K, { amp: 22, waves: [[1, 0.7, 1.9], [3, 0.4, 0.5]] }),
-    zones: [{ t0: 0.14, t1: 0.22, type: "water" }, { t0: 0.58, t1: 0.74, type: "sky" }, { t0: 0.3, t1: 0.38, type: "sub" }],
-    forks: [[0.04, 0.12], [0.44, 0.54], [0.84, 0.94]],
-    branches: [{ t0: 0.76, t1: 0.83, pull: -27, rise: 3 }, { t0: 0.39, t1: 0.43, pull: 26, rise: 8 }, { t0: 0.08, t1: 0.24, pull: 34}, { t0: 0.44, t1: 0.56, pull: -30}, { t0: 0.86, t1: 0.99, pull: 26 }],
-  },
-  {
-    id: "aether", difficulty: 3, hazards: 6, theme: "vapor",
-    relief: { amp: 30, waves: [[2, 0.8, 0.8], [5, 0.35, 2.2]] },
-    points: scaled([
-      [0, 0, -68], [38, 0, -62], [66, 0, -40], [58, 0, -14], [84, 0, 2], [74, 0, 28],
-      [52, 0, 42], [24, 0, 34], [10, 0, 54], [-16, 0, 66], [-42, 0, 56], [-52, 0, 32],
-      [-32, 0, 18], [-52, 0, 4], [-78, 0, 16], [-92, 0, -12], [-70, 0, -34], [-44, 0, -32],
-      [-54, 0, -58], [-24, 0, -70], [-6, 0, -56],
-    ], K, { amp: 30, waves: [[2, 0.8, 0.8], [5, 0.35, 2.2]] }),
-    zones: [{ t0: 0.28, t1: 0.38, type: "water" }, { t0: 0.55, t1: 0.85, type: "sky" }],
-    forks: [[0.08, 0.2], [0.42, 0.5], [0.88, 0.98]],
-    branches: [{ t0: 0.21, t1: 0.27, pull: 29, rise: 4 }, { t0: 0.04, t1: 0.2, pull: -34}, { t0: 0.6, t1: 0.76, pull: 32 }],
-  },
-  {
-    id: "neon", difficulty: 3, hazards: 7, theme: "techno",
-    relief: { amp: 16, waves: [[4, 0.75, 1.7], [8, 0.25, 0.4]] },
-    points: radial(30, 148, [[2, 0.14, 0.3], [3, 0.12, 1.2], [5, 0.09, 2.1]], 1.15, 0.9, { amp: 16, waves: [[4, 0.75, 1.7], [8, 0.25, 0.4]] }),
-    zones: [{ t0: 0.22, t1: 0.3, type: "water" }, { t0: 0.62, t1: 0.78, type: "sky" }, { t0: 0.4, t1: 0.48, type: "sub" }],
-    forks: [[0.08, 0.16], [0.84, 0.94]],
-    branches: [{ t0: 0.32, t1: 0.38, pull: 30, rise: 5 }, { t0: 0.52, t1: 0.6, pull: -28, rise: 3 }, { t0: 0.06, t1: 0.2, pull: 36}, { t0: 0.34, t1: 0.44, pull: -30}, { t0: 0.74, t1: 0.9, pull: 32 }],
-    traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
-  },
-  {
-    id: "coral", difficulty: 2, hazards: 4, theme: "frutiger",
-    relief: { amp: 13, waves: [[3, 0.7, 2.8], [6, 0.3, 1.1]] },
-    points: radial(28, 131, [[3, 0.16, 0.8], [4, 0.1, 2.4], [6, 0.06, 0.4]], 1.0, 1.1, { amp: 13, waves: [[3, 0.7, 2.8], [6, 0.3, 1.1]] }),
-    zones: [{ t0: 0.1, t1: 0.2, type: "water" }, { t0: 0.68, t1: 0.8, type: "sky" }, { t0: 0.3, t1: 0.42, type: "sub" }],
-    forks: [[0.5, 0.62]],
-    branches: [{ t0: 0.22, t1: 0.28, pull: -29, rise: 4 }, { t0: 0.84, t1: 0.92, pull: 28, rise: 5 }, { t0: 0.02, t1: 0.16, pull: -38}, { t0: 0.32, t1: 0.46, pull: 34}, { t0: 0.56, t1: 0.7, pull: -32}, { t0: 0.82, t1: 0.97, pull: 30 }],
-  },
-  {
-    id: "glacier", difficulty: 3, hazards: 6, theme: "aqua",
-    relief: { amp: 24, waves: [[1, 0.75, 0.2], [3, 0.35, 2.9]] },
-    points: radial(34, 160, [[2, 0.2, 2], [4, 0.12, 0.6], [7, 0.07, 1.4]], 1.2, 0.95, { amp: 24, waves: [[1, 0.75, 0.2], [3, 0.35, 2.9]] }),
-    zones: [{ t0: 0.36, t1: 0.44, type: "water" }, { t0: 0.6, t1: 0.72, type: "sky" }],
-    forks: [[0.12, 0.24], [0.78, 0.9]],
-    branches: [{ t0: 0.26, t1: 0.34, pull: 30, rise: 4 }, { t0: 0.48, t1: 0.56, pull: -28, rise: 6 }, { t0: 0.14, t1: 0.3, pull: -28}, { t0: 0.66, t1: 0.8, pull: 30 }],
-  },
-  {
-    id: "retro", difficulty: 2, hazards: 6, theme: "win98",
-    relief: { amp: 12, waves: [[2, 0.7, 2.2], [5, 0.3, 0.9]] },
-    points: radial(32, 140, [[4, 0.2, 0], [8, 0.06, 0.5]], 1, 1, { amp: 12, waves: [[2, 0.7, 2.2], [5, 0.3, 0.9]] }),
-    zones: [{ t0: 0.2, t1: 0.28, type: "water" }, { t0: 0.58, t1: 0.7, type: "sky" }, { t0: 0.74, t1: 0.82, type: "sub" }],
-    forks: [[0.06, 0.14], [0.4, 0.5]],
-    branches: [{ t0: 0.3, t1: 0.37, pull: 29, rise: 5 }, { t0: 0.86, t1: 0.93, pull: -27, rise: 4 }, { t0: 0.24, t1: 0.38, pull: 26}, { t0: 0.58, t1: 0.74, pull: -26 }],
-  },
-];
-
-TRACKS.push(
-  {
-    id: "prisma", difficulty: 3, hazards: 8, theme: "liquid",
-    relief: { amp: 28, waves: [[1, 0.8, 1.5], [4, 0.4, 0.3], [7, 0.2, 2.5]] },
-    points: radial(36, 165, [[2, 0.18, 1.1], [3, 0.13, 2.6], [5, 0.08, 0.2], [8, 0.05, 1.8]], 1.1, 1.0, { amp: 28, waves: [[1, 0.8, 1.5], [4, 0.4, 0.3], [7, 0.2, 2.5]] }),
-    zones: [{ t0: 0.16, t1: 0.24, type: "water" }, { t0: 0.52, t1: 0.66, type: "sky" }, { t0: 0.78, t1: 0.88, type: "sub" }],
-    forks: [[0.04, 0.13], [0.3, 0.42], [0.68, 0.76]],
-    branches: [{ t0: 0.08, t1: 0.24, pull: 32}, { t0: 0.44, t1: 0.58, pull: -30}, { t0: 0.78, t1: 0.94, pull: 28 }],
-    traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
-  },
-  {
-    id: "nimbus", difficulty: 2, hazards: 5, theme: "sunset",
-    relief: { amp: 32, waves: [[2, 0.8, 2.6], [5, 0.35, 1.2]] },
-    points: radial(30, 150, [[3, 0.17, 1.9], [6, 0.09, 0.7]], 1.25, 0.88, { amp: 32, waves: [[2, 0.8, 2.6], [5, 0.35, 1.2]] }),
-    zones: [{ t0: 0.26, t1: 0.34, type: "water" }, { t0: 0.5, t1: 0.74, type: "sky" }],
-    forks: [[0.08, 0.2], [0.82, 0.94]],
-    branches: [{ t0: 0.2, t1: 0.34, pull: -24}, { t0: 0.62, t1: 0.78, pull: 26 }],
-  },
-  {
-    id: "abyss", difficulty: 3, hazards: 7, theme: "techno",
-    relief: { amp: 20, waves: [[3, 0.7, 0.9], [6, 0.3, 2.2]] },
-    points: radial(34, 158, [[2, 0.22, 0.4], [5, 0.1, 2.2], [7, 0.06, 1.1]], 0.95, 1.2, { amp: 20, waves: [[3, 0.7, 0.9], [6, 0.3, 2.2]] }),
-    zones: [{ t0: 0.12, t1: 0.3, type: "sub" }, { t0: 0.44, t1: 0.52, type: "water" }, { t0: 0.66, t1: 0.78, type: "sky" }],
-    forks: [[0.34, 0.42], [0.86, 0.96]],
-    branches: [{ t0: 0.06, t1: 0.22, pull: 34}, { t0: 0.4, t1: 0.56, pull: -34}, { t0: 0.72, t1: 0.88, pull: 30 }],
-    traps: [{ t: 0.4, side: 1, kind: "bar", speed: 0.3, phase: 0, active: true }],
-  },
-  {
-    id: "garden", difficulty: 1, hazards: 4, theme: "eco",
-    relief: { amp: 15, waves: [[1, 0.7, 2.9], [3, 0.3, 1.4]] },
-    points: radial(28, 135, [[4, 0.15, 2.8], [2, 0.1, 0.9]], 1.05, 1.05, { amp: 15, waves: [[1, 0.7, 2.9], [3, 0.3, 1.4]] }),
-    zones: [{ t0: 0.2, t1: 0.3, type: "water" }, { t0: 0.6, t1: 0.72, type: "sky" }],
-    forks: [[0.42, 0.52]],
-    branches: [{ t0: 0.28, t1: 0.44, pull: 24}, { t0: 0.66, t1: 0.8, pull: -24 }],
-  },
-
-  // Three circuits that are one thing all the way round. The rest mix land,
-  // water and sky; these are committed, so a submarine circuit is a submarine
-  // circuit from the lights to the flag and the scenery follows the vehicle.
-  {
-    id: "abismo", difficulty: 3, hazards: 4, theme: "aqua", noGround: true,
-    relief: { amp: 16, waves: [[1, 0.7, 1.2], [3, 0.4, 2.4]] },
-    points: radial(32, 152, [[2, 0.2, 0.6], [3, 0.12, 2.2], [5, 0.07, 1.1]], 1.12, 0.92, { amp: 16, waves: [[1, 0.7, 1.2], [3, 0.4, 2.4]] }),
-    zones: [{ t0: 0, t1: 1, type: "sub" }],
-    biomes: [{ id: "reef", t0: 0, t1: 0.3 }, { id: "ruins", t0: 0.3, t1: 0.58 }, { id: "reef", t0: 0.58, t1: 0.78 }, { id: "ruins", t0: 0.78, t1: 1 }],
-    forks: [[0.12, 0.24], [0.66, 0.78]],
-    branches: [{ t0: 0.28, t1: 0.44, pull: 30, rise: 3 }, { t0: 0.6, t1: 0.76, pull: -30, rise: 4 }]
-  },
-  {
-    id: "nubes", difficulty: 2, hazards: 3, theme: "aero", noGround: true,
-    relief: { amp: 26, waves: [[2, 0.7, 0.4], [4, 0.35, 1.9]] },
-    points: radial(30, 158, [[2, 0.19, 1.7], [3, 0.11, 0.6], [6, 0.06, 2.7]], 1.2, 0.9, { amp: 26, waves: [[2, 0.7, 0.4], [4, 0.35, 1.9]] }),
-    zones: [{ t0: 0, t1: 1, type: "sky" }],
-    biomes: [{ id: "cloud", t0: 0, t1: 0.34 }, { id: "ruins", t0: 0.34, t1: 0.66 }, { id: "cloud", t0: 0.66, t1: 1 }],
-    forks: [[0.18, 0.3], [0.62, 0.74]],
-    branches: [{ t0: 0.32, t1: 0.5, pull: 28, rise: 6 }, { t0: 0.7, t1: 0.86, pull: -28, rise: 5 }]
-  },
-  {
-    id: "oceano", difficulty: 2, hazards: 5, theme: "aqua", noGround: true,
-    relief: { amp: 10, waves: [[1, 0.8, 2.1], [2, 0.4, 0.5]] },
-    points: radial(34, 148, [[3, 0.16, 1.2], [4, 0.1, 2.8], [7, 0.05, 0.3]], 1.08, 1.02, { amp: 10, waves: [[1, 0.8, 2.1], [2, 0.4, 0.5]] }),
-    zones: [{ t0: 0, t1: 1, type: "water" }],
-    biomes: [{ id: "coast", t0: 0, t1: 0.26 }, { id: "reef", t0: 0.26, t1: 0.54 }, { id: "coast", t0: 0.54, t1: 0.8 }, { id: "reef", t0: 0.8, t1: 1 }],
-    forks: [[0.14, 0.26], [0.6, 0.72]],
-    branches: [{ t0: 0.3, t1: 0.48, pull: 28, rise: 2 }, { t0: 0.74, t1: 0.9, pull: -28, rise: 3 }]
-  }
-);
-
-// Every circuit gets alternative routes so the finish can be reached in
-// different ways: hand-written side roads plus generated ones, dodging the zones.
-// Every circuit is normalised to the same lap length. Lap time is basically
-// length / average speed, so without this the short oval finished a lap in 20 s
-// while the long one took 45. Everything else (zones, shortcuts, portals, gaps,
-// item spawns) is expressed in track fractions, so it scales for free.
-const TARGET_LEN = 2300;
-for (const trk of TRACKS) {
-  if (trk.designed) continue;
-  let len = 0;
-  for (let i = 0; i < trk.points.length; i++) {
-    const a = trk.points[i];
-    const b = trk.points[(i + 1) % trk.points.length];
-    len += Math.hypot(b[0] - a[0], b[2] - a[2]);
-  }
-  const k = TARGET_LEN / len;
-  // hills grow slower than the track: full scaling would turn every rise into a
-  // wall the karts cannot climb
-  const ky = Math.min(1.7, Math.sqrt(k));
-  for (const pt of trk.points) {
-    pt[0] *= k;
-    pt[2] *= k;
-    pt[1] *= ky;
-  }
-}
-
-for (const trk of TRACKS) {
-  // every circuit gets its own phase so the holes, warps and portals never land
-  // on exactly the same fraction of the lap from one track to the next
-  const phase = TRACKS.indexOf(trk);
-  if (trk.designed) continue;
-  if (!trk.gaps) trk.gaps = [];
-  if (!trk.portals) trk.portals = [];
-
-  // Only a hole in the road is a hard block. Zones and forks are not: a skyway
-  // flies straight over a boat section or a fork ribbon, because the lanes are
-  // stacked in height rather than laid out side by side. Blocking them as well
-  // left barely 20% of each lap free, which starved the route network.
-  const hit = (a: number, b: number, c: number, d: number, pad: number) =>
-    !(b < c - pad || a > d + pad);
-  const overGap = (a: number, b: number, pad = 0.008) => trk.gaps!.some((g) => hit(a, b, g.t0, g.t1, pad));
-  const used = (a: number, b: number, pad = 0.008) => trk.branches.some((br) => hit(a, b, br.t0, br.t1, pad));
-
-  // The route network: real side roads, four per lap, alternating sides. They
-  // leave the carriageway, run alongside it and merge back in, so a lap can be
-  // driven four different ways without touching a single teleport.
-  const want = 6;
-  const PULLS = [30, -28, 26, -30];
-  const RISES = [4, 6, 3, 5];
-  const SPAN = 0.075;
-  const SLOT = 0.21;
-  for (let k = 0; k < want; k++) {
-    let placed = false;
-    for (let nudge = 0; nudge < 24 && !placed; nudge++) {
-      const t0 = (k * SLOT + 0.055 + phase * 0.017 + nudge * 0.011) % (1 - SPAN);
-      const t1 = t0 + SPAN;
-      if (overGap(t0, t1) || used(t0, t1)) continue;
-      trk.branches.push({ t0, t1, pull: PULLS[(k + phase) % PULLS.length], rise: RISES[k % RISES.length] });
-      placed = true;
-    }
-  }
-  // Two side roads on the same side of the same stretch would fight over the same
-  // tarmac: their decks would overlap and the physics would offer two surfaces to
-  // stand on. Keep the longer one, drop the shorter.
-  // optionally add a third fork if there is room, to multiply alternate routes
-  if (trk.forks.length < 3) {
-    for (let i = 0; i < 80; i++) {
-      const t0 = (i * 0.143 + 0.17 + phase * 0.041) % 1;
-      const t1 = t0 + 0.11;
-      if (t1 >= 1) continue;
-      const hitf = (a: number, b: number, c: number, d: number, pad: number) => !(b < c - pad || a > d + pad);
-      const overGap = (a: number, b: number, pad = 0.01) => trk.gaps!.some((g) => hitf(a, b, g.t0, g.t1, pad));
-      const usedBr = (a: number, b: number, pad = 0.01) => trk.branches.some((br) => hitf(a, b, br.t0, br.t1, pad));
-      const usedF = (a: number, b: number, pad = 0.01) => trk.forks.some((f) => hitf(a, b, f[0], f[1], pad));
-      if (overGap(t0, t1) || usedBr(t0, t1) || usedF(t0, t1)) continue;
-      if (trk.forks.some((f) => Math.abs(f[0] - t0) < 0.22)) continue;
-      trk.forks.push([t0, t1]);
-      break;
-    }
-  }
-
-  for (let pass = 0; pass < 4; pass++) {
-    const drop = new Set<Branch>();
-    for (let i = 0; i < trk.branches.length; i++) {
-      for (let j = i + 1; j < trk.branches.length; j++) {
-        const a = trk.branches[i];
-        const b = trk.branches[j];
-        if (Math.sign(a.pull) !== Math.sign(b.pull)) continue;
-        if (Math.abs(Math.abs(a.pull) - Math.abs(b.pull)) >= 17) continue;
-        if (Math.min(a.t1, b.t1) - Math.max(a.t0, b.t0) <= 0) continue;
-        drop.add(a.t1 - a.t0 < b.t1 - b.t0 ? a : b);
-      }
-    }
-    if (!drop.size) break;
-    trk.branches = trk.branches.filter((b) => !drop.has(b));
-  }
-  trk.branches.sort((a, b) => a.t0 - b.t0);
-
-  // Portals last: they only need a couple of metres at the barrier, so they can
-  // always find a home. They throw you FORWARD by a short hop; a portal that
-  // skipped half the lap would wreck the lap count and the pacing.
-  for (let i = 0; i < 300 && trk.portals!.length < 2; i++) {
-    const tIn = (i * 0.00311 + 0.19 + phase * 0.043) % 0.93;
-    // never stacked on top of each other or on a warp gate
-    if (overGap(tIn, tIn + 0.006) || used(tIn, tIn + 0.006)) continue;
-    if (trk.portals!.some((p) => Math.abs(p.tIn - tIn) < 0.18)) continue;
-    const k = trk.portals!.length;
-    // the exit must not drop the car into a hole
-    let tOut = (tIn + 0.075 + k * 0.02) % 1;
-    for (let f = 0; f < 3 && overGap(tOut, tOut + 0.01); f++) tOut = (tOut + 0.09) % 1;
-    trk.portals!.push({ tIn, tOut, side: k === 0 ? 1 : -1, cd: 3.5 + k });
-  }
-
-}
+// The circuits themselves are drawn in tracks.ts with the designer in trackDesign.ts.
+export const TRACKS: TrackDef[] = DESIGNED_TRACKS;
 
 /**
  * Per-lap mutation. A race never looks the same twice: every lap rotates the
@@ -1255,7 +895,7 @@ function shiftColor(hex: string, hue: number, sat: number, dim: number): string 
 
 /** Live state for mutating hazards (written by Track, read by the simulation). */
 export const hazardState: {
-  positions: { x: number; z: number; t: number }[];
+  positions: { x: number; y: number; z: number; t: number }[];
   lap: number;
 } = { positions: [], lap: 0 };
 

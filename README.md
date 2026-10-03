@@ -1,7 +1,7 @@
 # Bubble Team Racing
 
-Aero kart racing for the browser and the desktop: fourteen circuits that climb, drop
-through gaps and split into stacked shortcuts, twenty-eight characters, twenty-four
+Aero kart racing for the browser and the desktop: eight hand-built circuits with spiral
+towers, bridges, jumps, cannons, flights and dives, twenty-eight characters, nineteen
 chassis, six finishes and a partner who mans the fusion turret.
 
 Built with React 19, TypeScript, Vite, React Three Fiber and Tauri 2. The whole game
@@ -75,20 +75,21 @@ Options, with three control presets that install a full layout at once.
 
 ## What's in the game
 
-- **17 circuits** of roughly 2000 units, normalised so an AI lap lands between 60 and 90
-  seconds, each with vertical relief, a palette that mutates every lap and a themed sky.
-  Three of them are committed circuits: one is submarine from the lights to the flag, one
-  is all aircraft and one is all water.
-- **A lap that changes place**: every circuit crosses three or four biomes, and the
-  ground, what grows on it, the haze and the light follow the stretch you are on.
-- **Real gaps**: a driveable ramp, a lip, a pit and a far wall, with the physics and the
-  road mesh sharing one profile. Fall in and you get fished back to the far lip.
-- **Real side roads**: four alternative routes per lap that leave the carriageway, run
-  alongside it and merge back in, each with its own deck, kerbs and barriers. They are
-  tarmac you drive on, not teleports. Two portals still throw you a short hop ahead.
+- **8 circuits, one per aesthetic**, drawn by hand in real 3D (`juego/src/tracks.ts`):
+  roads pass over and under each other, wind up spiral towers and drop off falls. Laps
+  run 2150 to 2800 units.
+- **Alternate routes at other heights**: a road above and a road below the main one,
+  each with its own tarmac and barriers, plus an open chute with a gap in it.
+- **Jumps, falls and cannons**: a gap is road that is not there, with a lip that
+  launches; miss it and you are put back with a run-up. Cannons fire you over a corner
+  or back up to the top of a waterfall.
+- **Flying and diving for real**: in the air the pedals climb and dive to thread the
+  rings; submarine stretches go down a tube to twenty units under the sea.
+- **Barriers you slide along**: a graze costs next to nothing, a head-on hit costs most
+  of your speed. Karts shove each other and the heavier one gives way less.
 - **28 characters**, each with its own fusion turret signature: cadence, salvo size, fan
   angle and hit weight.
-- **24 chassis**, **7 + 7 + 7 water, air and sub craft** with real stats, and **6 finishes**
+- **19 chassis**, **7 + 7 + 7 water, air and sub craft** with real stats, and **6 finishes**
   (solid, gloss, matte, chrome, glass and holographic).
 - **Six modes**: quick race, time trial, team chaos, sprint, duel and endurance.
 - **Eight languages** including Hebrew and Arabic with proper RTL layout.
@@ -100,7 +101,10 @@ Options, with three control presets that install a full layout at once.
 
 ```
 juego/src            React + Three.js game
-juego/src/game       Scene (physics, AI, items), Track, Vehicle, particles
+juego/src/game       Scene (race rules, AI, items), Track, Vehicle, particles
+juego/src/physics.ts ground, barriers, gravity, lap progress: no rendering, runs headless
+juego/src/tracks.ts  the circuits, drawn with the designer in trackDesign.ts
+juego/tools          headless simulator, geometry checker and track plotter
 juego/src/screens    menus, garage, options, HUD, overlays
 juego/src-tauri      desktop shell (Rust) and bundle configuration
 AUDITORIA.md         what came from which of the four source zips, and how it was measured

@@ -17,14 +17,12 @@ import {
   PLANES,
   SUBS,
   TRACK_WIDTH,
-  SKY_ALTITUDE,
   WEAPON_META,
   raceSnapshot,
   hazardState,
   rollWeapon,
   AI_PROFILES,
   zoneAt,
-  zoneOfKind,
   craftSpeed,
   craftHandling,
   fusionSpec,
@@ -32,13 +30,12 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
+import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, getSkyRings, FLY_BASE, FLY_UP, FLY_DOWN, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
 import { moveBody, makeResult, placeBody, respawnBody, aimAhead, collideBodies, progDelta, GRAVITY, type Body, type StepOpts } from "../physics";
 import { emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
 
 const TAG_COOLDOWN_MAX = 3.6;
-const RING_COUNT = 7;
 // scratch objects for the per-frame physics calls, so the loop allocates nothing
 const stepOpts: StepOpts = { rideOffset: 0, bobbing: false, fly: false, flyAlt: 0, ghost: false };
 const stepRes = makeResult();
@@ -73,6 +70,10 @@ interface Racer extends Body {
   /** ribbon the AI has decided to take, 0 for the main loop, and the junction it last decided at */
   aiRoute: number;
   aiSeen: number;
+  /** how far above the cruising line the pilot is holding the plane */
+  flyOff: number;
+  /** being fired by a cannon: a scripted arc from where it was to where it lands */
+  launch: null | { from: THREE.Vector3; to: THREE.Vector3; idx: number; e: number; dur: number; lift: number };
   steerSmooth: number;
   t: number;
   lap: number;
@@ -175,18 +176,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const mode = MODES[modeId];
 
 
-  const skyRings = useMemo(() => {
-    const z = zoneOfKind("sky");
-    const out: THREE.Vector3[] = [];
-    if (!z) return out;
-    for (let i = 0; i < RING_COUNT; i++) {
-      const t = z.t0 + ((i + 0.5) / RING_COUNT) * (z.t1 - z.t0);
-      const p = trackCurvePoint(t);
-      const u = (t - z.t0) / (z.t1 - z.t0);
-      out.push(new THREE.Vector3(p.x, p.y + Math.sin(u * Math.PI) * SKY_ALTITUDE + 1.6, p.z));
-    }
-    return out;
-  }, []);
+  const skyRings = useMemo(() => getSkyRings(), []);
 
   const racers = useMemo<Racer[]>(() => {
     const list: Racer[] = [];
@@ -241,6 +231,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         padCd: 0,
         aiRoute: 0,
         aiSeen: -1,
+        flyOff: 0,
+        launch: null,
         heading: 0,
         speed: 0,
         steerSmooth: 0,
@@ -281,7 +273,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         boostsUsed: 0,
         tagSwaps: 0,
         rings: 0,
-        ringCd: Array.from({ length: RING_COUNT }, () => 0),
+        ringCd: skyRings.map(() => 0),
         bumpCd: 0,
         particleAccum: 0,
         visual: { current: { boosting: false, shielded: false, steer: 0, speedFrac: 0, stunned: false, mode: "land", drift: false } },
@@ -331,7 +323,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const tangent = trackTangentAt(t);
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
       const zone = zoneAt(t);
-      const y = surfaceYAt(t) + (zone?.type === "sky" ? SKY_ALTITUDE + 1.2 : 1.1);
+      const y = surfaceYAt(t) + (zone?.type === "sky" ? FLY_BASE + 0.6 : 1.1);
       coins.push({ pos: center.clone().addScaledVector(normal, (i % 2 === 0 ? 1 : -1) * 1.9).setY(y), active: true, respawn: 0, group: { current: null } });
     }
     // coin bait along every alternate route
@@ -850,6 +842,44 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.magnetTimer > 0) r.magnetTimer -= dt;
     if (r.ghostTimer > 0) r.ghostTimer -= dt;
 
+    // ---- fired by a cannon: a scripted arc, nothing else happens until it lands ----
+    if (r.launch) {
+      const L = r.launch;
+      L.e = Math.min(1, L.e + dt / L.dur);
+      const ease = L.e * L.e * (3 - 2 * L.e);
+      const before = r.y;
+      r.pos.lerpVectors(L.from, L.to, ease);
+      r.y = r.pos.y + Math.sin(L.e * Math.PI) * L.lift;
+      r.pos.y = r.y;
+      r.heading += wrapAngle(Math.atan2(L.to.x - L.from.x, L.to.z - L.from.z) - r.heading) * Math.min(1, dt * 6);
+      r.pitch = THREE.MathUtils.lerp(r.pitch, THREE.MathUtils.clamp((r.y - before) / Math.max(1e-3, dt) / 50, -0.7, 0.7), 0.2);
+      if (frame.current % 2 === 0) emitParticles({ position: r.pos.clone(), color: theme.glow, count: 2, speed: 0.8, spread: 0.3, size: 0.22, life: 0.5, gravity: 0 });
+      if (L.e >= 1) {
+        r.launch = null;
+        placeBody(r, 0, L.idx);
+        r.t = r.prog;
+        r.speed = st.maxSpeed;
+        r.boostTimer = Math.max(r.boostTimer, 1.2);
+        r.boostMult = Math.max(r.boostMult, 1.45);
+        r.padCd = 1;
+        emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: theme.glow, count: 30, speed: 5, spread: 1.4, size: 0.24, life: 0.7 });
+        if (r.isPlayer) {
+          addShake(0.3);
+          sfx.bump();
+        }
+      }
+      r.visual.current.boosting = true;
+      r.visual.current.speedFrac = 1;
+      r.visual.current.steer = 0;
+      if (r.group.current) {
+        r.group.current.position.set(r.pos.x, r.y, r.pos.z);
+        r.group.current.rotation.order = "YXZ";
+        r.group.current.rotation.y = r.heading;
+        r.group.current.rotation.x = -r.pitch;
+      }
+      return;
+    }
+
     // ---- zone / mode ----
     const zone = zoneAt(r.t);
     const newMode: VehicleMode = !zone ? "land" : zone.type === "water" ? "boat" : zone.type === "sub" ? "sub" : "plane";
@@ -890,6 +920,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       fusePressed = controls.fusePressed;
       turboPressed = controls.turboPressed;
       if (settings.autoGas && throttleIn === 0 && r.stunTimer <= 0) throttleIn = 1;
+      // in the air the pedals fly the plane: up climbs, down dives, the engine runs by itself
+      if (r.mode === "plane") {
+        r.flyOff = THREE.MathUtils.clamp(r.flyOff + controls.throttle * 12 * dt, FLY_DOWN, FLY_UP);
+        throttleIn = r.stunTimer > 0 ? 0 : 1;
+      }
     } else if (!r.isPlayer) {
       // every opponent runs the skill profile the player picked, with a small
       // per-racer personality offset so a field of pros is not a mirror clone
@@ -915,6 +950,20 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       r.aiRoute = aimAhead(r, r.aiRoute, lookDist, THREE.MathUtils.clamp(weave * 1.6 + sloppy, -0.85, 0.85), aimV);
       const desired = Math.atan2(aimV.x - r.pos.x, aimV.z - r.pos.z);
       steerIn = THREE.MathUtils.clamp(wrapAngle(desired - r.heading) * ai.steerGain, -1, 1);
+      // flying: line up with the next ring, as well as the profile allows
+      if (r.mode === "plane") {
+        let want = 0;
+        let near = 0.2;
+        for (const ring of skyRings) {
+          const d = progDelta(r.prog, ring.prog);
+          if (d > 0 && d < near) {
+            near = d;
+            want = ring.offset - FLY_BASE;
+          }
+        }
+        const reach = 5 + ai.steerGain * 2.5;
+        r.flyOff += THREE.MathUtils.clamp(want * (0.6 + ai.drift * 0.4) - r.flyOff, -reach * dt, reach * dt);
+      }
       // pros lift when they have the room, beginners floor it into the barrier
       throttleIn = r.stunTimer > 0 ? 0 : Math.abs(wrapAngle(desired - r.heading)) > 0.55 && ai.steerGain < 3 ? 0.55 : 1;
 
@@ -1022,7 +1071,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
     const bob = performance.now();
     stepOpts.fly = r.mode === "plane";
-    stepOpts.flyAlt = Math.sin(Math.min(1, Math.max(0, inSky)) * Math.PI) * SKY_ALTITUDE;
+    // the plane lifts off as the flying stretch begins and comes back down onto the road at its end
+    const lift = THREE.MathUtils.smoothstep(inSky, 0, 0.1) * (1 - THREE.MathUtils.smoothstep(inSky, 0.9, 1));
+    if (r.mode !== "plane") r.flyOff = 0;
+    stepOpts.flyAlt = lift * (FLY_BASE + r.flyOff);
     stepOpts.bobbing = r.mode === "boat" || r.mode === "sub";
     stepOpts.rideOffset =
       r.mode === "boat" ? -0.12 + Math.sin(bob * 0.004 + r.aiPhase) * 0.09 : r.mode === "sub" ? 0.35 + Math.sin(bob * 0.003 + r.aiPhase) * 0.1 : 0;
@@ -1071,9 +1123,21 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       for (const pad of pads) {
         const px = pad.pos.x - r.pos.x;
         const pz = pad.pos.z - r.pos.z;
-        if (px * px + pz * pz > 10 || Math.abs(pad.pos.y - r.y) > 2) continue;
+        if (Math.abs(pad.pos.y - r.y) > 2) continue;
+        if (pad.kind === "cannon") {
+          // a cannon spans the whole road: nobody drives round it
+          const ahead = px * Math.sin(pad.heading) + pz * Math.cos(pad.heading);
+          if (Math.abs(ahead) > 3.5 || px * px + pz * pz > 200) continue;
+        } else if (px * px + pz * pz > 10) continue;
         r.padCd = 0.9;
-        if (pad.kind === "jump") {
+        if (pad.kind === "cannon") {
+          const main = getPaths()[0];
+          const to = new THREE.Vector3(main.px[pad.toIdx], main.py[pad.toIdx], main.pz[pad.toIdx]);
+          const from = r.pos.clone().setY(r.y);
+          r.launch = { from, to, idx: pad.toIdx, e: 0, dur: THREE.MathUtils.clamp(from.distanceTo(to) / 62, 1, 2.8), lift: pad.lift };
+          r.isDrifting = false;
+          r.driftCharge = 0;
+        } else if (pad.kind === "jump") {
           r.vy = pad.power ?? 13;
           r.airborne = true;
         } else {
@@ -1177,13 +1241,13 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       for (let i = 0; i < skyRings.length; i++) {
         if (r.ringCd[i] > 0) continue;
         const ring = skyRings[i];
-        const d = Math.hypot(ring.x - r.pos.x, ring.z - r.pos.z);
-        if (d < 3.6 && Math.abs(ring.y - (r.y + 0.8)) < 3.4) {
+        const d = Math.hypot(ring.pos.x - r.pos.x, ring.pos.z - r.pos.z);
+        if (d < 3.8 && Math.abs(ring.pos.y - (r.y + 0.8)) < 3) {
           r.ringCd[i] = 3;
           r.rings++;
           r.boostTimer = Math.max(r.boostTimer, 0.55);
           r.boostMult = Math.max(r.boostMult, 1.35);
-          emitParticles({ position: ring.clone(), color: theme.glow, count: 20, speed: 4, spread: 1.4, size: 0.22, life: 0.6 });
+          emitParticles({ position: ring.pos.clone(), color: theme.glow, count: 20, speed: 4, spread: 1.4, size: 0.22, life: 0.6 });
           if (r.isPlayer) {
             addShake(0.2);
             sfx.coin();
@@ -1221,7 +1285,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.mode === "land" && r.hazardCd <= 0) {
       for (const h of hazardState.positions) {
         const d = Math.hypot(h.x - r.pos.x, h.z - r.pos.z);
-        if (d < 1.7) {
+        if (d < 1.7 && Math.abs(h.y - r.y) < 3) {
           r.hazardCd = 1.1;
           applyHit(r, false);
           emitParticles({ position: r.pos.clone().setY(r.y + 0.8), color: WEAPON_META.zap.glow, count: 16, speed: 3.6, spread: 1.1, size: 0.2, life: 0.5 });
@@ -1742,8 +1806,4 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       <ParticleSystem />
     </group>
   );
-}
-
-function trackCurvePoint(t: number) {
-  return trackPointAt(t);
 }

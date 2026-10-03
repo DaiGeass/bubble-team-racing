@@ -13,8 +13,8 @@ import { TRACKS, ZONES, TRACK_WIDTH, type TrackDef, type RouteDef, setBiomeTrack
 export const trackCurve = new THREE.CatmullRomCurve3(
   TRACKS[0].points.map((p) => new THREE.Vector3(p[0], p[1], p[2])),
   true,
-  "catmullrom",
-  0.5
+  // centripetal: control points are not evenly spaced, and this one does not overshoot between them
+  "centripetal"
 );
 
 const norm = (t: number) => ((t % 1) + 1) % 1;
@@ -252,7 +252,7 @@ function rebuild(def: TrackDef) {
       const b = trackCurve.getPointAt(norm(r.t1));
       pts = [a, a2, ...r.points.map((p) => new THREE.Vector3(p[0], p[1], p[2])), b2, b];
     }
-    const curve = new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5);
+    const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
     const rl = curve.getLength();
     const p = allocPath(paths.length, Math.max(12, Math.round(rl / 1.9)) + 1, false);
     p.t0 = norm(r.t0);
@@ -461,8 +461,11 @@ export function safeSpot(pathId: number, idx: number): { path: number; idx: numb
 export interface PadRT {
   pos: THREE.Vector3;
   heading: number;
-  kind: "boost" | "jump";
+  kind: "boost" | "jump" | "cannon";
   power?: number;
+  /** cannon: sample of the main loop it fires you to, and the height of the arc */
+  toIdx: number;
+  lift: number;
 }
 
 /** Pads of the active circuit, placed on the ribbon they belong to. */
@@ -472,8 +475,50 @@ export function getPads(): PadRT[] {
     const pid = pad.route === undefined ? 0 : pad.route + 1;
     const p = paths[pid] ?? paths[0];
     const i = p.main ? mainIndexAt(pad.t) : Math.round(Math.min(1, Math.max(0, pad.t)) * (p.n - 1));
-    return { pos: pathPoint(p.id, i, pad.lat ?? 0, new THREE.Vector3()), heading: Math.atan2(p.tx[i], p.tz[i]), kind: pad.kind, power: pad.power };
+    return {
+      pos: pathPoint(p.id, i, pad.lat ?? 0, new THREE.Vector3()),
+      heading: Math.atan2(p.tx[i], p.tz[i]),
+      kind: pad.kind,
+      power: pad.power,
+      toIdx: mainIndexAt(pad.toT ?? pad.t),
+      lift: pad.lift ?? 22,
+    };
   });
+}
+
+/** How far above the flight line a plane cruises when the pilot does nothing. */
+export const FLY_BASE = 2.6;
+/** How far above and below that the pilot can take it. */
+export const FLY_UP = 8;
+export const FLY_DOWN = -2;
+
+export interface SkyRing {
+  pos: THREE.Vector3;
+  heading: number;
+  prog: number;
+  /** height above the flight line, which is what the pilot has to match */
+  offset: number;
+}
+
+/**
+ * Boost rings of every flying stretch. They weave up and down, so a flying
+ * stretch is flown, not just steered.
+ */
+export function getSkyRings(): SkyRing[] {
+  const out: SkyRing[] = [];
+  const main = paths[0];
+  for (const z of getActiveTrack().zones) {
+    if (z.type !== "sky") continue;
+    const span = z.t1 - z.t0;
+    const count = Math.max(3, Math.round((span * main.length) / 48));
+    for (let k = 0; k < count; k++) {
+      const prog = z.t0 + span * (0.12 + (0.76 * (k + 0.5)) / count);
+      const i = mainIndexAt(prog);
+      const offset = FLY_BASE + 3.2 * (1 + Math.sin(k * 1.9 + out.length));
+      out.push({ pos: new THREE.Vector3(main.px[i], main.py[i] + offset, main.pz[i]), heading: Math.atan2(main.tx[i], main.tz[i]), prog, offset });
+    }
+  }
+  return out;
 }
 
 export function setActiveTrack(id: string) {

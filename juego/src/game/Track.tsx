@@ -2,8 +2,8 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { trackCurve, halfWidthAt, getActiveTrack, nearestT, surfaceYAt, trapTransform, portalTransform, getPaths, getPads, groundAt, makeGround, F_SOLID, F_WALL_POS, F_WALL_NEG, type PathRT } from "../trackCurve";
-import { TRACK_WIDTH, ZONES, SKY_ALTITUDE, hazardState, zoneAt, zoneOfKind, raceSnapshot, biomeMix, type ThemeDef, type Zone, type ZoneKind } from "../data";
+import { trackCurve, halfWidthAt, getActiveTrack, nearestT, surfaceYAt, trapTransform, portalTransform, getPaths, getPads, getSkyRings, groundAt, makeGround, F_SOLID, F_WALL_POS, F_WALL_NEG, type PathRT } from "../trackCurve";
+import { TRACK_WIDTH, ZONES, hazardState, zoneAt, zoneOfKind, raceSnapshot, biomeMix, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
 function makeRoadTexture(theme: ThemeDef) {
   const size = 256;
@@ -43,6 +43,22 @@ function makeRoadTexture(theme: ThemeDef) {
  * launches. `slab` is the body of the deck: sides and underside, which is what
  * you see of a bridge from the road below.
  */
+/**
+ * Stretches of the main loop with nothing to drive on: the flight line of a
+ * flying stretch, and the boat lane when the circuit has a real sea to float on.
+ */
+function deckless(path: PathRT, i: number) {
+  if (!path.main) return false;
+  const t = path.prog[i];
+  const sea = getActiveTrack().sea !== undefined;
+  for (const z of ZONES) {
+    if (z.type === "sub" || (z.type === "water" && !sea)) continue;
+    const pad = (z.t1 - z.t0) * (z.type === "sky" ? 0.06 : 0.01);
+    if (t >= z.t0 + pad && t <= z.t1 - pad) return true;
+  }
+  return false;
+}
+
 function buildRibbonGeometry(path: PathRT) {
   const positions: number[] = [];
   const uvs: number[] = [];
@@ -78,6 +94,7 @@ function buildRibbonGeometry(path: PathRT) {
     if (k === count - 1) break;
     const j = (k + 1) % path.n;
     if (!(path.flags[i] & F_SOLID) || !(path.flags[j] & F_SOLID)) continue;
+    if (deckless(path, i) || deckless(path, j)) continue;
     const a = k * 2;
     indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     const b = k * 4;
@@ -105,8 +122,10 @@ function buildBarriers() {
     for (let i = 0; i < path.n; i += every) {
       if (!(path.flags[i] & F_SOLID)) continue;
       const t = path.prog[i];
-      // open shores: no posts in lake / submarine sections
-      if (path.main && ZONES.some((z) => z.type !== "sky" && t >= z.t0 - 0.01 && t <= z.t1 + 0.01)) continue;
+      // no posts along a flight line or inside the submarine tube; a lake keeps
+      // open shores, but on the open sea the lane is marked with buoys
+      const sea = getActiveTrack().sea !== undefined;
+      if (path.main && ZONES.some((z) => (z.type !== "water" || !sea) && t >= z.t0 - 0.01 && t <= z.t1 + 0.01)) continue;
       const angle = Math.atan2(path.tx[i], path.tz[i]);
       const reach = path.half[i] + 0.7;
       for (const side of [1, -1]) {
@@ -131,7 +150,7 @@ function buildPillars(floor: number) {
     for (let i = Math.floor(every / 2); i < path.n; i += every) {
       if (!(path.flags[i] & F_SOLID)) continue;
       const top = path.py[i] - 0.9;
-      if (top - floor < 2.5) continue;
+      if (top - floor < 2.5 || deckless(path, i)) continue;
       for (const side of [1, -1]) {
         const off = path.half[i] * 0.62 * side;
         const x = path.px[i] - path.tz[i] * off;
@@ -200,8 +219,18 @@ function Pads({ theme }: { theme: ThemeDef }) {
         <group key={i} position={[pad.pos.x, pad.pos.y + 0.12, pad.pos.z]} rotation={[0, pad.heading, 0]}>
           <mesh rotation={[Math.PI / 2, 0, 0]}>
             <planeGeometry args={[6, 6]} />
-            <meshBasicMaterial map={tex} color={pad.kind === "jump" ? theme.barrierA : theme.glow} transparent toneMapped={false} depthWrite={false} side={THREE.DoubleSide} />
+            <meshBasicMaterial map={tex} color={pad.kind === "boost" ? theme.glow : theme.barrierA} transparent toneMapped={false} depthWrite={false} side={THREE.DoubleSide} />
           </mesh>
+          {pad.kind === "cannon" && (
+            <group rotation={[-0.7, 0, 0]} position={[0, 2.6, 1]}>
+              {[0, 1, 2].map((n) => (
+                <mesh key={n} position={[0, 0, n * 2.4]}>
+                  <torusGeometry args={[4.2 - n * 0.5, 0.36, 10, 30]} />
+                  <meshStandardMaterial color={theme.barrierA} emissive={n % 2 ? theme.glow : theme.barrierA} emissiveIntensity={2.2} toneMapped={false} />
+                </mesh>
+              ))}
+            </group>
+          )}
         </group>
       ))}
     </group>
@@ -289,7 +318,7 @@ function MovingHazards({ theme }: { theme: ThemeDef }) {
       g.position.y = c.y + 1.15 + Math.sin(time * 2 + b.phase) * 0.15;
       g.rotation.y = time * 1.4 + b.phase;
       if (i === 0) hazardState.positions = [];
-      hazardState.positions[i] = { x: g.position.x, z: g.position.z, t };
+      hazardState.positions[i] = { x: g.position.x, y: c.y, z: g.position.z, t };
     });
   });
 
@@ -508,25 +537,12 @@ function Props({ theme }: { theme: ThemeDef }) {
 }
 
 function SkyRings({ theme }: { theme: ThemeDef }) {
-  const rings = useMemo(() => {
-    const z = zoneOfKind("sky");
-    const out: { pos: THREE.Vector3; angle: number }[] = [];
-    const n = 7;
-    if (!z) return out;
-    for (let i = 0; i < n; i++) {
-      const t = z.t0 + ((i + 0.5) / n) * (z.t1 - z.t0);
-      const p = trackCurve.getPointAt(t);
-      const tan = trackCurve.getTangentAt(t);
-      const u = (t - z.t0) / (z.t1 - z.t0);
-      out.push({ pos: new THREE.Vector3(p.x, p.y + Math.sin(u * Math.PI) * SKY_ALTITUDE + 1.6, p.z), angle: Math.atan2(tan.x, tan.z) });
-    }
-    return out;
-  }, []);
+  const rings = useMemo(() => getSkyRings(), []);
   return (
     <group>
       {rings.map((r, i) => (
-        <mesh key={i} position={r.pos.toArray()} rotation={[0, r.angle, 0]}>
-          <torusGeometry args={[3.4, 0.32, 10, 28]} />
+        <mesh key={i} position={r.pos.toArray()} rotation={[0, r.heading, 0]}>
+          <torusGeometry args={[3.6, 0.32, 10, 28]} />
           <meshStandardMaterial color={theme.glow} emissive={theme.glow} emissiveIntensity={2.6} toneMapped={false} />
         </mesh>
       ))}
@@ -1555,12 +1571,19 @@ export default function Track({ theme }: { theme: ThemeDef }) {
         <>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, def.floor, 0]} receiveShadow>
             <circleGeometry args={[1500, 72]} />
-            <meshStandardMaterial color={theme.ground} roughness={0.9} />
+            <meshStandardMaterial color={def.sea !== undefined ? theme.isle : theme.ground} roughness={0.9} />
           </mesh>
           <Pillars floor={def.floor} theme={theme} />
         </>
       )}
-      <Lake theme={theme} />
+      {def.sea !== undefined ? (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, def.sea, 0]}>
+          <circleGeometry args={[1500, 72]} />
+          <meshStandardMaterial color={theme.water} transparent opacity={0.72} roughness={0.06} metalness={0.4} side={THREE.DoubleSide} depthWrite={false} />
+        </mesh>
+      ) : (
+        <Lake theme={theme} />
+      )}
       {ribbons.map((r, i) => (
         <group key={i}>
           <mesh geometry={r.deck} receiveShadow>
