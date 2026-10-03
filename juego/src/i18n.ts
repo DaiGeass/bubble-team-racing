@@ -142,6 +142,12 @@ const en: Dict = {
   turboBtn: "Turbo",
   weapons: "Weapons",
   zoneInfo: "Track info",
+  fin_solid: "Solid",
+  fin_gloss: "Gloss",
+  fin_matte: "Matte",
+  fin_chrome: "Chrome",
+  fin_glass: "Glass",
+  fin_holo: "Holographic",
 };
 
 const es: Dict = {
@@ -271,6 +277,12 @@ const es: Dict = {
   turboBtn: "Turbo",
   weapons: "Armas",
   zoneInfo: "Datos del circuito",
+  fin_solid: "Sólido",
+  fin_gloss: "Brillante",
+  fin_matte: "Mate",
+  fin_chrome: "Cromo",
+  fin_glass: "Cristal",
+  fin_holo: "Holográfico",
 };
 
 const fr: Dict = {
@@ -400,6 +412,12 @@ const fr: Dict = {
   turboBtn: "Turbo",
   weapons: "Armes",
   zoneInfo: "Infos circuit",
+  fin_solid: "Solide",
+  fin_gloss: "Brillant",
+  fin_matte: "Mat",
+  fin_chrome: "Chrome",
+  fin_glass: "Verre",
+  fin_holo: "Holographique",
 };
 
 const ru: Dict = {
@@ -529,6 +547,12 @@ const ru: Dict = {
   turboBtn: "Турбо",
   weapons: "Оружие",
   zoneInfo: "О трассе",
+  fin_solid: "Гладкий",
+  fin_gloss: "Глянец",
+  fin_matte: "Матовый",
+  fin_chrome: "Хром",
+  fin_glass: "Стекло",
+  fin_holo: "Голограмма",
 };
 
 const ja: Dict = {
@@ -658,6 +682,12 @@ const ja: Dict = {
   turboBtn: "ターボ",
   weapons: "武器",
   zoneInfo: "コース情報",
+  fin_solid: "ソリッド",
+  fin_gloss: "グロス",
+  fin_matte: "マット",
+  fin_chrome: "クローム",
+  fin_glass: "ガラス",
+  fin_holo: "ホログラム",
 };
 
 const zh: Dict = {
@@ -787,6 +817,12 @@ const zh: Dict = {
   turboBtn: "涡轮",
   weapons: "武器",
   zoneInfo: "赛道信息",
+  fin_solid: "纯色",
+  fin_gloss: "亮面",
+  fin_matte: "哑光",
+  fin_chrome: "镀铬",
+  fin_glass: "玻璃",
+  fin_holo: "全息",
 };
 
 const ar: Dict = {
@@ -916,6 +952,12 @@ const ar: Dict = {
   turboBtn: "تيربو",
   weapons: "الأسلحة",
   zoneInfo: "معلومات المسار",
+  fin_solid: "صلب",
+  fin_gloss: "لامع",
+  fin_matte: "مطفي",
+  fin_chrome: "كروم",
+  fin_glass: "زجاجي",
+  fin_holo: "هولوغرامي",
 };
 
 const he: Dict = {
@@ -1045,6 +1087,12 @@ const he: Dict = {
   turboBtn: "טורבו",
   weapons: "נשק",
   zoneInfo: "פרטי המסלול",
+  fin_solid: "מלא",
+  fin_gloss: "מבריק",
+  fin_matte: "מט",
+  fin_chrome: "כרום",
+  fin_glass: "זכוכית",
+  fin_holo: "הולוגרפי",
 };
 
 export const DICTS: Record<Lang, Dict> = { en, es, fr, ru, ja, zh, ar, he };

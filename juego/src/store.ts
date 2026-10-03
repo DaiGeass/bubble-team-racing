@@ -302,7 +302,7 @@ const defaultSettings: Settings = {
   aiSkill: "pro",
   invertSteer: false,
   shake: 1,
-  telemetry: false,
+  telemetry: true,
   volume: 0.8,
   motionBlur: 0,
   keybinds: DEFAULT_KEYBINDS,
