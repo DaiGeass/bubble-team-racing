@@ -141,9 +141,9 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     draw: (t) =>
       t.go(40).mark("go").go(120).drop(-14).go(97)
         .left(180, 70, -4)
-        .go(100).drop(-14).go(117)
+        .go(100).drop(-14).go(20).mark("cutA").go(97)
         .right(180, 70, -4)
-        .go(120).drop(-16).go(124, -4)
+        .go(97).mark("cutB").go(23).drop(-16).go(124, -4)
         .left(90, 80, -4).mark("w0").go(140).mark("w1")
         .left(90, 80)
         .go(60, -2).mark("s0").go(290, -16)
@@ -156,7 +156,14 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     kick: 0,
     cannons: [["c0", "land", 34]],
     pads: [["go", "boost"], ["w1", "boost"], ["s1", "boost", 1.45, 30]],
-    routes: [],
+    routes: [
+      {
+        // the inside line of the second hairpin: half the distance, no barriers and a gap
+        from: "cutA", to: "cutB", width: 11, walls: false,
+        draw: (t) => t.go(18).right(80, 60, -1.5).go(16).mark("gap").go(40, -1).right(100, 60, -1.5).go(18),
+        holes: [["gap", 14]],
+      },
+    ],
   }),
 
   // WINDOWS 98 — square corners and flat decks, like windows on a desktop. The
@@ -192,14 +199,14 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .left(90, 70).go(120, 6)
         .left(450, 55, 20)
         .mark("top").go(60).mark("k0")
-        .go(220, -22)
+        .go(160, -22)
         .left(90, 100, -6)
         .go(80, -4).mark("k1")
         .go(100, -4).mark("w0").go(160).mark("w1")
         .right(90, 80)
         .go(40, -2).mark("s0").go(90, -16)
         .left(180, 60)
-        .go(162, 10).go(70, 8).mark("s1")
+        .go(102, 10).go(70, 8).mark("s1")
         .go(55, 4).mark("c0").go(8).mark("air")
         .left(90, 60).mark("land")
         .mark("homeA").go(BYPASS + 98, 6).mark("homeB")

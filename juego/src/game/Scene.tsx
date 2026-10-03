@@ -30,7 +30,7 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, getSkyRings, FLY_BASE, FLY_UP, FLY_DOWN, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
+import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, getSkyRings, getSkyBlocks, FLY_BASE, FLY_UP, FLY_DOWN, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
 import { moveBody, makeResult, placeBody, respawnBody, aimAhead, collideBodies, progDelta, GRAVITY, type Body, type StepOpts } from "../physics";
 import { emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
@@ -177,6 +177,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
 
   const skyRings = useMemo(() => getSkyRings(), []);
+  const skyBlocks = useMemo(() => getSkyBlocks(), []);
 
   const racers = useMemo<Racer[]>(() => {
     const list: Racer[] = [];
@@ -412,6 +413,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   }, [theme]);
 
   useEffect(() => {
+    hazardState.lap = 1;
     useGame.getState().resetTelemetry();
     useGame.getState().setTelemetry({ totalLaps: mode.laps, totalRacers: racers.length, countdown: 3 });
     const timers: number[] = [];
@@ -1252,6 +1254,20 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
             addShake(0.2);
             sfx.coin();
           }
+        }
+      }
+    }
+
+    // ---- things hanging in the flight path ----
+    if (r.mode === "plane" && r.hazardCd <= 0) {
+      for (const blk of skyBlocks) {
+        const dx = blk.pos.x - r.pos.x;
+        const dy = blk.pos.y - (r.y + 0.6);
+        const dz = blk.pos.z - r.pos.z;
+        if (dx * dx + dy * dy + dz * dz < 7.5) {
+          r.hazardCd = 1.2;
+          applyHit(r, false);
+          break;
         }
       }
     }

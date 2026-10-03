@@ -2,7 +2,7 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { trackCurve, halfWidthAt, getActiveTrack, nearestT, surfaceYAt, trapTransform, portalTransform, getPaths, getPads, getSkyRings, groundAt, makeGround, F_SOLID, F_WALL_POS, F_WALL_NEG, type PathRT } from "../trackCurve";
+import { trackCurve, halfWidthAt, getActiveTrack, nearestT, surfaceYAt, trapTransform, portalTransform, getPaths, getPads, getSkyRings, getSkyBlocks, plainRoadAt, groundAt, makeGround, F_SOLID, F_WALL_POS, F_WALL_NEG, F_TUNNEL, type PathRT } from "../trackCurve";
 import { TRACK_WIDTH, ZONES, hazardState, zoneAt, zoneOfKind, raceSnapshot, biomeMix, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
 function makeRoadTexture(theme: ThemeDef) {
@@ -208,6 +208,95 @@ function padTexture() {
   return new THREE.CanvasTexture(c);
 }
 
+/** Obstacles hanging in the flight path, where the physics has them. */
+function SkyBlocks({ theme }: { theme: ThemeDef }) {
+  const blocks = useMemo(() => getSkyBlocks(), []);
+  const refs = useRef<(THREE.Mesh | null)[]>([]);
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    refs.current.forEach((m, i) => {
+      if (m) m.rotation.set(t * 0.7 + i, t * 0.9 + i * 2, 0);
+    });
+  });
+  return (
+    <group>
+      {blocks.map((b, i) => (
+        <mesh key={i} ref={(el) => (refs.current[i] = el)} position={b.pos.toArray()}>
+          <icosahedronGeometry args={[2.2, 0]} />
+          <meshStandardMaterial color={theme.barrierA} emissive={theme.barrierA} emissiveIntensity={1.6} roughness={0.2} metalness={0.5} flatShading toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Arches over every covered road, so a low route reads as a tunnel. */
+function TunnelArches({ theme }: { theme: ThemeDef }) {
+  const mats = useMemo(() => {
+    const out: THREE.Matrix4[] = [];
+    const dummy = new THREE.Object3D();
+    for (const path of getPaths()) {
+      const every = Math.max(1, Math.round(13 / path.ds));
+      for (let i = every; i < path.n - every; i += every) {
+        if (!(path.flags[i] & F_TUNNEL) || !(path.flags[i] & F_SOLID)) continue;
+        // only where it has dropped clear of the road it left
+        if (Math.abs(path.py[i] - path.py[0]) < 3) continue;
+        dummy.position.set(path.px[i], path.py[i], path.pz[i]);
+        dummy.rotation.set(0, Math.atan2(path.tx[i], path.tz[i]), 0);
+        dummy.scale.setScalar((path.half[i] + 1) / 8);
+        dummy.updateMatrix();
+        out.push(dummy.matrix.clone());
+      }
+    }
+    return out;
+  }, []);
+  if (!mats.length) return null;
+  return (
+    <instancedMesh
+      args={[undefined, undefined, mats.length]}
+      ref={(m) => {
+        if (!m) return;
+        mats.forEach((mat, i) => m.setMatrixAt(i, mat));
+        m.instanceMatrix.needsUpdate = true;
+        m.computeBoundingSphere();
+      }}
+    >
+      <torusGeometry args={[8, 0.45, 8, 24, Math.PI]} />
+      <meshStandardMaterial color={theme.glow} emissive={theme.glow} emissiveIntensity={1.8} toneMapped={false} />
+    </instancedMesh>
+  );
+}
+
+/** The floor under an elevated circuit: the aesthetic's ground colour with a ruled grid. */
+function makeFloorTexture(theme: ThemeDef) {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 128;
+  const g = c.getContext("2d")!;
+  g.fillStyle = theme.ground;
+  g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = theme.roadLine;
+  g.globalAlpha = 0.45;
+  g.lineWidth = 3;
+  g.strokeRect(0, 0, 128, 128);
+  g.globalAlpha = 0.18;
+  g.lineWidth = 1;
+  for (const v of [32, 64, 96]) {
+    g.beginPath();
+    g.moveTo(v, 0);
+    g.lineTo(v, 128);
+    g.moveTo(0, v);
+    g.lineTo(128, v);
+    g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(60, 60);
+  tex.anisotropy = 4;
+  return tex;
+}
+
 /** Boost and jump pads painted on the tarmac, where the physics fires them. */
 function Pads({ theme }: { theme: ThemeDef }) {
   const pads = useMemo(() => getPads(), []);
@@ -288,14 +377,21 @@ function ForkIslands({ theme }: { theme: ThemeDef }) {
 }
 
 /** Mutating hazards: glowing pillars sliding across the road, pattern changes each lap. */
+/** How many extra hazards each new lap of the leader switches on. */
+const HAZARDS_PER_LAP = 2;
+
 function MovingHazards({ theme }: { theme: ThemeDef }) {
-  const count = Math.max(2, getActiveTrack().hazards);
+  // the lap mutates: lap one has the circuit's own hazards, every lap after adds two more
+  const first = Math.max(2, getActiveTrack().hazards);
+  const count = first + HAZARDS_PER_LAP * 3;
   const refs = useRef<(THREE.Group | null)[]>([]);
   const bases = useMemo(() => {
     const out: { t: number; phase: number; dir: number }[] = [];
     for (let i = 0; i < count; i++) {
-      let ht = (i + 0.75) / (count + 1);
-      for (let guard = 0; guard < 12 && zoneAt(ht); guard++) ht = (ht + 0.035) % 1; // keep hazards on dry road
+      // spread by the golden ratio so the late ones land between the early ones
+      let ht = (0.11 + i * 0.6180339887) % 1;
+      // on plain dry road only: never on a jump, a cannon line, a flight or the sea
+      for (let guard = 0; guard < 40 && (zoneAt(ht) || !plainRoadAt(ht, 60)); guard++) ht = (ht + 0.023) % 1;
       out.push({ t: ht, phase: Math.random() * Math.PI * 2, dir: i % 2 === 0 ? 1 : -1 });
     }
     return out;
@@ -303,22 +399,26 @@ function MovingHazards({ theme }: { theme: ThemeDef }) {
 
   useFrame((state) => {
     const time = state.clock.elapsedTime;
-    const lapPhase = hazardState.lap * 1.7; // the map mutates every lap
+    const lap = Math.max(1, hazardState.lap);
+    const active = first + HAZARDS_PER_LAP * (lap - 1);
+    const lapPhase = lap * 1.7;
+    hazardState.positions.length = 0;
     refs.current.forEach((g, i) => {
       if (!g) return;
+      g.visible = i < active;
+      if (!g.visible) return;
       const b = bases[i];
       const t = b.t;
       const c = trackCurve.getPointAt(t);
       const tan = trackCurve.getTangentAt(t);
       const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
       const spread = halfWidthAt(t) - 2.4;
-      const speed = 0.7 + (hazardState.lap % 3) * 0.22;
+      const speed = 0.7 + (lap % 3) * 0.22;
       const off = Math.sin(time * speed + b.phase + lapPhase) * spread * b.dir;
       g.position.copy(c).addScaledVector(n, off);
       g.position.y = c.y + 1.15 + Math.sin(time * 2 + b.phase) * 0.15;
       g.rotation.y = time * 1.4 + b.phase;
-      if (i === 0) hazardState.positions = [];
-      hazardState.positions[i] = { x: g.position.x, y: c.y, z: g.position.z, t };
+      hazardState.positions.push({ x: g.position.x, y: c.y, z: g.position.z, t });
     });
   });
 
@@ -376,8 +476,11 @@ function BarrierRing({ matrices, theme }: { matrices: THREE.Matrix4[]; theme: Th
 }
 
 function Props({ theme }: { theme: ThemeDef }) {
+  const def = getActiveTrack();
+  const islet = def.sea !== undefined;
   const items = useMemo(() => {
     const arr: { pos: THREE.Vector3; rot: number; s: number; kind: number }[] = [];
+    const probe = makeGround();
     for (let i = 0; i < 86; i++) {
       const t = i / 86;
       const center = trackCurve.getPointAt(t);
@@ -387,8 +490,16 @@ function Props({ theme }: { theme: ThemeDef }) {
       const side = (i % 2 === 0 ? 1 : -1) * (z ? 2.4 : 1);
       const dist = TRACK_WIDTH / 2 + 4 + Math.random() * 12;
       const p = center.clone().addScaledVector(normal, side * dist);
-      const g = groundReach(t);
-      p.y = Math.min(groundYAt(t, dist - g.edge), surfaceYAt(nearestT(p, t))) - 0.25;
+      if (def.floor !== undefined) {
+        // a hand-built circuit: stand on the floor, or on an islet in the sea, and never under tarmac
+        let covered = false;
+        for (const [ox, oz] of [[0, 0], [5, 0], [-5, 0], [0, 5], [0, -5]]) if (groundAt(p.x + ox, p.z + oz, 1e6, probe, 0)) covered = true;
+        if (covered) continue;
+        p.y = def.sea !== undefined ? def.sea + 0.25 : def.floor;
+      } else {
+        const g = groundReach(t);
+        p.y = Math.min(groundYAt(t, dist - g.edge), surfaceYAt(nearestT(p, t))) - 0.25;
+      }
       arr.push({ pos: p, rot: Math.random() * Math.PI, s: 0.8 + Math.random() * 0.9, kind: i % 3 });
     }
     return arr;
@@ -398,6 +509,12 @@ function Props({ theme }: { theme: ThemeDef }) {
     <group>
       {items.map((it, i) => (
         <group key={i} position={[it.pos.x, it.pos.y, it.pos.z]} rotation={[0, it.rot, 0]} scale={it.s}>
+          {islet && (
+            <mesh position={[0, -0.9, 0]} receiveShadow>
+              <cylinderGeometry args={[3.4, 4.6, 1.8, 10]} />
+              <meshStandardMaterial color={theme.isle} roughness={0.9} flatShading />
+            </mesh>
+          )}
           {theme.prop === "palm" && (
             <>
               <mesh position={[0, 1.6, 0]} castShadow>
@@ -1550,6 +1667,7 @@ export default function Track({ theme }: { theme: ThemeDef }) {
   const voidCircuit = !!def.noGround;
   const ground = useMemo(() => (voidCircuit ? null : buildGround()), [voidCircuit]);
   const techno = theme.id === "techno";
+  const floorTexture = useMemo(() => (def.floor !== undefined && def.sea === undefined ? makeFloorTexture(theme) : null), [theme, def]);
 
   return (
     <group>
@@ -1571,7 +1689,7 @@ export default function Track({ theme }: { theme: ThemeDef }) {
         <>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, def.floor, 0]} receiveShadow>
             <circleGeometry args={[1500, 72]} />
-            <meshStandardMaterial color={def.sea !== undefined ? theme.isle : theme.ground} roughness={0.9} />
+            <meshStandardMaterial color={floorTexture ? "#ffffff" : theme.isle} map={floorTexture} roughness={0.9} />
           </mesh>
           <Pillars floor={def.floor} theme={theme} />
         </>
@@ -1595,6 +1713,8 @@ export default function Track({ theme }: { theme: ThemeDef }) {
         </group>
       ))}
       <Pads theme={theme} />
+      <SkyBlocks theme={theme} />
+      <TunnelArches theme={theme} />
       <BarrierRing matrices={barriers} theme={theme} />
       <StartArch theme={theme} />
       <SkyRings theme={theme} />
@@ -1608,7 +1728,7 @@ export default function Track({ theme }: { theme: ThemeDef }) {
       <SectorBoards theme={theme} />
       <BiomeSky theme={theme} />
       <Scatter />
-      {!voidCircuit && <Props theme={theme} />}
+      <Props theme={theme} />
       <Clouds theme={theme} />
       <AmbientLife theme={theme} />
     </group>

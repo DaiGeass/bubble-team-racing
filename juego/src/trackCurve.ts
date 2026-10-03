@@ -521,6 +521,43 @@ export function getSkyRings(): SkyRing[] {
   return out;
 }
 
+export interface SkyBlock {
+  pos: THREE.Vector3;
+  prog: number;
+}
+
+/**
+ * Things to fly round. One hangs between each pair of rings, at the height the
+ * ring before it is not: above a low ring, below a high one, and off to one
+ * side, so the line through the rings is also the line that misses them.
+ */
+export function getSkyBlocks(): SkyBlock[] {
+  const rings = getSkyRings();
+  const main = paths[0];
+  const out: SkyBlock[] = [];
+  for (let k = 0; k + 1 < rings.length; k++) {
+    const a = rings[k];
+    const b = rings[k + 1];
+    if (b.prog - a.prog > 0.05 || b.prog < a.prog) continue;
+    const s = (a.offset - FLY_BASE) / 3.2 - 1;
+    if (Math.abs(s) < 0.35) continue;
+    const prog = (a.prog + b.prog) / 2;
+    const i = mainIndexAt(prog);
+    const lat = k % 2 ? 4.5 : -4.5;
+    out.push({ pos: new THREE.Vector3(main.px[i] - main.tz[i] * lat, main.py[i] + FLY_BASE + 3.2 * (1 - s), main.pz[i] + main.tx[i] * lat), prog });
+  }
+  return out;
+}
+
+/** True when the main road is whole for `reach` units either side of lap progress t: no jump, no flight. */
+export function plainRoadAt(t: number, reach = 40): boolean {
+  const main = paths[0];
+  const c = mainIndexAt(t);
+  const n = Math.round(reach / main.ds);
+  for (let k = -n; k <= n; k++) if (!(main.flags[(c + k + main.n) % main.n] & F_SOLID)) return false;
+  return true;
+}
+
 export function setActiveTrack(id: string) {
   const def = TRACKS.find((t) => t.id === id) ?? TRACKS[0];
   activeTrackId = def.id;

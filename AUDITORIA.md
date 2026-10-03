@@ -40,9 +40,9 @@ Longitud en unidades; un kart recorre unas 27 por segundo sin turbo.
 | Arrecife Profundo | Aqua | 2162 | −20–10 | mar abierto, inmersión a 20 bajo el mar, cañón sobre la última curva, carril-rampa sobre el agua |
 | Torre Neón | Techno | 2413 | 2–54 | espiral de 2¼ vueltas, vuelo en picado desde la cima, tres carriles a tres alturas en la recta |
 | Órbita Y2K | Y2K | 2301 | 8–42 | ocho con una vuelta extra en espiral, puente 22 unidades sobre la recta, carretera encima y debajo del puente |
-| Cascada Líquida | Liquid Glass | 2713 | −18–61 | tres caídas de 14–16 unidades, barco, inmersión, cañón de vuelta a la cima |
+| Cascada Líquida | Liquid Glass | 2713 | −18–61 | tres caídas de 14–16 unidades, atajo sin barreras y con hueco por dentro de la segunda horquilla, barco, inmersión, cañón de vuelta a la cima |
 | Escritorio 98 | Windows 98 | 2242 | 2–20 | esquinas a 90°, salto, portal, recta de tres carriles (uno en túnel) |
-| Gran Fusión | mezcla | 2802 | −18–36 | espiral, vuelo, barco, inmersión, cañón y tres carriles a meta |
+| Gran Fusión | mezcla | 2683 | −18–36 | espiral, vuelo, barco, inmersión, cañón y tres carriles a meta |
 
 ## 3. Cómo se mide
 
@@ -59,7 +59,7 @@ Tres herramientas en `juego/tools/`:
 | `tsc --noEmit` | 0 errores |
 | `vite build` | OK |
 | `sim.sh check` | las 8 cierran con error ≤ 7 unidades; radios y alturas libres dentro de límites. Único aviso: 64 % de pendiente en Cascada, que son las caídas |
-| `sim.sh` (16 recorridos) | 16 completos, 0 caídas, vueltas de 75 a 98 s a velocidad base sin turbos |
+| `sim.sh` (16 recorridos) | 16 completos, 0 caídas, vueltas de 75 a 94 s a velocidad base sin turbos |
 | Pared, en el juego real | raspando la barrera la posición lateral varía 0,1 unidades, la dirección no oscila y la velocidad se mantiene (medido en la primera pista de prueba) |
 | Juego real en navegador sin GPU, 6 karts | en las 8 pistas el primer rival completa la vuelta en 74–95 s; se visitan tierra, barco, avión y submarino donde tocan; la IA usa las rutas; 0 errores de consola |
 
@@ -70,11 +70,11 @@ pruebas renderiza por software.
 
 Del plan original, sin hacer todavía:
 
-- **Mutación de la pista entre vueltas**: solo cambian paleta, luz y patrón de peligros. No hay
-  caminos que se abran o cierren ni agua que suba.
+- **Mutación de la pista entre vueltas**: cambian paleta y luz, y cada vuelta del líder
+  enciende dos pilares móviles más en tramos de carretera normal. No hay caminos que se abran
+  o cierren ni agua que suba.
 - **Elementos vivos**: quedan los pilares móviles y un portal; no hay tráfico, criaturas ni
   plataformas móviles.
-- **Obstáculos en los tramos de vuelo**: solo hay anillos.
 - **Controles**: reasignar teclas no quita flechas/WASD; reasignar botones táctiles hace doble
   acción; el turbo no tiene botón táctil.
 - **IA**: no derrapa, no usa turbo ni fusión; `pace`, `accel` y `drift` de los niveles casi no
@@ -84,10 +84,12 @@ Del plan original, sin hacer todavía:
 - **Modos**: no hay Gran Premio, fantasma de contrarreloj, arena, equipos ni eliminación.
 - **Garaje**: 19 carrocerías en la tabla (el tipo declara 24).
 - **Emojis y símbolos** en la interfaz (banderas, ⭐ ⚡ ♪).
-- **Decorado**: las pistas nuevas van sobre un suelo plano o sobre el mar, con pilares; no
-  tienen relieve ni escenografía propia por estética más allá de la paleta y los adornos.
-- **Tiempos de vuelta**: Cascada y Gran Fusión rondan 94–98 s a velocidad base, por encima
-  del objetivo de 60–90 s si no se usan los turbos.
+- **Decorado**: cada pista tiene el adorno de su estética (palmeras, árboles, ventanas de
+  Windows, esferas cromadas…) sobre un suelo cuadriculado o sobre islotes en el mar, arcos en
+  los carriles en túnel y obstáculos colgados en los tramos de vuelo. Sigue sin haber relieve
+  ni edificios grandes propios de cada mundo.
+- **Tiempos de vuelta**: Bahía, Cascada y Gran Fusión rondan 90–94 s a velocidad base, algo
+  por encima del objetivo de 60–90 s si no se usan los turbos.
 
 ## 5. Lo que tienes que probar tú
 
