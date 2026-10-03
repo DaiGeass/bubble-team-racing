@@ -228,7 +228,7 @@ export function laneAt(t: number, offset: number): { lane: Lane; inside: boolean
   const lanes = lanesAt(t).slice().sort((a, b) => a.min - b.min);
   // small tolerance: makes transitions into a side road at its very mouth feel
   // less "jumpy" without making the whole track wider
-  const TOL = 0.6;
+  const TOL = 0.2;
   for (const l of lanes) if (offset >= l.min - TOL && offset <= l.max + TOL) return { lane: l, inside: true, outBy: 0 };
   let best = lanes[0];
   let bestD = Infinity;
