@@ -32,19 +32,6 @@ export default function RaceCanvas({ controls }: { controls: UseControlsReturn }
       <Suspense fallback={null}>
         <BiomeFog theme={theme} />
         <ambientLight intensity={theme.ambient} color={theme.ambientColor} />
-        <directionalLight
-          position={[45, 65, -25]}
-          intensity={theme.sunIntensity}
-          color={theme.sun}
-          castShadow
-          shadow-mapSize={[1536, 1536]}
-          shadow-camera-left={-140}
-          shadow-camera-right={140}
-          shadow-camera-top={140}
-          shadow-camera-bottom={-140}
-          shadow-camera-far={520}
-          shadow-bias={-0.0008}
-        />
         <hemisphereLight args={[theme.hemiSky, theme.hemiGround, 0.85]} />
         <Scene controls={controls} />
         {bloomOn && <PostFX intensity={theme.bloom} />}

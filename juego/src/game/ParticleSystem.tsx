@@ -2,7 +2,9 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { drainParticleQueue } from "../particles";
-import { nearestT, surfaceYAt } from "../trackCurve";
+import { groundAt, makeGround } from "../trackCurve";
+
+const floorProbe = makeGround();
 
 const POOL = 260;
 
@@ -91,7 +93,7 @@ export default function ParticleSystem() {
       p.pos.addScaledVector(p.vel, dt);
       if (p.ground && !p.settled) {
         // chassis debris lands on the road and skids to a stop
-        const gy = surfaceYAt(nearestT(p.pos, undefined as any)) + p.size * 0.45;
+        const gy = groundAt(p.pos.x, p.pos.z, p.pos.y + 1, floorProbe, 0) ? floorProbe.y + p.size * 0.45 : -Infinity;
         if (p.pos.y <= gy) {
           p.pos.y = gy;
           if (Math.abs(p.vel.y) < 1.2) {

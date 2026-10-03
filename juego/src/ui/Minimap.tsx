@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { trackCurve, getActiveTrack, trackFrameAt, halfWidthAt } from "../trackCurve";
+import { getActiveTrack, trackFrameAt, halfWidthAt, getPaths, F_SOLID } from "../trackCurve";
 import { raceSnapshot, ZONES } from "../data";
 
 const SIZE = 168;
@@ -15,67 +15,72 @@ function shade(hex: string, u: number): string {
   return `rgb(${mix((n >> 16) & 255)},${mix((n >> 8) & 255)},${mix(n & 255)})`;
 }
 
+interface Seg {
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  /** mean height, which decides the drawing order and the shade */
+  h: number;
+  zone: "water" | "sky" | "sub" | null;
+  route: boolean;
+}
+
 export default function Minimap() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pathRef = useRef<{ x: number; y: number; h: number; zone: "water" | "sky" | "sub" | null }[]>([]);
-  const scRef = useRef<{ ax: number; ay: number; bx: number; by: number }[]>([]);
-  const marksRef = useRef<{
-    gaps: { x: number; z: number; x1: number; z1: number }[];
-    portals: { x: number; z: number; ox: number; oz: number }[];
-  }>({ gaps: [], portals: [] });
+  const segsRef = useRef<Seg[]>([]);
+  const rangeRef = useRef({ hMin: 0, hSpan: 1 });
+  const startRef = useRef({ x: 0, z: 0 });
+  const portalsRef = useRef<{ x: number; z: number; ox: number; oz: number }[]>([]);
   const boundsRef = useRef({ minX: 0, maxX: 1, minZ: 0, maxZ: 1 });
+  // the static part of the map is painted once per palette, not once per frame
+  const layerRef = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
 
   useEffect(() => {
-    // project track once
-    const pts: { x: number; y: number; h: number; zone: "water" | "sky" | "sub" | null }[] = [];
-    scRef.current = getActiveTrack().branches.map((b) => {
-      const a = trackFrameAt(b.t0 + 0.012);
-      const z = trackFrameAt(b.t1 - 0.012);
-      const off = (f: typeof a, pull: number) => f.point.clone().addScaledVector(f.normal, pull * 0.92);
-      const pa = off(a, b.pull);
-      const pb = off(z, b.pull);
-      return { ax: pa.x, ay: pa.z, bx: pb.x, by: pb.z };
-    });
+    // Every ribbon is cut into short pieces and the pieces are drawn lowest
+    // first, each with a dark outline: where one road crosses over another the
+    // upper one visibly cuts across the lower, so the levels read as levels.
+    const segs: Seg[] = [];
     let minX = Infinity;
     let maxX = -Infinity;
     let minZ = Infinity;
     let maxZ = -Infinity;
-    const N = 160;
-    for (let i = 0; i <= N; i++) {
-      const t = i / N;
-      const p = trackCurve.getPointAt(t);
-      minX = Math.min(minX, p.x);
-      maxX = Math.max(maxX, p.x);
-      minZ = Math.min(minZ, p.z);
-      maxZ = Math.max(maxZ, p.z);
-      const zone = ZONES.find((z) => t >= z.t0 && t <= z.t1);
-      pts.push({ x: p.x, y: p.z, h: p.y, zone: zone?.type ?? null });
+    let hMin = Infinity;
+    let hMax = -Infinity;
+    for (const path of getPaths()) {
+      const every = Math.max(1, Math.round(9 / path.ds));
+      const last = path.closed ? path.n : path.n - 1;
+      for (let i = 0; i < last; i += every) {
+        const j = path.closed ? (i + every) % path.n : Math.min(path.n - 1, i + every);
+        if (!(path.flags[i] & F_SOLID) || !(path.flags[j] & F_SOLID)) continue;
+        const t = path.prog[i];
+        const zone = path.main ? ZONES.find((z) => t >= z.t0 && t <= z.t1) : undefined;
+        const h = (path.py[i] + path.py[j]) / 2;
+        segs.push({ ax: path.px[i], az: path.pz[i], bx: path.px[j], bz: path.pz[j], h, zone: zone?.type ?? null, route: !path.main });
+        minX = Math.min(minX, path.px[i]);
+        maxX = Math.max(maxX, path.px[i]);
+        minZ = Math.min(minZ, path.pz[i]);
+        maxZ = Math.max(maxZ, path.pz[i]);
+        hMin = Math.min(hMin, h);
+        hMax = Math.max(hMax, h);
+      }
     }
-    pathRef.current = pts;
+    segs.sort((a, b) => a.h - b.h);
+    segsRef.current = segs;
+    rangeRef.current = { hMin, hSpan: Math.max(1, hMax - hMin) };
     boundsRef.current = { minX, maxX, minZ, maxZ };
+    const main = getPaths()[0];
+    startRef.current = { x: main.px[0], z: main.pz[0] };
+    layerRef.current = null;
 
-    // holes and warps are the two things that break a lap, so the map has to
-    // show where they are and which side of the road they sit on
     const trk = getActiveTrack();
-    marksRef.current = {
-      gaps: (trk.gaps ?? []).map((g) => {
-        const a = trackFrameAt(g.t0);
-        const b = trackFrameAt(g.t1);
-        return {
-          x: a.point.x,
-          z: a.point.z,
-          x1: b.point.x,
-          z1: b.point.z,
-        };
-      }),
-      portals: (trk.portals ?? []).map((pr) => {
-        const f = trackFrameAt(pr.tIn);
-        const p = f.point.clone().addScaledVector(f.normal, pr.side * (halfWidthAt(pr.tIn) - 2.6));
-        const o = trackFrameAt(pr.tOut);
-        const op = o.point.clone().addScaledVector(o.normal, (pr.side === 1 ? -1 : 1) * (halfWidthAt(pr.tOut) - 2.6));
-        return { x: p.x, z: p.z, ox: op.x, oz: op.z };
-      }),
-    };
+    portalsRef.current = (trk.portals ?? []).map((pr) => {
+      const f = trackFrameAt(pr.tIn);
+      const p = f.point.clone().addScaledVector(f.normal, pr.side * (halfWidthAt(pr.tIn) - 2.6));
+      const o = trackFrameAt(pr.tOut);
+      const op = o.point.clone().addScaledVector(o.normal, pr.side * (halfWidthAt(pr.tOut) - 2.6));
+      return { x: p.x, z: p.z, ox: op.x, oz: op.z };
+    });
   }, []);
 
   useEffect(() => {
@@ -95,157 +100,69 @@ export default function Minimap() {
       const oy = (SIZE - h * scale) / 2 - minZ * scale;
       const toX = (x: number) => x * scale + ox;
       const toY = (z: number) => z * scale + oy;
+      const { hMin, hSpan } = rangeRef.current;
+
+      const key = `${theme.road}|${theme.water}|${theme.glow}|${theme.barrierA}`;
+      if (!layerRef.current || layerRef.current.key !== key) {
+        const layer = document.createElement("canvas");
+        layer.width = SIZE;
+        layer.height = SIZE;
+        const g = layer.getContext("2d")!;
+        // plate
+        g.fillStyle = "rgba(255,255,255,0.30)";
+        g.beginPath();
+        if (typeof g.roundRect === "function") g.roundRect(2, 2, SIZE - 4, SIZE - 4, 20);
+        else g.rect(2, 2, SIZE - 4, SIZE - 4);
+        g.fill();
+        g.strokeStyle = "rgba(255,255,255,0.75)";
+        g.lineWidth = 2;
+        g.stroke();
+
+        g.lineCap = "round";
+        g.lineJoin = "round";
+        for (const s of segsRef.current) {
+          const u = (s.h - hMin) / hSpan;
+          const wide = s.route ? 4 : 6;
+          g.beginPath();
+          g.moveTo(toX(s.ax), toY(s.az));
+          g.lineTo(toX(s.bx), toY(s.bz));
+          g.strokeStyle = "rgba(10,40,70,0.55)";
+          g.lineWidth = wide + 3;
+          g.stroke();
+          // higher is lighter; zones keep their own colour
+          g.strokeStyle =
+            s.zone === "water" ? theme.water : s.zone === "sky" ? theme.glow : s.zone === "sub" ? "#3b82f6" : shade(s.route ? theme.barrierA : theme.road, u);
+          g.lineWidth = wide;
+          g.stroke();
+        }
+
+        // warps: entry ring on the side you have to aim at, dashed link to the exit
+        for (const pr of portalsRef.current) {
+          const x = toX(pr.x);
+          const y = toY(pr.z);
+          g.save();
+          g.setLineDash([2, 4]);
+          g.strokeStyle = "rgba(124,92,255,0.55)";
+          g.lineWidth = 1.4;
+          g.beginPath();
+          g.moveTo(x, y);
+          g.lineTo(toX(pr.ox), toY(pr.oz));
+          g.stroke();
+          g.restore();
+          g.strokeStyle = "#7c5cff";
+          g.lineWidth = 2;
+          g.beginPath();
+          g.arc(x, y, 4.6, 0, Math.PI * 2);
+          g.stroke();
+          g.fillStyle = "rgba(124,92,255,0.35)";
+          g.fill();
+        }
+        layerRef.current = { key, canvas: layer };
+      }
 
       ctx.clearRect(0, 0, SIZE, SIZE);
-      // plate
-      ctx.fillStyle = "rgba(255,255,255,0.30)";
-      ctx.beginPath();
-      if (typeof ctx.roundRect === "function") ctx.roundRect(2, 2, SIZE - 4, SIZE - 4, 20);
-      else ctx.rect(2, 2, SIZE - 4, SIZE - 4);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.75)";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      const pts = pathRef.current;
-      if (pts.length === 0) return;
-
-      // track body
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      pts.forEach((p, i) => (i === 0 ? ctx.moveTo(toX(p.x), toY(p.y)) : ctx.lineTo(toX(p.x), toY(p.y))));
-      ctx.closePath();
-      ctx.strokeStyle = "rgba(10,50,80,0.35)";
-      ctx.lineWidth = 9;
-      ctx.stroke();
-      // shade the ribbon by elevation so climbs and descents read at a glance
-      const hs = pts.map((p) => p.h);
-      const hMin = Math.min(...hs);
-      const hSpan = Math.max(1, Math.max(...hs) - hMin);
-      for (let i = 0; i < pts.length - 1; i++) {
-        const a = pts[i];
-        const b = pts[i + 1];
-        const u = (a.h - hMin) / hSpan;
-        ctx.beginPath();
-        ctx.moveTo(toX(a.x), toY(a.y));
-        ctx.lineTo(toX(b.x), toY(b.y));
-        ctx.strokeStyle = shade(theme.road, u);
-        ctx.lineWidth = 6;
-        ctx.stroke();
-      }
-
-      // zones
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = theme.water;
-      ctx.beginPath();
-      let drawing = false;
-      pts.forEach((p) => {
-        if (p.zone === "water") {
-          if (!drawing) {
-            ctx.moveTo(toX(p.x), toY(p.y));
-            drawing = true;
-          } else ctx.lineTo(toX(p.x), toY(p.y));
-        } else drawing = false;
-      });
-      ctx.stroke();
-
-      ctx.strokeStyle = theme.glow;
-      ctx.beginPath();
-      drawing = false;
-      pts.forEach((p) => {
-        if (p.zone === "sky") {
-          if (!drawing) {
-            ctx.moveTo(toX(p.x), toY(p.y));
-            drawing = true;
-          } else ctx.lineTo(toX(p.x), toY(p.y));
-        } else drawing = false;
-      });
-      ctx.stroke();
-
-      // submarine section
-      ctx.strokeStyle = "#3b82f6";
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      drawing = false;
-      pts.forEach((p) => {
-        if (p.zone === "sub") {
-          if (!drawing) {
-            ctx.moveTo(toX(p.x), toY(p.y));
-            drawing = true;
-          } else ctx.lineTo(toX(p.x), toY(p.y));
-        } else drawing = false;
-      });
-      ctx.stroke();
-
-      // side roads: they are tarmac now, so they are drawn as roads
-      ctx.save();
-      ctx.strokeStyle = shade(theme.road, 0.35);
-      ctx.lineWidth = 4;
-      ctx.lineCap = "round";
-      for (const sc of scRef.current) {
-        ctx.beginPath();
-        ctx.moveTo(toX(sc.ax), toY(sc.ay));
-        ctx.lineTo(toX(sc.bx), toY(sc.by));
-        ctx.stroke();
-      }
-      ctx.strokeStyle = theme.barrierA;
-      ctx.lineWidth = 1.2;
-      for (const sc of scRef.current) {
-        ctx.beginPath();
-        ctx.moveTo(toX(sc.ax), toY(sc.ay));
-        ctx.lineTo(toX(sc.bx), toY(sc.by));
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      const marks = marksRef.current;
-
-      // holes: the road stroke is cut open and the rim is flagged red
-      ctx.strokeStyle = "#ff3b30";
-      ctx.lineWidth = 2.4;
-      for (const g of marks.gaps) {
-        const ax = toX(g.x);
-        const ay = toY(g.z);
-        const bx = toX(g.x1);
-        const by = toY(g.z1);
-        ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(bx, by);
-        ctx.lineWidth = 3;
-        ctx.setLineDash([2, 3]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = "#ff3b30";
-        for (const [cx, cy] of [[ax, ay], [bx, by]]) {
-          ctx.beginPath();
-          ctx.arc(cx, cy, 3.1, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.lineWidth = 2.4;
-      }
-
-      // warps: entry ring on the side you have to aim at, dashed link to the exit
-      for (const pr of marks.portals) {
-        const x = toX(pr.x);
-        const y = toY(pr.z);
-        ctx.save();
-        ctx.setLineDash([2, 4]);
-        ctx.strokeStyle = "rgba(124,92,255,0.55)";
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(toX(pr.ox), toY(pr.oz));
-        ctx.stroke();
-        ctx.restore();
-        ctx.strokeStyle = "#7c5cff";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x, y, 4.6, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = "rgba(124,92,255,0.35)";
-        ctx.fill();
-      }
+      ctx.drawImage(layerRef.current.canvas, 0, 0);
+      const pts = [{ x: startRef.current.x, y: startRef.current.z }];
 
       // sector ticks, matching the numbered boards standing on the circuit
       ctx.fillStyle = "rgba(10,30,50,0.55)";

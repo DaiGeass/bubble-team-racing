@@ -603,6 +603,43 @@ export interface TrapDef {
   active: boolean;
 }
 
+/**
+ * An alternate road with its own shape in 3D. It leaves the main loop at lap
+ * progress t0 and rejoins it at t1; in between it can climb over the main road,
+ * dive under it or take a different way round.
+ */
+export interface RouteDef {
+  t0: number;
+  t1: number;
+  /** control points between the two junctions, in world units */
+  points: [number, number, number][];
+  /** full width of the tarmac, 14 by default */
+  width?: number;
+  /** false leaves the edges open: run wide and you fall */
+  walls?: boolean;
+  /** stretches with no tarmac at all, as fractions of the route */
+  holes?: [number, number][];
+  /** height of the launch lip before each hole */
+  kick?: number;
+  /** covered road, dressed with arches */
+  tunnel?: boolean;
+  /** internal: an old lateral side road converted on load */
+  legacy?: Branch;
+}
+
+/** Something on the tarmac that acts on whoever drives over it. */
+export interface PadDef {
+  /** lap progress on the main loop, or fraction of the route when `route` is set */
+  t: number;
+  /** index into `routes`; the main loop when omitted */
+  route?: number;
+  /** metres off the centre line */
+  lat?: number;
+  kind: "boost" | "jump";
+  /** boost: speed multiplier. jump: upward speed in units per second */
+  power?: number;
+}
+
 export interface PortalDef {
   tIn: number;
   tOut: number;
@@ -671,6 +708,23 @@ export interface TrackDef {
   portals?: PortalDef[];
   traps?: TrapDef[];
   gaps?: GapDef[];
+  /** hand-built alternate roads; when present the old `branches` are ignored */
+  routes?: RouteDef[];
+  /** full width of the main road, TRACK_WIDTH by default */
+  width?: number;
+  /** wider stretches of the main road: [t0, t1, halfWidth] */
+  widths?: [number, number, number][];
+  /** stretches of the main road with no barriers */
+  open?: [number, number][];
+  /** stretches of the main road with no tarmac: jumps */
+  holes?: [number, number][];
+  /** height of the launch lip before each hole */
+  kick?: number;
+  pads?: PadDef[];
+  /** drawn at real scale by hand: skip the length normalisation and the generators */
+  designed?: boolean;
+  /** height of a flat floor under an elevated circuit; the road stands on pillars */
+  floor?: number;
 }
 
 /** Vertical profile of a circuit, written as harmonics of the loop angle. */
@@ -782,7 +836,49 @@ export function defaultBiomes(theme: ThemeId, phase = 0): BiomeDef[] {
   }).sort((a, b) => a.t0 - b.t0);
 }
 
+/** Points of a spiral ramp: `turns` laps around (cx, cz), climbing from y0 to y1. */
+function helix(cx: number, cz: number, r: number, a0: number, turns: number, y0: number, y1: number, flat = 0): [number, number, number][] {
+  const steps = Math.max(2, Math.round(Math.abs(turns) * 8));
+  const out: [number, number, number][] = [];
+  for (let k = 0; k <= steps; k++) {
+    const u = k / steps;
+    const a = a0 + turns * Math.PI * 2 * u;
+    // `flat` keeps the first part level, so a road can split off before the climb starts
+    const rise = Math.max(0, (u - flat) / (1 - flat));
+    out.push([cx + Math.sin(a) * r, y0 + (y1 - y0) * rise, cz + Math.cos(a) * r]);
+  }
+  return out;
+}
+
 export const TRACKS: TrackDef[] = [
+  // Built by hand in real 3D: a spiral tower, a bridge that crosses over the
+  // start straight, a jump on the way down and a low road that goes round instead.
+  {
+    id: "torre", difficulty: 2, hazards: 0, theme: "y2k", designed: true, noGround: true, floor: -1.2,
+    points: [
+      [-300, 0, -200], [-180, 0, -200], [-60, 0, -200], [60, 0, -200], [180, 0, -200],
+      [270, 1, -175], [318, 3, -110], [330, 6, -30], [318, 10, 50], [275, 13, 120], [205, 15, 170],
+      ...helix(120, 130, 60, 0, -1, 16, 42, 0.125),
+      [40, 41, 195], [-50, 39, 180], [-130, 34, 140], [-185, 29, 80], [-205, 24, 10], [-205, 19, -70],
+      [-200, 15, -140], [-200, 13, -200], [-205, 10, -260],
+      [-235, 7, -315], [-290, 4, -345], [-350, 2, -330], [-390, 1, -270], [-372, 0, -222], [-335, 0, -203],
+    ],
+    zones: [],
+    forks: [],
+    branches: [],
+    holes: [[0.62, 0.626]],
+    kick: 2.6,
+    routes: [
+      {
+        t0: 0.424, t1: 0.769, width: 13,
+        points: [[40, 15, 232], [-80, 14, 262], [-200, 14, 240], [-290, 15, 170], [-322, 17, 80], [-292, 19, 0]],
+      },
+    ],
+    pads: [
+      { t: 0.045, kind: "boost" }, { t: 0.3, kind: "boost" }, { t: 0.5, kind: "boost" }, { t: 0.607, kind: "boost", power: 1.5 },
+      { t: 0.5, route: 0, kind: "boost" },
+    ],
+  },
   {
     id: "laguna", difficulty: 1, hazards: 3, theme: "aqua",
     relief: { amp: 14, waves: [[1, 0.7, 0.6], [3, 0.35, 2.1]] },
@@ -970,6 +1066,7 @@ TRACKS.push(
 // item spawns) is expressed in track fractions, so it scales for free.
 const TARGET_LEN = 2300;
 for (const trk of TRACKS) {
+  if (trk.designed) continue;
   let len = 0;
   for (let i = 0; i < trk.points.length; i++) {
     const a = trk.points[i];
@@ -991,6 +1088,7 @@ for (const trk of TRACKS) {
   // every circuit gets its own phase so the holes, warps and portals never land
   // on exactly the same fraction of the lap from one track to the next
   const phase = TRACKS.indexOf(trk);
+  if (trk.designed) continue;
   if (!trk.gaps) trk.gaps = [];
   if (!trk.portals) trk.portals = [];
 
@@ -1002,21 +1100,6 @@ for (const trk of TRACKS) {
     !(b < c - pad || a > d + pad);
   const overGap = (a: number, b: number, pad = 0.008) => trk.gaps!.some((g) => hit(a, b, g.t0, g.t1, pad));
   const used = (a: number, b: number, pad = 0.008) => trk.branches.some((br) => hit(a, b, br.t0, br.t1, pad));
-
-  // Two real holes per circuit, kept far apart so no lap has all its drama in
-  // one corner. The span is short enough to leave room for the route network and
-  // long enough to be a real jump.
-  const GAP_SPAN = 0.08;
-  for (let i = 0; i < 120 && !trk.noGround && trk.gaps!.length < 2; i++) {
-    const t0 = (i * 0.217 + 0.12 + phase * 0.031) % 1;
-    const t1 = t0 + GAP_SPAN;
-    if (t1 > 1) continue;
-    if (overGap(t0, t1) || used(t0, t1)) continue;
-    // too close to the hole we already placed?
-    if (trk.gaps!.some((g) => Math.abs(g.t0 - t0) < 0.3)) continue;
-    // a drivable ramp: too steep and the kart simply stalls at the bottom
-    trk.gaps!.push({ t0, t1, ramp: 1.7 + (i % 3) * 0.25, pit: 6.5 + (i % 2) * 2 });
-  }
 
   // The route network: real side roads, four per lap, alternating sides. They
   // leave the carriageway, run alongside it and merge back in, so a lap can be

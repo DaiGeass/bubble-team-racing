@@ -32,16 +32,18 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, branchCenterAt, lanesAt, laneAt, getActiveTrack, surfaceYAt, trackFrameAt, halfWidthAt, trapPhase, trapTransform, inGapPit, gapExitT } from "../trackCurve";
+import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
+import { moveBody, makeResult, placeBody, respawnBody, aimAhead, collideBodies, progDelta, GRAVITY, type Body, type StepOpts } from "../physics";
 import { emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
 
 const TAG_COOLDOWN_MAX = 3.6;
 const RING_COUNT = 7;
-/** Downward acceleration for crest launches and jumps, in units per second squared. */
-const GRAVITY = 26;
-/** Fastest vertical speed the road surface may drag a vehicle up or down with it. */
-const MAX_GLUE = 34;
+// scratch objects for the per-frame physics calls, so the loop allocates nothing
+const stepOpts: StepOpts = { rideOffset: 0, bobbing: false, fly: false, flyAlt: 0, ghost: false };
+const stepRes = makeResult();
+const aimV = new THREE.Vector3();
+const camG = makeGround();
 
 function wrapAngle(a: number) {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -49,33 +51,28 @@ function wrapAngle(a: number) {
   return a;
 }
 
-interface Racer {
+interface Racer extends Body {
   id: string;
   isPlayer: boolean;
   main: CharacterDef;
   partner: CharacterDef | null;
   activeIsPartner: boolean;
   vehicle: VehicleConfig;
-  pos: THREE.Vector3;
-  y: number;
-  /** vertical velocity, only meaningful while airborne */
-  vy: number;
-  airborne: boolean;
-  /** surface height under the vehicle, used to spot crests that launch it */
-  groundY: number;
-  /** road slope in radians, drives the visual pitch */
+  /** visual pitch in radians: the slope on the ground, the arc in the air */
   pitch: number;
-  /** seconds spent stuck off the road, and how long the last rescue took */
-  stuckFor: number;
-  /** seconds spent pinned against a barrier going nowhere */
+  /** seconds spent wedged with the throttle open */
   pinnedFor: number;
-  /** best lap progress, used to spot a driver who is going backwards */
-  bestT: number;
-  /** seconds since the lap progress last moved forward */
+  /** furthest it has got, and seconds since that last moved (AI only) */
+  bestTotal: number;
   noProgressFor: number;
   respawnLock: number;
-  heading: number;
-  speed: number;
+  /** whole laps completed */
+  lapsDone: number;
+  /** cooldown so one pad fires once */
+  padCd: number;
+  /** ribbon the AI has decided to take, 0 for the main loop, and the junction it last decided at */
+  aiRoute: number;
+  aiSeen: number;
   steerSmooth: number;
   t: number;
   lap: number;
@@ -95,8 +92,6 @@ interface Racer {
   fusionHp: number;
   turboMeter: number;
   hazardCd: number;
-  warpCd: number;
-  warp: null | { fromT: number; toT: number; side: number; startOffset: number; t: number; dur: number; heading: number; lift: number };
   magnetTimer: number;
   ghostTimer: number;
   fuseShots: number;
@@ -107,8 +102,6 @@ interface Racer {
   isDrifting: boolean;
   mode: VehicleMode;
   aiPhase: number;
-  /** side of the side road this driver committed to, 0 while on the main road */
-  routeLane: 1 | -1 | 0;
   aiLookahead: number;
   aiWeaponDelay: number;
   aiMult: number;
@@ -200,19 +193,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const mainChar = CHARACTERS.find((c) => c.id === characterId) ?? CHARACTERS[0];
     const partnerChar = CHARACTERS.find((c) => c.id === partnerId) ?? null;
     const total = 1 + mode.aiCount;
-    const tangent0 = trackTangentAt(0);
-    const center0 = trackPointAt(0);
-    const normal0 = new THREE.Vector3(-tangent0.z, 0, tangent0.x).normalize();
-    const heading0 = Math.atan2(tangent0.x, tangent0.z);
+    const mainPath = getPaths()[0];
     for (let i = 0; i < total; i++) {
       const isPlayer = i === 0;
       const row = Math.floor(i / 2);
       const col = i % 2 === 0 ? -1 : 1;
       // grid starts just AHEAD of the finish line so the first crossing = lap 1 done
-      const pos = center0
-        .clone()
-        .addScaledVector(tangent0, 4 + row * 3.4)
-        .addScaledVector(normal0, col * 3.3);
       const aiChar = CHARACTERS[(i * 5 + 3) % CHARACTERS.length];
       list.push({
         id: isPlayer ? "player" : `ai-${i}`,
@@ -233,21 +219,32 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
               plane: PLANES[(i + 1) % PLANES.length],
               sub: SUBS[(i + 2) % SUBS.length],
             },
-        pos,
-        y: surfaceYAt(nearestT(pos)),
+        pos: new THREE.Vector3(),
+        y: 0,
         vy: 0,
         airborne: false,
         groundY: 0,
+        slopeAlong: 0,
+        touching: false,
+        path: 0,
+        idx: 0,
+        prog: 0,
+        total: 0,
+        safePath: 0,
+        safeIdx: 0,
         pitch: 0,
-        stuckFor: 0,
         pinnedFor: 0,
-        bestT: 0,
+        bestTotal: 0,
         noProgressFor: 0,
         respawnLock: 0,
-        heading: heading0,
+        lapsDone: 0,
+        padCd: 0,
+        aiRoute: 0,
+        aiSeen: -1,
+        heading: 0,
         speed: 0,
         steerSmooth: 0,
-        t: nearestT(pos),
+        t: 0,
         lap: 1,
         finished: false,
         weapon: null,
@@ -265,8 +262,6 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         fusionHp: 1,
         turboMeter: 0,
         hazardCd: 0,
-        warpCd: 0,
-        warp: null,
         magnetTimer: 0,
         ghostTimer: 0,
         fuseShots: 0,
@@ -277,7 +272,6 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         isDrifting: false,
         mode: "land",
         aiPhase: Math.random() * Math.PI * 2,
-        routeLane: 0,
         aiLookahead: 0.03 + Math.random() * 0.012,
         aiWeaponDelay: 0,
         aiMult: 1,
@@ -293,6 +287,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         visual: { current: { boosting: false, shielded: false, steer: 0, speedFrac: 0, stunned: false, mode: "land", drift: false } },
         group: { current: null },
       });
+      const me = list[i];
+      placeBody(me, 0, Math.round((4 + row * 3.4) / mainPath.ds), col * 3.3);
+      me.total = me.prog;
+      me.bestTotal = me.total;
+      me.t = me.prog;
     }
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -304,7 +303,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     for (let i = 0; i < count; i++) {
       const t = (i + 0.5) / count;
       const zone = zoneAt(t);
-      if (zone) continue; // no boxes inside water/sky zones
+      if (zone && zone.t1 - zone.t0 < 0.99) continue; // no boxes inside water/sky zones, unless the whole lap is one
       // the box has to sit inside the pickup radius, so a car driving the middle
       // of the road still collects it; sides just nudge it off the racing line
       const side = i % 3 === 0 ? 1 : i % 3 === 1 ? -1 : 0;
@@ -335,18 +334,40 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const y = surfaceYAt(t) + (zone?.type === "sky" ? SKY_ALTITUDE + 1.2 : 1.1);
       coins.push({ pos: center.clone().addScaledVector(normal, (i % 2 === 0 ? 1 : -1) * 1.9).setY(y), active: true, respawn: 0, group: { current: null } });
     }
-    // coin bait along every alternate branch route
-    for (const b of getActiveTrack().branches) {
+    // coin bait along every alternate route
+    const all = getPaths();
+    for (let k = 1; k < all.length; k++) {
       const N = 9;
       for (let i = 0; i < N; i++) {
-        const t = b.t0 + ((b.t1 - b.t0) * (i + 0.5)) / N;
-        const bc = branchCenterAt(t);
-        if (!bc) continue;
-        coins.push({ pos: bc.point.clone(), active: true, respawn: 0, group: { current: null } });
+        const p = pathPoint(k, Math.round(((i + 0.5) / N) * (all[k].n - 1)), 0, new THREE.Vector3());
+        p.y += 1.1;
+        coins.push({ pos: p, active: true, respawn: 0, group: { current: null } });
       }
     }
     return coins;
   }, []);
+
+  const pads = useMemo(() => getPads(), []);
+
+  /** Back on the road after a fall or when wedged, with enough speed to take the next jump. */
+  function recover(r: Racer, pace: number) {
+    respawnBody(r);
+    r.speed = pace;
+    r.respawnLock = 1;
+    r.pinnedFor = 0;
+    r.noProgressFor = 0;
+    r.stunTimer = 0;
+    r.isDrifting = false;
+    r.driftCharge = 0;
+    r.aiRoute = 0;
+    r.swapInvuln = Math.max(r.swapInvuln, 1.5);
+    r.t = r.prog;
+    emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: theme.glow, count: 26, speed: 5, spread: 1.4, size: 0.22, life: 0.6 });
+    if (r.isPlayer) {
+      addShake(0.22);
+      sfx.swap();
+    }
+  }
 
   const PROJ_POOL = 18;
   const projectiles = useMemo<Projectile[]>(
@@ -361,6 +382,25 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     []
   );
   const puddleRefs = useMemo(() => Array.from({ length: PUDDLE_POOL }, () => ({ current: null as THREE.Group | null })), []);
+
+  const sun = useMemo(() => {
+    const l = new THREE.DirectionalLight();
+    l.castShadow = true;
+    l.shadow.mapSize.set(2048, 2048);
+    const c = l.shadow.camera;
+    c.left = -110;
+    c.right = 110;
+    c.top = 110;
+    c.bottom = -110;
+    c.far = 320;
+    c.updateProjectionMatrix();
+    l.shadow.bias = -0.0008;
+    return l;
+  }, []);
+  useEffect(() => {
+    sun.color.set(theme.sun);
+    sun.intensity = theme.sunIntensity;
+  }, [sun, theme]);
 
   const started = useRef(false);
   const raceClock = useRef(0);
@@ -416,10 +456,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   function findTargetAhead(r: Racer, maxGap: number) {
     let best: Racer | null = null;
     let bestDiff = Infinity;
-    const my = r.lap + r.t;
+    const my = r.total;
     for (const o of racers) {
       if (o === r || o.finished) continue;
-      const gap = o.lap + o.t - my;
+      const gap = o.total - my;
       if (gap > 0.004 && gap < maxGap && gap < bestDiff) {
         bestDiff = gap;
         best = o;
@@ -635,7 +675,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         puddle.ownerId = r.id;
         puddle.ignoreUntil = performance.now() + 1000;
         puddle.life = 14;
-        puddle.pos.copy(r.pos).addScaledVector(fwd, -2.6).setY(surfaceYAt(r.t) + 0.08);
+        puddle.pos.copy(r.pos).addScaledVector(fwd, -2.6).setY(r.groundY + 0.08);
       }
       if (r.isPlayer) sfx.item();
     } else if (w === "beam") {
@@ -667,10 +707,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     } else if (w === "zap") {
       // lightning: chain-stun up to 3 rivals ahead
       let hits = 0;
-      const my = r.lap + r.t;
+      const my = r.total;
       for (const o of racers) {
         if (o === r || o.finished || hits >= 3) continue;
-        const gap = o.lap + o.t - my;
+        const gap = o.total - my;
         if (gap > 0.004 && gap < 0.3) {
           hits++;
           if (!protectedNow(o)) {
@@ -702,7 +742,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         mine.ownerId = r.id;
         mine.ignoreUntil = performance.now() + 1100;
         mine.life = 16;
-        mine.pos.copy(r.pos).addScaledVector(fwd, -3.2).setY(surfaceYAt(r.t) + 0.12);
+        mine.pos.copy(r.pos).addScaledVector(fwd, -3.2).setY(r.groundY + 0.12);
       }
       if (r.isPlayer) sfx.item();
     } else if (w === "swap") {
@@ -710,19 +750,15 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const target = findTargetAhead(r, 0.5);
       if (target) {
         const myPos = r.pos.clone();
-        const myT = r.t;
-        const myLap = r.lap;
-        const myHeading = r.heading;
         r.pos.copy(target.pos);
-        r.t = target.t;
-        r.lap = target.lap;
-        r.heading = target.heading;
         target.pos.copy(myPos);
-        target.t = myT;
-        target.lap = myLap;
-        target.heading = myHeading;
+        // everything that says where on the lap a car is changes hands with it
+        for (const k of ["t", "lap", "lapsDone", "heading", "y", "vy", "airborne", "path", "idx", "prog", "total", "bestTotal", "safePath", "safeIdx", "groundY"] as const) {
+          const mine = r[k];
+          (r as unknown as Record<string, unknown>)[k] = target[k];
+          (target as unknown as Record<string, unknown>)[k] = mine;
+        }
         [r.mode, target.mode] = [target.mode, r.mode];
-        [r.y, target.y] = [target.y, r.y];
         r.swapInvuln = 1;
         target.swapInvuln = 0.6;
         emitParticles({ position: r.pos.clone().setY(r.y + 1), color: col, count: 32, speed: 5.5, spread: 1.5, size: 0.24, life: 0.8 });
@@ -747,16 +783,18 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // ground slam: everyone on the same lap section gets bounced
       for (const o of racers) {
         if (o === r || o.finished) continue;
-        if (Math.abs(o.lap + o.t - (r.lap + r.t)) > 0.2) continue;
+        if (Math.abs(o.total - (r.total)) > 0.2) continue;
         if (protectedNow(o)) continue;
         o.stunTimer = Math.max(o.stunTimer, 0.9);
         o.speed *= 0.6;
-        o.y += 1.4;
+        // thrown into the air for real
+        o.vy = 7;
+        o.airborne = true;
         emitParticles({ position: o.pos.clone().setY(o.y + 0.5), color: col, count: 16, speed: 4, spread: 1.4, size: 0.22, life: 0.6 });
         if (o.isPlayer) addShake(0.4);
       }
       for (let i = 0; i < 4; i++) {
-        emitParticles({ position: r.pos.clone().setY(surfaceYAt(r.t) + 0.2), color: WEAPON_META.quake.glow, count: 14, speed: 6 + i, spread: 2.2, size: 0.24, life: 0.7, upBias: 0.2 });
+        emitParticles({ position: r.pos.clone().setY(r.groundY + 0.2), color: WEAPON_META.quake.glow, count: 14, speed: 6 + i, spread: 2.2, size: 0.24, life: 0.7, upBias: 0.2 });
       }
       if (r.isPlayer) {
         addShake(0.55);
@@ -805,54 +843,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.fuseCd > 0) r.fuseCd -= dt;
     if (r.bumpCd > 0) r.bumpCd -= dt;
     for (let i = 0; i < r.ringCd.length; i++) if (r.ringCd[i] > 0) r.ringCd[i] -= dt;
-    if (r.warpCd > 0) r.warpCd -= dt;
+    if (r.padCd > 0) r.padCd -= dt;
     if (r.aiMistake > 0) r.aiMistake -= dt;
     else if (!r.isPlayer && Math.random() < AI_PROFILES[useGame.getState().settings.aiSkill].mistake * dt) r.aiMistake = 0.5 + Math.random();
     if (r.portalCd > 0) r.portalCd -= dt;
     if (r.magnetTimer > 0) r.magnetTimer -= dt;
     if (r.ghostTimer > 0) r.ghostTimer -= dt;
-
-    // ---- ALTERNATIVE PATH: flying along a shortcut arc ----
-    if (r.warp) {
-      const w = r.warp;
-      w.t += dt / w.dur;
-      const e = Math.min(1, w.t);
-      const ease = e * e * (3 - 2 * e);
-      r.t = (w.fromT + ((w.toT - w.fromT + 1) % 1) * ease) % 1;
-      const wTan = trackTangentAt(r.t);
-      const wNrm = new THREE.Vector3(-wTan.z, 0, wTan.x).normalize();
-      const wOff = THREE.MathUtils.lerp(w.startOffset, w.side * (halfWidthAt(r.t) - 3.6), ease);
-      r.pos.copy(trackPointAt(r.t)).addScaledVector(wNrm, wOff);
-      r.y = surfaceYAt(r.t) + Math.sin(e * Math.PI) * (w.lift || 9);
-      r.vy = 0;
-      r.airborne = false;
-      r.heading += wrapAngle(w.heading - r.heading) * Math.min(1, dt * 6);
-      if (frame.current % 2 === 0) {
-        emitParticles({ position: r.pos.clone().setY(r.y + 0.4), color: theme.glow, count: 2, speed: 0.8, spread: 0.3, size: 0.22, life: 0.5, gravity: 0 });
-      }
-      if (e >= 1) {
-        r.warp = null;
-        r.y = surfaceYAt(r.t);
-        r.mode = "land";
-        r.boostTimer = Math.max(r.boostTimer, 1.2);
-        r.boostMult = Math.max(r.boostMult, 1.5);
-        r.warpCd = 2.5;
-        emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: theme.glow, count: 30, speed: 5, spread: 1.4, size: 0.24, life: 0.7 });
-        if (r.isPlayer) {
-          addShake(0.3);
-          sfx.boost();
-        }
-      }
-      r.visual.current.mode = "plane";
-      r.visual.current.boosting = true;
-      r.visual.current.speedFrac = 1;
-      r.visual.current.steer = 0;
-      if (r.group.current) {
-        r.group.current.position.set(r.pos.x, r.y, r.pos.z);
-        r.group.current.rotation.y = r.heading;
-      }
-      return;
-    }
 
     // ---- zone / mode ----
     const zone = zoneAt(r.t);
@@ -898,49 +894,34 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // every opponent runs the skill profile the player picked, with a small
       // per-racer personality offset so a field of pros is not a mirror clone
       const ai = AI_PROFILES[useGame.getState().settings.aiSkill];
-      const look = r.t + r.aiLookahead * (ai.lookahead / 0.04);
       const wobble = Math.sin(clockRef.current * 0.0006 + r.aiPhase);
       const weave = wobble * ai.weave * (1 + r.aiQuirk);
-      const cp = trackPointAt(look);
-      const tan = trackTangentAt(look);
-      const nrm = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
       // lower skill runs a wider line and drifts wider on corners
-      const sloppy = r.aiMistake > 0 ? r.aiMistake * 3.2 : 0;
-      // Aim at the middle of the lane it is on, never past its edge: the old
-      // weave was ±9 plus the mistake term, which is outside the tarmac on a
-      // narrow stretch, so the field spent the race grinding the barrier.
-      const wantLane = laneAt(look, weave * TRACK_WIDTH * 0.45 + sloppy * TRACK_WIDTH * 0.12).lane;
-      const laneMid = (wantLane.min + wantLane.max) / 2;
-      const laneRoom = (wantLane.max - wantLane.min) / 2 - 2.5;
-      const aimOffset = THREE.MathUtils.clamp(
-        wantLane.kind === "side" && r.routeLane === wantLane.side ? laneMid + weave * 2.2 : laneMid + weave * laneRoom,
-        wantLane.min + 2.5,
-        wantLane.max - 2.5
-      );
-      const aim = cp.clone().addScaledVector(nrm, aimOffset);
-      aim.y = r.mode === "plane" ? Math.sin(Math.min(1, Math.max(0, inSky)) * Math.PI) * SKY_ALTITUDE + 1.6 : 0;
-      const toAim = new THREE.Vector3().subVectors(aim, r.pos.clone().setY(aim.y));
-      const desired = Math.atan2(toAim.x, toAim.z);
+      const sloppy = r.aiMistake > 0 ? Math.min(0.5, r.aiMistake * 0.4) : 0;
+      // route choice: decided once per junction, a little before reaching it
+      const all = getPaths();
+      if (r.aiSeen > 0 && (!all[r.aiSeen] || progDelta(all[r.aiSeen].t0, r.prog) > 0.05)) r.aiSeen = -1;
+      if (r.aiRoute === 0) {
+        for (let k = 1; k < all.length; k++) {
+          const rel = progDelta(all[k].t0, r.prog);
+          if (rel > -0.03 && rel < 0 && r.aiSeen !== k) {
+            r.aiSeen = k;
+            if (Math.random() < Math.min(0.9, ai.gateUse * 1.5)) r.aiRoute = k;
+          }
+        }
+      }
+      // aim along the road it is taking, in 3D: the bridge and the road under it are different roads
+      const lookDist = 12 + Math.abs(r.speed) * (0.3 + ai.lookahead * 7) * (r.aiLookahead / 0.036);
+      r.aiRoute = aimAhead(r, r.aiRoute, lookDist, THREE.MathUtils.clamp(weave * 1.6 + sloppy, -0.85, 0.85), aimV);
+      const desired = Math.atan2(aimV.x - r.pos.x, aimV.z - r.pos.z);
       steerIn = THREE.MathUtils.clamp(wrapAngle(desired - r.heading) * ai.steerGain, -1, 1);
       // pros lift when they have the room, beginners floor it into the barrier
       throttleIn = r.stunTimer > 0 ? 0 : Math.abs(wrapAngle(desired - r.heading)) > 0.55 && ai.steerGain < 3 ? 0.55 : 1;
 
       const player = racers[0];
-      const gap = player.lap + player.t - (r.lap + r.t);
+      const gap = player.total - (r.total);
       const rb = mode.rubberband * ai.rubberband;
       r.aiMult = gap > 0.05 ? 1 + 0.2 * rb : gap < -0.1 ? 1 - 0.13 * rb : 1;
-
-      // route choice: a driver commits to a side road while one is open and
-      // merges back on its own, because the lane centre returns to the racing
-      // line at both ends of the envelope
-      const openHere = lanesAt(r.t);
-      if (r.routeLane) {
-        const still = openHere.some((l) => l.kind === "side" && l.side === r.routeLane);
-        if (!still) r.routeLane = 0;
-      } else if (Math.random() < ai.gateUse * dt * 3) {
-        const option = openHere.find((l) => l.kind === "side" && l.side !== r.routeLane);
-        if (option) r.routeLane = option.side;
-      }
 
       if (r.weapon) {
         r.aiWeaponDelay -= dt;
@@ -1001,6 +982,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.mode === "plane") effMax *= st.planeBonus * 1.12 * craftSpeed(r.vehicle.plane, 1);
     if (r.slowTimer > 0) effMax *= 0.55;
 
+    // hills cost speed going up and give it back coming down
+    const hill = r.airborne || r.mode === "plane" ? 0 : THREE.MathUtils.clamp(r.slopeAlong, -0.35, 0.35);
+    effMax *= 1 - hill * (r.speed >= 0 ? 0.55 : -0.55);
+    if (hill !== 0) r.speed -= GRAVITY * 0.4 * hill * dt;
+
     const accelNow = st.accel * (r.mode === "plane" ? 1.25 : 1);
     if (throttleIn > 0) r.speed += accelNow * dt;
     else if (throttleIn < 0) r.speed -= accelNow * 1.4 * dt;
@@ -1025,57 +1011,39 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const dir = r.speed >= 0 ? 1 : -1;
     r.heading += r.steerSmooth * st.turnRate * authority * driftMul * modeMul * dir * dt;
 
-    // ---- movement ----
+    // ---- movement: ground, barriers, gravity and lap progress live in physics.ts ----
     const fwd = new THREE.Vector3(Math.sin(r.heading), 0, Math.cos(r.heading));
-    r.pos.addScaledVector(fwd, r.speed * dt);
+    let mx = fwd.x * r.speed * dt;
+    let mz = fwd.z * r.speed * dt;
     if (r.isDrifting) {
-      const nrm = new THREE.Vector3(-fwd.z, 0, fwd.x);
-      r.pos.addScaledVector(nrm, -r.steerSmooth * 0.32 * Math.abs(r.speed) * dt);
+      const slip = -r.steerSmooth * 0.32 * Math.abs(r.speed) * dt;
+      mx += -fwd.z * slip;
+      mz += fwd.x * slip;
     }
+    const bob = performance.now();
+    stepOpts.fly = r.mode === "plane";
+    stepOpts.flyAlt = Math.sin(Math.min(1, Math.max(0, inSky)) * Math.PI) * SKY_ALTITUDE;
+    stepOpts.bobbing = r.mode === "boat" || r.mode === "sub";
+    stepOpts.rideOffset =
+      r.mode === "boat" ? -0.12 + Math.sin(bob * 0.004 + r.aiPhase) * 0.09 : r.mode === "sub" ? 0.35 + Math.sin(bob * 0.003 + r.aiPhase) * 0.1 : 0;
+    moveBody(r, mx, mz, dt, stepOpts, stepRes);
 
-    // ---- vertical: every mode rides the lane it is on, and crests launch the vehicle ----
-    // The lane matters: side roads have their own deck, so riding surfaceYAt would
-    // leave a car floating over them or buried under them.
-    const laneInfo = laneAt(r.t, lateralOffsetFrom(r.pos, r.t));
-    const groundY = laneInfo.lane.y;
-    let rideY = groundY;
-    if (r.mode === "plane") {
-      rideY = groundY + Math.sin(Math.min(1, Math.max(0, inSky)) * Math.PI) * SKY_ALTITUDE;
-    } else if (r.mode === "boat") {
-      rideY = groundY - 0.12 + Math.sin(performance.now() * 0.004 + r.aiPhase) * 0.09;
-    } else if (r.mode === "sub") {
-      rideY = groundY + 0.35 + Math.sin(performance.now() * 0.003 + r.aiPhase) * 0.1;
-    }
-
-    if (r.mode === "plane") {
-      // planes fly: hold the altitude profile whatever the ground does
-      r.airborne = false;
-      r.vy = 0;
-      r.y = THREE.MathUtils.lerp(r.y, rideY, 0.12);
-    } else {
-      // vertical speed needed to stay glued to the surface over this frame, capped so a
-      // discontinuity (respawn, warp exit, zone change) can never fling the car upward
-      const need = THREE.MathUtils.clamp(dt > 1e-4 ? (rideY - r.y) / dt : 0, -MAX_GLUE, MAX_GLUE);
-      const fall = r.vy - GRAVITY * dt;
-      // the ground fell away faster than gravity can follow: we leave it.
-      // Hulls bob a few centimetres above their target height, which would otherwise
-      // flicker the flag every frame, so the launch test needs real separation there.
-      const bobbing = r.mode === "boat" || r.mode === "sub";
-      if (!r.airborne && need < fall - 0.5 && (!bobbing || rideY - r.y > 0.3)) r.airborne = true;
-      if (r.airborne) {
-        r.vy = fall;
-        r.y += r.vy * dt;
-        if (r.y <= rideY && r.vy <= 0) {
-          r.y = rideY;
-          r.vy = 0;
-          r.airborne = false;
-        }
-      } else {
-        r.y = rideY;
-        r.vy = THREE.MathUtils.lerp(r.vy, need, 0.4);
+    // a barrier is felt once, in proportion to how hard it was hit; sliding along it is silent
+    if (stepRes.wallFirst && stepRes.wallImpact > 0.12 && r.bumpCd <= 0) {
+      r.bumpCd = 0.45;
+      if (r.isPlayer) {
+        addShake(0.05 + 0.22 * stepRes.wallImpact);
+        sfx.bump();
+        emitParticles({ position: r.pos.clone().setY(r.y + 0.4), color: theme.particles[0], count: 8, speed: 2.4, spread: 0.7, size: 0.16, life: 0.35 });
       }
     }
-    r.groundY = groundY;
+    if (stepRes.landed > 8) {
+      emitParticles({ position: r.pos.clone().setY(r.y + 0.2), color: theme.particles[1], count: 10, speed: 2.6, spread: 1.1, size: 0.18, life: 0.4 });
+      if (r.isPlayer) {
+        addShake(Math.min(0.3, stepRes.landed * 0.012));
+        sfx.bump();
+      }
+    }
 
     if (r.exploding) {
       r.explodeTimer -= dt;
@@ -1084,175 +1052,74 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       if (r.explodeTimer <= 0) {
         r.exploding = false;
         if (r.group.current) r.group.current.visible = true;
+        // back on its wheels in the middle of the road it was on
+        placeBody(r, r.safePath, r.safeIdx);
         r.respawnLock = 1.1;
-        const lane = laneAt(r.t, lateralOffsetFrom(r.pos, r.t)).lane;
-        const tangent = trackTangentAt(r.t);
-        const nrm = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-        r.pos.addScaledVector(nrm, (lane.min + lane.max) / 2 - lateralOffsetFrom(r.pos, r.t));
-        r.y = lane.y;
-        r.vy = 0;
-        r.airborne = false;
-        r.speed = Math.min(Math.abs(r.speed), 5);
-        r.heading = Math.atan2(tangent.x, tangent.z);
+        r.speed = 5;
         r.stunTimer = 1.2;
         r.ghostTimer = 2.2;
         emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: theme.glow, count: 40, speed: 6, spread: 1.8, size: 0.26, life: 0.8 });
       }
-      // skip normal physics while exploding
     }
 
+    // on the ground the nose follows the slope, in the air it follows the arc
+    const nose = r.airborne ? THREE.MathUtils.clamp(Math.atan2(r.vy, Math.max(10, Math.abs(r.speed))), -0.6, 0.6) : Math.atan(r.slopeAlong);
+    r.pitch = THREE.MathUtils.lerp(r.pitch, nose, r.mode === "plane" ? 0.05 : r.airborne ? 0.1 : 0.25);
 
-    // the road slope becomes visual pitch, so hills are felt and not only seen
-    const surface = trackFrameAt(r.t);
-    const slope = Math.asin(THREE.MathUtils.clamp(surface.tangent.y, -1, 1));
-    r.pitch = THREE.MathUtils.lerp(r.pitch, slope, r.mode === "plane" ? 0.05 : 0.25);
-
-    // ---- track containment (relaxed while flying) ----
-    const newT = nearestT(r.pos, r.t);
-    const offset = lateralOffsetFrom(r.pos, newT);
-    // Lane walls: the main carriageway and each side road are separate surfaces,
-    // so the verge between them is a barrier instead of free space.
-    const here = laneAt(newT, offset);
-    const pad = r.ghostTimer > 0 ? 9 : r.mode === "plane" ? 3 : -0.9;
-    const lo = here.lane.min + pad;
-    const hi = here.lane.max + pad;
-    if (!here.inside) {
-      // Smooth wall slide: clamp position, nudge heading parallel to the wall.
-      // Feedback (shake/sound/speed loss) only on FIRST contact — no vibration loop.
-      const tangent = trackTangentAt(newT);
-      const nrm = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-      // Only cancel the lateral overshoot. Rewriting the whole position here would
-      // wipe the forward motion of the frame and freeze the kart against the barrier.
-      const clamped = offset > hi ? hi : lo;
-      r.pos.addScaledVector(nrm, clamped - offset);
-      const wallHeading = Math.atan2(tangent.x, tangent.z);
-      const diff = wrapAngle(wallHeading - r.heading);
-      r.heading += diff * Math.min(1, dt * 5);
-      const firstHit = r.bumpCd <= 0;
-      if (firstHit && Math.abs(r.speed) > 4) {
-        r.bumpCd = 0.5;
-        r.speed *= r.mode === "plane" ? 0.9 : 0.72;
-        if (r.isPlayer) {
-          addShake(0.18);
-          sfx.bump();
-          emitParticles({ position: r.pos.clone().setY(r.y + 0.4), color: theme.particles[0], count: 8, speed: 2.4, spread: 0.7, size: 0.16, life: 0.35 });
+    // ---- pads painted on the road ----
+    if (r.padCd <= 0 && !r.airborne) {
+      for (const pad of pads) {
+        const px = pad.pos.x - r.pos.x;
+        const pz = pad.pos.z - r.pos.z;
+        if (px * px + pz * pz > 10 || Math.abs(pad.pos.y - r.y) > 2) continue;
+        r.padCd = 0.9;
+        if (pad.kind === "jump") {
+          r.vy = pad.power ?? 13;
+          r.airborne = true;
+        } else {
+          r.boostTimer = Math.max(r.boostTimer, 1.1);
+          r.boostMult = Math.max(r.boostMult, pad.power ?? 1.45);
+          r.speed = Math.max(r.speed, st.maxSpeed * 0.85);
         }
-      } else {
-        r.speed *= 1 - (r.mode === "plane" ? 0.25 : 0.8) * dt;
+        emitParticles({ position: r.pos.clone().setY(r.y + 0.4), color: theme.glow, count: 18, speed: 4.5, spread: 0.9, size: 0.2, life: 0.5 });
+        if (r.isPlayer) {
+          r.boostsUsed++;
+          addShake(0.16);
+          sfx.boost();
+        }
+        break;
       }
     }
 
-    // ---- rescue: nobody stays stranded off the road ----
+    // ---- rescue: out of the circuit, or wedged ----
     if (r.respawnLock > 0) r.respawnLock -= dt;
-    // stranded means outside every lane, not merely outside the main road: a car
-    // wedged in the verge between the carriageway and a side road used to sit
-    // there forever because the old corridor test considered it legal ground
-    const lanes = lanesAt(newT);
-    let outsideBy = 0;
-    let nearest = lanes[0];
-    let nearestD = Infinity;
-    for (const l of lanes) {
-      const d = offset < l.min ? l.min - offset : offset > l.max ? offset - l.max : 0;
-      if (d < nearestD) {
-        nearestD = d;
-        nearest = l;
-      }
-      outsideBy = Math.max(outsideBy, d);
-    }
-    if (r.mode !== "plane" && (outsideBy > 4 || r.y < groundY - 8)) {
-      r.stuckFor += dt;
-      // three seconds of drifting off the road puts you back on the tarmac
-      if (r.stuckFor > 3 && r.respawnLock <= 0) {
-        r.stuckFor = 0;
-        r.respawnLock = 1.2;
-        r.t = newT;
-        const tangent = trackTangentAt(newT);
-        const nrm = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-        const centre = (nearest.min + nearest.max) / 2;
-        r.pos.addScaledVector(nrm, centre - offset);
-        r.y = nearest.y;
-        r.vy = 0;
-        r.airborne = false;
-        r.speed = Math.min(r.speed, 6);
-        r.heading = Math.atan2(tangent.x, tangent.z);
-        emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: theme.glow, count: 26, speed: 5, spread: 1.4, size: 0.22, life: 0.6 });
-        if (r.isPlayer) {
-          addShake(0.25);
-          sfx.bump();
-        }
-      }
-    } else if (r.speed > 1) {
-      r.stuckFor = 0;
-    }
-
-    // ---- rescue 2: pinned or going nowhere ----
-    // Grinding a barrier, or sitting in a donut with no forward progress, is as
-    // bad as falling off a cliff: both strand the player behind the pack.
-    // the pit counts once, not twice: whichever branch owns the timer below is
-    // the only one allowed to grow pinnedFor
-    const stuckInPit = inGapPit(r.t);
-    if (r.respawnLock <= 0 && r.mode !== "plane" && !r.warp && !stuckInPit && r.speed < st.maxSpeed * 0.18 && r.speed < 7) {
-      r.pinnedFor += dt;
-    } else if (r.speed > st.maxSpeed * 0.3) {
-      r.pinnedFor = 0;
-    }
-
-    // forward progress is tracked across the whole lap, wrap included
-    const lapKey = r.lap * 1000 + newT;
-    if (lapKey > r.bestT + 0.0005) {
-      r.bestT = lapKey;
+    const trying = r.isPlayer ? throttleIn !== 0 : true;
+    if (trying && r.stunTimer <= 0 && !r.exploding && r.respawnLock <= 0 && Math.abs(r.speed) < 2.5) r.pinnedFor += dt;
+    else r.pinnedFor = Math.max(0, r.pinnedFor - dt * 2);
+    if (r.total > r.bestTotal + 0.0004) {
+      r.bestTotal = r.total;
       r.noProgressFor = 0;
-    } else if (r.mode === "land") {
+    } else if (!r.isPlayer && r.stunTimer <= 0) {
       r.noProgressFor += dt;
     }
-
-    // a car sitting in the bottom of a gap gets fished over to the far lip, and
-    // sooner than a barrier scrape: the pit floor has no grip at all
-    if (r.respawnLock <= 0 && stuckInPit && r.speed < 5 && !r.airborne) {
-      r.pinnedFor += dt * 1.6;
+    if (stepRes.fell || r.pinnedFor > 2.5 || r.noProgressFor > 7) {
+      recover(r, st.maxSpeed * 0.6);
+      if (r.isPlayer) useGame.getState().setTelemetry({ shortcutFlash: Date.now() });
     }
 
-    if (r.respawnLock <= 0 && (r.pinnedFor > 2.6 || r.noProgressFor > 6)) {
-      const wasInPit = stuckInPit;
-      if (wasInPit) {
-        const out = gapExitT(r.t);
-        r.t = out;
-        r.pos.copy(trackPointAt(out));
-        r.y = surfaceYAt(out);
-        r.heading = Math.atan2(trackTangentAt(out).x, trackTangentAt(out).z);
-      }
-      r.pinnedFor = 0;
-      r.noProgressFor = 0;
-      r.stuckFor = 0;
-      r.respawnLock = 1.2;
-      // drop back on the racing line, pointing the right way, at a slow speed
-      const tangent = trackTangentAt(r.t);
-      r.pos.copy(trackPointAt(r.t));
-      r.y = surfaceYAt(r.t);
-      r.vy = 0;
-      r.airborne = false;
-      r.speed = Math.min(r.speed, 7);
-      r.heading = Math.atan2(tangent.x, tangent.z);
-      r.stunTimer = 0;
-      emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: theme.barrierB, count: 24, speed: 5, spread: 1.4, size: 0.22, life: 0.6 });
-      if (r.isPlayer) {
-        addShake(0.22);
-        sfx.bump();
-        useGame.getState().setTelemetry({ shortcutFlash: Date.now() });
-      }
-    }
-
-    // ---- lap ----
-    if (r.t > 0.8 && newT < 0.2) {
-      r.lap += 1;
-      hazardState.lap = r.lap; // the map mutates: hazard patterns shift each lap
+    // ---- lap: counted from distance really driven, so reversing over the line gains nothing ----
+    r.t = r.prog;
+    const lapsNow = Math.floor(r.total);
+    if (lapsNow > r.lapsDone) {
+      r.lapsDone = lapsNow;
+      r.lap = lapsNow + 1;
+      hazardState.lap = Math.max(hazardState.lap, r.lap); // the map mutates: hazard patterns shift each lap
       if (r.isPlayer) {
         addShake(0.14);
         sfx.coin();
         emitParticles({ position: r.pos.clone().setY(r.y + 1.4), color: theme.glow, count: 20, speed: 4, spread: 1.4, size: 0.22, life: 0.7 });
       }
     }
-    r.t = newT;
 
     // ---- magnet slipstream: get yanked toward the racer ahead ----
     if (r.magnetTimer > 0) {
@@ -1269,8 +1136,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // ---- pickups ----
     for (const box of itemBoxes) {
       if (!box.active) continue;
-      if (r.mode !== "land" && r.mode !== "boat") continue;
-      if (box.pos.distanceTo(r.pos) < 2.9) {
+      if (Math.hypot(box.pos.x - r.pos.x, box.pos.z - r.pos.z) < 2.9 && Math.abs(box.pos.y - r.y) < (r.mode === "plane" ? 12 : 3)) {
         if (!r.weapon) {
           const rolled: WeaponId = rollWeapon();
           r.weapon = rolled;
@@ -1335,12 +1201,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       if (p.pos.distanceTo(r.pos) < hitR) {
         if (p.kind === "mine") {
           applyHit(r, true);
-          emitParticles({ position: p.pos.clone().setY(0.5), color: WEAPON_META.mine.glow, count: 28, speed: 5, spread: 1.6, size: 0.24, life: 0.7 });
+          emitParticles({ position: p.pos.clone().setY(p.pos.y + 0.5), color: WEAPON_META.mine.glow, count: 28, speed: 5, spread: 1.6, size: 0.24, life: 0.7 });
         } else if (!protectedNow(r)) {
           r.slowTimer = 1.1;
           r.speed *= 0.55;
           r.stunTimer = Math.max(r.stunTimer, 0.5);
-          emitParticles({ position: r.pos.clone().setY(0.4), color: WEAPON_META.slime.color, count: 18, speed: 3, spread: 1.2, size: 0.2, life: 0.6 });
+          emitParticles({ position: r.pos.clone().setY(r.y + 0.4), color: WEAPON_META.slime.color, count: 18, speed: 3, spread: 1.2, size: 0.2, life: 0.6 });
           if (r.isPlayer) {
             addShake(0.3);
             sfx.hit();
@@ -1463,16 +1329,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         // ring is 5.4 across, so a car wider than that keeps driving on the road
         const gateOff = Math.abs(lateralOffsetFrom(r.pos, pr.tIn) - pr.side * (halfWidthAt(pr.tIn) - 3.6));
         if (dIn < 0.012 && gateOff < 3) {
-          const wTan = trackTangentAt(pr.tOut);
-          const wNrm = new THREE.Vector3(-wTan.z, 0, wTan.x).normalize();
-          const wOff = pr.side * (halfWidthAt(pr.tOut) - 3.6);
-          r.t = pr.tOut;
-          r.pos.copy(trackPointAt(pr.tOut)).addScaledVector(wNrm, wOff);
-          r.y = surfaceYAt(pr.tOut);
-          r.heading = Math.atan2(wTan.x, wTan.z);
+          placeBody(r, 0, mainIndexAt(pr.tOut), pr.side * (halfWidthAt(pr.tOut) - 3.6));
+          r.t = r.prog;
           r.portalCd = pr.cd;
-          r.vy = 0;
-          r.airborne = false;
           r.boostTimer = Math.max(r.boostTimer, 0.8);
           r.boostMult = Math.max(r.boostMult, 1.4);
           emitParticles({ position: r.pos.clone().setY(r.y + 0.8), color: theme.glow, count: 32, speed: 6, spread: 1.6, size: 0.24, life: 0.8 });
@@ -1487,7 +1346,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     r.particleAccum -= dt;
     if (r.particleAccum <= 0 && (r.boostTimer > 0 || r.isDrifting || r.mode === "boat" || r.mode === "plane" || r.mode === "sub")) {
       r.particleAccum = r.mode === "boat" ? 0.05 : 0.045;
-      const behind = r.pos.clone().addScaledVector(fwd, -1.3).setY(r.mode === "plane" ? r.y + 0.4 : r.mode === "boat" ? 0.15 : 0.25);
+      const behind = r.pos.clone().addScaledVector(fwd, -1.3).setY(r.y + (r.mode === "plane" ? 0.4 : r.mode === "boat" ? 0.15 : 0.25));
       const color =
         r.mode === "boat"
           ? "#ffffff"
@@ -1520,67 +1379,31 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
   }
 
-  useFrame((_, deltaRaw) => {
-    const state = useGame.getState();
-    const dt = Math.min(deltaRaw, 1 / 30);
+  function simulate(dt: number, controls: ReturnType<typeof poll>, over: boolean) {
     frame.current++;
-    clockRef.current = performance.now();
-    const controls = poll();
-
-    if (controls.pausePressed && state.screen === "race" && !state.telemetry.finished) state.setPaused(!state.paused);
-
-    // pickups animate
-    for (const box of itemBoxes) {
-      if (!box.active) {
-        box.respawn -= dt;
-        if (box.respawn <= 0) box.active = mode.itemsEnabled;
-      }
-      if (box.group.current) {
-        box.group.current.visible = box.active;
-        box.group.current.rotation.y += dt * 1.8;
-        box.group.current.rotation.x += dt * 0.7;
-        box.group.current.position.y = box.pos.y + 1 + Math.sin(performance.now() * 0.003 + box.t * 12) * 0.18;
-      }
-    }
-    for (const coin of coinSpots) {
-      if (!coin.active) {
-        coin.respawn -= dt;
-        if (coin.respawn <= 0) coin.active = true;
-      }
-      if (coin.group.current) {
-        coin.group.current.visible = coin.active;
-        coin.group.current.rotation.y += dt * 2.6;
-        coin.group.current.position.y = coin.pos.y + 0.7 + Math.sin(performance.now() * 0.004 + coin.pos.x) * 0.12;
-      }
-    }
-
-    // beam visual
-    if (beamRef.current) {
-      if (beamTimer.current > 0) {
-        beamTimer.current -= dt;
-        beamRef.current.visible = true;
-        const mid = beamFrom.current.clone().lerp(beamTo.current, 0.5);
-        const len = beamFrom.current.distanceTo(beamTo.current);
-        beamRef.current.position.copy(mid);
-        beamRef.current.lookAt(beamTo.current);
-        beamRef.current.rotateX(Math.PI / 2);
-        beamRef.current.scale.set(1, len, 1);
-        const m = beamRef.current.material as THREE.MeshBasicMaterial;
-        m.opacity = Math.min(1, beamTimer.current * 3);
-      } else {
-        beamRef.current.visible = false;
-      }
-    }
-
-    if (state.paused || !started.current) {
-      updateCamera(dt, true);
-      return;
-    }
-
-    if (!state.telemetry.finished) raceClock.current += dt * 1000;
+    if (!over) raceClock.current += dt * 1000;
 
     for (const r of racers) {
       if (!r.finished) updateRacer(r, dt, r.isPlayer ? controls : null);
+    }
+
+
+    // karts shove each other: the heavier character gives way less
+    for (let i = 0; i < racers.length; i++) {
+      const a = racers[i];
+      if (a.finished || a.exploding || a.ghostTimer > 0) continue;
+      for (let j = i + 1; j < racers.length; j++) {
+        const b = racers[j];
+        if (b.finished || b.exploding || b.ghostTimer > 0) continue;
+        if (a.mode !== b.mode) continue;
+        const hit = collideBodies(a, b, 2 + activeChar(a).weight, 2 + activeChar(b).weight);
+        if (hit > 4 && (a.isPlayer || b.isPlayer) && a.bumpCd <= 0 && b.bumpCd <= 0) {
+          a.bumpCd = 0.4;
+          b.bumpCd = 0.4;
+          addShake(Math.min(0.2, hit * 0.012));
+          sfx.bump();
+        }
+      }
     }
 
     // projectiles
@@ -1643,9 +1466,76 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         g.rotation.z += dt * 0.8;
       }
     }
+  }
+
+  useFrame((_, deltaRaw) => {
+    const state = useGame.getState();
+    const dt = Math.min(deltaRaw, 1 / 30);
+    clockRef.current = performance.now();
+    const controls = poll();
+
+    if (controls.pausePressed && state.screen === "race" && !state.telemetry.finished) state.setPaused(!state.paused);
+
+    // pickups animate
+    for (const box of itemBoxes) {
+      if (!box.active) {
+        box.respawn -= dt;
+        if (box.respawn <= 0) box.active = mode.itemsEnabled;
+      }
+      if (box.group.current) {
+        box.group.current.visible = box.active;
+        box.group.current.rotation.y += dt * 1.8;
+        box.group.current.rotation.x += dt * 0.7;
+        box.group.current.position.y = box.pos.y + 1 + Math.sin(performance.now() * 0.003 + box.t * 12) * 0.18;
+      }
+    }
+    for (const coin of coinSpots) {
+      if (!coin.active) {
+        coin.respawn -= dt;
+        if (coin.respawn <= 0) coin.active = true;
+      }
+      if (coin.group.current) {
+        coin.group.current.visible = coin.active;
+        coin.group.current.rotation.y += dt * 2.6;
+        coin.group.current.position.y = coin.pos.y + 0.7 + Math.sin(performance.now() * 0.004 + coin.pos.x) * 0.12;
+      }
+    }
+
+    // beam visual
+    if (beamRef.current) {
+      if (beamTimer.current > 0) {
+        beamTimer.current -= dt;
+        beamRef.current.visible = true;
+        const mid = beamFrom.current.clone().lerp(beamTo.current, 0.5);
+        const len = beamFrom.current.distanceTo(beamTo.current);
+        beamRef.current.position.copy(mid);
+        beamRef.current.lookAt(beamTo.current);
+        beamRef.current.rotateX(Math.PI / 2);
+        beamRef.current.scale.set(1, len, 1);
+        const m = beamRef.current.material as THREE.MeshBasicMaterial;
+        m.opacity = Math.min(1, beamTimer.current * 3);
+      } else {
+        beamRef.current.visible = false;
+      }
+    }
+
+    if (state.paused || !started.current) {
+      updateCamera(dt, true);
+      return;
+    }
+
+    // The simulation runs in steps of at most 1/60 s. A slow frame is cut into
+    // several steps instead of being played in slow motion, and a fast display
+    // gets one short step per frame.
+    const span = Math.min(deltaRaw, 0.1);
+    const steps = Math.max(1, Math.ceil(span * 60 - 0.01));
+    const h = span / steps;
+    // a press belongs to one step only; holding carries through all of them
+    const held = steps > 1 ? { ...controls, itemPressed: false, swapPressed: false, fusePressed: false, turboPressed: false } : controls;
+    for (let step = 0; step < steps; step++) simulate(h, step === 0 ? controls : held, state.telemetry.finished);
 
     const player = racers[0];
-    const sorted = [...racers].sort((a, b) => b.lap + b.t - (a.lap + a.t));
+    const sorted = [...racers].sort((a, b) => b.total - (a.total));
     const position = sorted.indexOf(player) + 1;
 
     if (!finishedOnce.current && player.lap > mode.laps) {
@@ -1701,7 +1591,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         activeIsPartner: player.activeIsPartner,
         mode: player.mode,
         rings: player.rings,
-        standings: sorted.map((r) => ({ id: r.id, name: activeChar(r).name, isPlayer: r.isPlayer, progress: r.lap + r.t, lap: Math.min(r.lap, mode.laps), color: r.vehicle.body })),
+        standings: sorted.map((r) => ({ id: r.id, name: activeChar(r).name, isPlayer: r.isPlayer, progress: r.total, lap: Math.min(r.lap, mode.laps), color: r.vehicle.body })),
       });
     }
 
@@ -1736,19 +1626,25 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       .add(new THREE.Vector3(0, height + speedKick * 0.5, 0));
     // never let the chase camera sink into a hill: lift it to clear the road
     // surface behind the car, and never drop it below the car either
-    const behindGround = surfaceYAt(nearestT(desired, player.t));
+    // the floor is whatever road is under the camera on the player's level, so
+    // it clears a hill behind the car without being dragged up to a bridge overhead
+    const behindGround = groundAt(desired.x, desired.z, player.y + 3, camG, 0) ? camG.y : player.y - 2;
     const floor = Math.max(behindGround + 1.8, player.y + 1.4);
     if (desired.y < floor) desired.y = floor;
     // look at the road ahead, not at the sky above a crest or into the ground on a descent
-    const aheadY = surfaceYAt(player.t + 0.022);
+    const aheadY = !player.airborne && groundAt(player.pos.x + fwd.x * 10, player.pos.z + fwd.z * 10, player.y + 3, camG, 0) ? camG.y : player.y;
     const look = player.pos.clone()
       .setY(THREE.MathUtils.lerp(player.y, aheadY, 0.8) + 1.2)
       .addScaledVector(fwd, 7);
     camPos.current.lerp(desired, idle ? 0.05 : 0.11);
     // the smoothed camera lags on a fast descent, so clamp again once it is
     // settled: otherwise it dips through the road surface for a few frames
-    const camGround = surfaceYAt(nearestT(camPos.current, player.t));
+    const camGround = groundAt(camPos.current.x, camPos.current.z, player.y + 3, camG, 0) ? camG.y : -Infinity;
     if (camPos.current.y < camGround + 1.6) camPos.current.y = camGround + 1.6;
+    // the sun travels with the player, so shadows exist all the way round the lap
+    sun.position.set(player.pos.x + 45, player.y + 65, player.pos.z - 25);
+    sun.target.position.set(player.pos.x, player.y, player.pos.z);
+    sun.target.updateMatrixWorld();
     camLook.current.lerp(look, idle ? 0.05 : 0.13);
 
     shakeState.trauma = Math.max(0, shakeState.trauma - dt * 1.7);
@@ -1769,6 +1665,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
   return (
     <group>
+      <primitive object={sun} />
+      <primitive object={sun.target} />
       <Track theme={theme} />
       {itemBoxes.map((box, i) => (
         <group key={`b${i}`} ref={box.group} position={box.pos.toArray()}>
