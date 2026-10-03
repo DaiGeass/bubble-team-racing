@@ -468,11 +468,25 @@ export const WEAPON_WEIGHTS: Record<WeaponId, number> = {
   swap: 4, magnet: 8, ghost: 7, quake: 5,
 };
 
-export function rollWeapon(): WeaponId {
-  const total = Object.values(WEAPON_WEIGHTS).reduce((a, b) => a + b, 0);
+/**
+ * How an item's odds lean with race position: positive favours whoever is at
+ * the back, negative whoever is in front. The leader gets things to defend
+ * with, the tail of the field gets things to catch up with.
+ */
+const WEAPON_LEAN: Record<WeaponId, number> = {
+  orb: 0.5, missile: 0.9, bubble: -0.8, slime: -0.9, beam: 0.6, zap: 1, mine: -1, wave: 0,
+  swap: 1, magnet: 0.3, ghost: 0.2, quake: 0.8,
+};
+
+/** Draw an item. `behind` is 0 for the leader and 1 for the last racer. */
+export function rollWeapon(behind = 0.5): WeaponId {
+  const lean = (behind - 0.5) * 2;
+  const weight = (w: WeaponId) => WEAPON_WEIGHTS[w] * Math.max(0.08, 1 + WEAPON_LEAN[w] * lean);
+  let total = 0;
+  for (const w of WEAPONS) total += weight(w);
   let r = Math.random() * total;
   for (const w of WEAPONS) {
-    r -= WEAPON_WEIGHTS[w];
+    r -= weight(w);
     if (r <= 0) return w;
   }
   return "orb";
@@ -484,7 +498,7 @@ export const WEAPON_META: Record<WeaponId, { glyph: string; color: string; glow:
   bubble: { glyph: "◎", color: "#38bdf8", glow: "#bfeaff" },
   slime: { glyph: "❋", color: "#84cc16", glow: "#d9f99d" },
   beam: { glyph: "≡", color: "#c084fc", glow: "#f0abfc" },
-  zap: { glyph: "⚡", color: "#ffe066", glow: "#fff6c2" },
+  zap: { glyph: "ϟ", color: "#ffe066", glow: "#fff6c2" },
   mine: { glyph: "✱", color: "#ff7b3d", glow: "#ffc29b" },
   wave: { glyph: "≋", color: "#22d3ee", glow: "#b5f4ff" },
   swap: { glyph: "⇅", color: "#f472b6", glow: "#ffd1ec" },

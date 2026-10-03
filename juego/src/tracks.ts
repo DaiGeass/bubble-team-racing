@@ -16,21 +16,21 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     id: "bahia", theme: "frutiger", difficulty: 1, sea: 0, start: [0, 3, 0, 0], hazards: 2,
     draw: (t) =>
       t.go(60).mark("go").go(180)
-        .right(90, 60).go(120, 5).right(90, 50, 4)
+        .right(90, 60).go(40, 5).right(90, 50, 4)
         .mark("climbA").go(BYPASS + 123, 10).mark("climbB")
         .left(180, 45)
         .go(90, -3).mark("run").go(40, -1).mark("jump").go(130, -8)
         .right(90, 60, -3).go(60, -4)
-        .right(90, 70, -3).mark("w0").go(320).mark("w1")
+        .right(90, 70, -3).mark("w0").go(240).mark("w1")
         .right(90, 60, 3)
-        .mark("homeA").go(BYPASS + 213).mark("homeB")
-        .right(90, 60).go(120),
+        .mark("homeA").go(BYPASS + 133).mark("homeB")
+        .right(90, 60).go(40),
     zones: [["w0", "w1", "water"]],
-    holes: [["jump", 15]],
+    holes: [["jump", 11]],
     pads: [["go", "boost"], ["run", "boost", 1.5], ["homeB", "boost"]],
     routes: [
       { from: "climbA", to: "climbB", draw: (t) => t.bypass("R", 123, 13, 10), pads: [["mid", "boost"]] },
-      { from: "homeA", to: "homeB", draw: (t) => t.bypass("R", 213, 8), holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
+      { from: "homeA", to: "homeB", draw: (t) => t.bypass("R", 133, 8), holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
     ],
   }),
 
@@ -50,14 +50,14 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .left(90, 80, -5)
         .go(110, -4).mark("j2").go(160, -5).mark("merge")
         .left(90, 80, -5).go(200, -6),
-    holes: [["j1", 16], ["j2", 15]],
+    holes: [["j1", 12], ["j2", 11]],
     pads: [["go", "boost"], ["drop1", "boost", 1.5], ["j2", "boost", 1.5, -22], ["merge", "boost"]],
     routes: [
       { from: "ridgeA", to: "ridgeB", draw: (t) => t.bypass("L", 123, 14, 12), pads: [["mid", "boost"]] },
       {
         from: "top", to: "merge", width: 12, walls: false,
         draw: (t) => t.go(20, -1).left(45, 70, -2.5).go(120, -8).mark("gap").go(60, -8).go(190, -11.4).left(45, 70, -2.5).go(20, -0.6),
-        holes: [["gap", 22]],
+        holes: [["gap", 17]],
         pads: [["gap", "boost", 1.6]],
       },
     ],
@@ -126,7 +126,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .right(90, 60, -4).go(100, -4).mark("run").go(40, -2).mark("jump").go(60, -2)
         .right(90, 60, -4).go(120, -4)
         .right(90, 60, -2).go(180),
-    holes: [["jump", 15]],
+    holes: [["jump", 11]],
     pads: [["go", "boost"], ["coil", "boost"], ["run", "boost", 1.5]],
     routes: [
       { from: "bridgeA", to: "bridgeB", draw: (t) => t.bypass("L", 183, -11), pads: [["mid", "boost"]] },
@@ -180,7 +180,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .left(90, 30)
         .mark("barA").go(BYPASS + 260).mark("barB").go(83)
         .left(90, 30).go(160),
-    holes: [["jump", 15]],
+    holes: [["jump", 11]],
     pads: [["go", "boost"], ["run", "boost", 1.5], ["barB", "boost"]],
     portals: [["warpIn", "warpOut"]],
     routes: [
@@ -195,18 +195,18 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   design({
     id: "fusion", theme: "vapor", difficulty: 3, sea: 0, start: [0, 10, 0, 0], hazards: 4,
     draw: (t) =>
-      t.go(50).mark("go").go(110)
+      t.go(50).mark("go").go(70)
         .left(90, 70).go(120, 6)
         .left(450, 55, 20)
         .mark("top").go(60).mark("k0")
-        .go(160, -22)
+        .go(110, -22)
         .left(90, 100, -6)
         .go(80, -4).mark("k1")
         .go(100, -4).mark("w0").go(160).mark("w1")
         .right(90, 80)
-        .go(40, -2).mark("s0").go(90, -16)
+        .go(20, -2).mark("s0").go(70, -16)
         .left(180, 60)
-        .go(102, 10).go(70, 8).mark("s1")
+        .go(52, 10).go(70, 8).mark("s1")
         .go(55, 4).mark("c0").go(8).mark("air")
         .left(90, 60).mark("land")
         .mark("homeA").go(BYPASS + 98, 6).mark("homeB")

@@ -1371,11 +1371,17 @@ function RoadMarks({ theme }: { theme: ThemeDef }) {
         turn,
       });
     };
-    // side-road entries: three arrows stepping towards the side the road leaves on
-    for (const b of getActiveTrack().branches) {
+    // route entries: three arrows stepping towards the side the road leaves on
+    const all = getPaths();
+    const main = all[0];
+    for (const route of all.slice(1)) {
+      // which side it peels off to, read a little way down the route
+      const j = Math.round(main.n * route.t0) % main.n;
+      const i = Math.min(route.n - 1, Math.round(45 / route.ds));
+      const side = Math.sign(-(route.px[i] - main.px[j]) * main.tz[j] + (route.pz[i] - main.pz[j]) * main.tx[j]) || 1;
       for (let k = 0; k < 3; k++) {
-        const t = (b.t0 - 0.026 + k * 0.007 + 1) % 1;
-        put(t, Math.sign(b.pull) * (2 + k * 2.4), 0, Math.sign(b.pull));
+        const t = (route.t0 - (62 - k * 16) / main.length + 1) % 1;
+        put(t, side * (2 + k * 2.4), 0, side);
       }
     }
     return out;

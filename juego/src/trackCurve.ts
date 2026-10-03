@@ -236,7 +236,7 @@ function rebuild(def: TrackDef) {
 
   paths = [];
   const main = allocPath(0, Math.max(400, Math.round(len / 1.9)), true);
-  fillPath(main, trackCurve, (_u, prog) => halfWidthAt(prog), def.holes, def.kick ?? 2.6, (prog) => !inRanges(def.open, prog), false);
+  fillPath(main, trackCurve, (_u, prog) => halfWidthAt(prog), def.holes, def.kick ?? 3, (prog) => !inRanges(def.open, prog), false);
   paths.push(main);
 
   for (const r of routeList(def)) {
@@ -434,7 +434,7 @@ export function pathPoint(pathId: number, idx: number, lat: number, out: THREE.V
 export function safeSpot(pathId: number, idx: number): { path: number; idx: number } {
   let p = paths[pathId] ?? paths[0];
   let i = Math.min(p.n - 1, Math.max(0, idx));
-  const RUN = 48;
+  const RUN = 62;
   for (let guard = 0; guard < 400; guard++) {
     const ahead = Math.round(RUN / p.ds);
     let clear = (p.flags[i] & F_SOLID) !== 0;

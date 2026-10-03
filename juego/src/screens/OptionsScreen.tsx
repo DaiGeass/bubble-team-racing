@@ -31,7 +31,8 @@ const ACTION_LABEL: Record<Action, string> = {
 const SLOT_LABEL: Record<TouchSlot, string> = {
   padL: "Palanca izq",
   padR: "Palanca der",
-  drift: "Botónderrape",
+  drift: "Botón derrape",
+  turbo: "Botón turbo",
   gas: "Pedal acelerador",
   brake: "Pedal freno",
   swap: "Botón cambio",

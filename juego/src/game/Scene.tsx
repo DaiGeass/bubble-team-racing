@@ -16,7 +16,6 @@ import {
   BOATS,
   PLANES,
   SUBS,
-  TRACK_WIDTH,
   WEAPON_META,
   raceSnapshot,
   hazardState,
@@ -30,7 +29,7 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, getSkyRings, getSkyBlocks, FLY_BASE, FLY_UP, FLY_DOWN, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
+import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, FLY_BASE, FLY_UP, FLY_DOWN, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
 import { moveBody, makeResult, placeBody, respawnBody, aimAhead, collideBodies, progDelta, GRAVITY, type Body, type StepOpts } from "../physics";
 import { emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
@@ -65,6 +64,8 @@ interface Racer extends Body {
   respawnLock: number;
   /** whole laps completed */
   lapsDone: number;
+  /** race clock at the last fall, to spot a racer that keeps falling at the same place */
+  lastFall: number;
   /** cooldown so one pad fires once */
   padCd: number;
   /** ribbon the AI has decided to take, 0 for the main loop, and the junction it last decided at */
@@ -229,6 +230,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         noProgressFor: 0,
         respawnLock: 0,
         lapsDone: 0,
+        lastFall: -1e9,
         padCd: 0,
         aiRoute: 0,
         aiSeen: -1,
@@ -292,24 +294,26 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
   const itemBoxes = useMemo(() => {
     const boxes: { t: number; pos: THREE.Vector3; active: boolean; respawn: number; group: React.MutableRefObject<THREE.Group | null> }[] = [];
-    const count = Math.max(6, Math.round(18 * (mode.itemFrequency || 1)));
-    for (let i = 0; i < count; i++) {
-      const t = (i + 0.5) / count;
-      const zone = zoneAt(t);
-      if (zone && zone.t1 - zone.t0 < 0.99) continue; // no boxes inside water/sky zones, unless the whole lap is one
-      // the box has to sit inside the pickup radius, so a car driving the middle
-      // of the road still collects it; sides just nudge it off the racing line
-      const side = i % 3 === 0 ? 1 : i % 3 === 1 ? -1 : 0;
+    // Rows of three across the road, so the pack splits to take them. Only on
+    // road that is really there: never over a jump, a cannon shot, a flight or the sea.
+    const rows = Math.max(4, Math.round(8 * (mode.itemFrequency || 1)));
+    for (let i = 0; i < rows; i++) {
+      let t = (i + 0.5) / rows;
+      const whole = (z: ReturnType<typeof zoneAt>) => !!z && z.t1 - z.t0 >= 0.99;
+      for (let guard = 0; guard < 30 && ((zoneAt(t) && !whole(zoneAt(t))) || !plainRoadAt(t, 30)); guard++) t = (t + 0.017) % 1;
       const center = trackPointAt(t);
       const tangent = trackTangentAt(t);
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-      boxes.push({
-        t,
-        pos: center.clone().addScaledVector(normal, side * TRACK_WIDTH * 0.09),
-        active: mode.itemsEnabled,
-        respawn: 0,
-        group: { current: null },
-      });
+      const gap = Math.min(4.8, halfWidthAt(t) - 3.2);
+      for (const side of [-1, 0, 1]) {
+        boxes.push({
+          t,
+          pos: center.clone().addScaledVector(normal, side * gap),
+          active: mode.itemsEnabled,
+          respawn: 0,
+          group: { current: null },
+        });
+      }
     }
     return boxes;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -320,6 +324,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const count = 26;
     for (let i = 0; i < count; i++) {
       const t = (i + 0.35) / count;
+      if (!plainRoadAt(t, 8)) continue; // nothing to collect in mid-air over a gap
       const center = trackPointAt(t);
       const tangent = trackTangentAt(t);
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
@@ -342,9 +347,30 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
   const pads = useMemo(() => getPads(), []);
 
+  /** First sample at or after `idx` of the main loop with whole road for a good way ahead. */
+  function safeAhead(idx: number) {
+    const main = getPaths()[0];
+    for (let k = 0; k < 200; k++) {
+      const i = (idx + k * 3) % main.n;
+      if (plainRoadAt(main.prog[i], 45)) return i;
+    }
+    return idx;
+  }
+
   /** Back on the road after a fall or when wedged, with enough speed to take the next jump. */
   function recover(r: Racer, pace: number) {
-    respawnBody(r);
+    // Falling again straight after being put back means the run-up is not
+    // enough for whoever this is: set it down past the obstacle, on the main
+    // road, instead of feeding it to the same gap for ever.
+    const again = raceClock.current - r.lastFall < 7000;
+    r.lastFall = raceClock.current;
+    if (again) {
+      placeBody(r, 0, mainIndexAt(r.prog + 0.035));
+      const spot = safeAhead(r.idx);
+      if (spot !== r.idx) placeBody(r, 0, spot);
+    } else {
+      respawnBody(r);
+    }
     r.speed = pace;
     r.respawnLock = 1;
     r.pinnedFor = 0;
@@ -1027,7 +1053,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
 
     // ---- speed ----
-    let effMax = st.maxSpeed * r.boostMult * (r.isPlayer ? 1 : r.aiMult);
+    // the skill tier sets how fast and how eager an opponent is, on top of the catch-up
+    const tier = r.isPlayer ? null : AI_PROFILES[settings.aiSkill];
+    let effMax = st.maxSpeed * r.boostMult * (tier ? r.aiMult * tier.pace : 1);
     if (r.mode === "boat") effMax *= st.boatBonus * 0.94 * craftSpeed(r.vehicle.boat, 1);
     if (r.mode === "sub") effMax *= st.boatBonus * 0.9 * craftSpeed(r.vehicle.sub, 1);
     if (r.mode === "plane") effMax *= st.planeBonus * 1.12 * craftSpeed(r.vehicle.plane, 1);
@@ -1038,7 +1066,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     effMax *= 1 - hill * (r.speed >= 0 ? 0.55 : -0.55);
     if (hill !== 0) r.speed -= GRAVITY * 0.4 * hill * dt;
 
-    const accelNow = st.accel * (r.mode === "plane" ? 1.25 : 1);
+    const accelNow = st.accel * (r.mode === "plane" ? 1.25 : 1) * (tier ? tier.accel : 1);
     if (throttleIn > 0) r.speed += accelNow * dt;
     else if (throttleIn < 0) r.speed -= accelNow * 1.4 * dt;
     else {
@@ -1126,11 +1154,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         const px = pad.pos.x - r.pos.x;
         const pz = pad.pos.z - r.pos.z;
         if (Math.abs(pad.pos.y - r.y) > 2) continue;
-        if (pad.kind === "cannon") {
-          // a cannon spans the whole road: nobody drives round it
-          const ahead = px * Math.sin(pad.heading) + pz * Math.cos(pad.heading);
-          if (Math.abs(ahead) > 3.5 || px * px + pz * pz > 200) continue;
-        } else if (px * px + pz * pz > 10) continue;
+        // a cannon spans the whole road, so nobody drives round it; a pad is as
+        // wide as it is painted
+        const ahead = px * Math.sin(pad.heading) + pz * Math.cos(pad.heading);
+        const reach = pad.kind === "cannon" ? 200 : 20;
+        if (Math.abs(ahead) > 3.5 || px * px + pz * pz > reach) continue;
         r.padCd = 0.9;
         if (pad.kind === "cannon") {
           const main = getPaths()[0];
@@ -1169,7 +1197,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       r.noProgressFor += dt;
     }
     if (stepRes.fell || r.pinnedFor > 2.5 || r.noProgressFor > 7) {
-      recover(r, st.maxSpeed * 0.6);
+      recover(r, st.maxSpeed * 0.85);
       if (r.isPlayer) useGame.getState().setTelemetry({ shortcutFlash: Date.now() });
     }
 
@@ -1204,7 +1232,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       if (!box.active) continue;
       if (Math.hypot(box.pos.x - r.pos.x, box.pos.z - r.pos.z) < 2.9 && Math.abs(box.pos.y - r.y) < (r.mode === "plane" ? 12 : 3)) {
         if (!r.weapon) {
-          const rolled: WeaponId = rollWeapon();
+          let ahead = 0;
+          for (const o of racers) if (o !== r && o.total > r.total) ahead++;
+          const rolled: WeaponId = rollWeapon(racers.length > 1 ? ahead / (racers.length - 1) : 0.5);
           r.weapon = rolled;
           box.active = false;
           box.respawn = 4.5 + Math.random() * 2.5;

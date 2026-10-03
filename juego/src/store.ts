@@ -124,9 +124,9 @@ export type Action = "item" | "drift" | "swap" | "fuse" | "turbo" | "left" | "ri
 export const ACTIONS: Action[] = ["item", "drift", "swap", "fuse", "turbo", "left", "right", "gas", "brake"];
 
 /** Physical slots available to the touch overlay. */
-export type TouchSlot = "padL" | "padR" | "drift" | "gas" | "brake" | "swap" | "fuse" | "item";
+export type TouchSlot = "padL" | "padR" | "drift" | "turbo" | "gas" | "brake" | "swap" | "fuse" | "item";
 
-export const TOUCH_SLOTS: TouchSlot[] = ["padL", "padR", "drift", "gas", "brake", "swap", "fuse", "item"];
+export const TOUCH_SLOTS: TouchSlot[] = ["padL", "padR", "drift", "turbo", "gas", "brake", "swap", "fuse", "item"];
 
 export const DEFAULT_KEYBINDS: Record<Action, string[]> = {
   item: ["Space"],
@@ -163,6 +163,7 @@ export const DEFAULT_TOUCH: Record<TouchSlot, Action> = {
   padL: "left",
   padR: "right",
   drift: "drift",
+  turbo: "turbo",
   gas: "gas",
   brake: "brake",
   swap: "swap",

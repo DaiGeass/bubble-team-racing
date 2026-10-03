@@ -35,14 +35,14 @@ Longitud en unidades; un kart recorre unas 27 por segundo sin turbo.
 
 | Pista | Estética | Largo | Alturas | Qué tiene |
 |---|---|---|---|---|
-| Bahía Aero | Frutiger Aero | 2515 | 0–30 | colina con horquilla, salto, travesía en barco, recta final con carril-rampa |
+| Bahía Aero | Frutiger Aero | 2196 | 0–30 | colina con horquilla, salto, travesía en barco, recta final con carril-rampa |
 | Bosque Colgante | Frutiger Eco | 2287 | 8–59 | subida en zigzag, dos saltos en la bajada, tobogán sin barreras desde la cima |
 | Arrecife Profundo | Aqua | 2162 | −20–10 | mar abierto, inmersión a 20 bajo el mar, cañón sobre la última curva, carril-rampa sobre el agua |
 | Torre Neón | Techno | 2413 | 2–54 | espiral de 2¼ vueltas, vuelo en picado desde la cima, tres carriles a tres alturas en la recta |
 | Órbita Y2K | Y2K | 2301 | 8–42 | ocho con una vuelta extra en espiral, puente 22 unidades sobre la recta, carretera encima y debajo del puente |
 | Cascada Líquida | Liquid Glass | 2713 | −18–61 | tres caídas de 14–16 unidades, atajo sin barreras y con hueco por dentro de la segunda horquilla, barco, inmersión, cañón de vuelta a la cima |
 | Escritorio 98 | Windows 98 | 2242 | 2–20 | esquinas a 90°, salto, portal, recta de tres carriles (uno en túnel) |
-| Gran Fusión | mezcla | 2683 | −18–36 | espiral, vuelo, barco, inmersión, cañón y tres carriles a meta |
+| Gran Fusión | mezcla | 2504 | −18–36 | espiral, vuelo, barco, inmersión, cañón y tres carriles a meta |
 
 ## 3. Cómo se mide
 
@@ -60,11 +60,39 @@ Tres herramientas en `juego/tools/`:
 | `vite build` | OK |
 | `sim.sh check` | las 8 cierran con error ≤ 7 unidades; radios y alturas libres dentro de límites. Único aviso: 64 % de pendiente en Cascada, que son las caídas |
 | `sim.sh` (16 recorridos) | 16 completos, 0 caídas, vueltas de 75 a 94 s a velocidad base sin turbos |
+| Carrera completa de 3 vueltas en el juego real, jugador en piloto automático + 5 rivales | las 8 pistas llegan a la pantalla de resultados con 0 errores de consola; quedan 0–1 caídas de rivales por carrera, en saltos |
 | Pared, en el juego real | raspando la barrera la posición lateral varía 0,1 unidades, la dirección no oscila y la velocidad se mantiene (medido en la primera pista de prueba) |
 | Juego real en navegador sin GPU, 6 karts | en las 8 pistas el primer rival completa la vuelta en 74–95 s; se visitan tierra, barco, avión y submarino donde tocan; la IA usa las rutas; 0 errores de consola |
 
 **Lo que no se puede medir aquí**: los 60 fps y la sensación de conducción. El navegador de
 pruebas renderiza por software.
+
+## 3b. Bugs arreglados en la última pasada
+
+Encontrados corriendo carreras completas de 3 vueltas en el juego real:
+
+- **La IA daba vueltas en círculo** al tomar una ruta más corta o más larga que el tramo
+  que sustituye (el atajo de Cascada bloqueaba a toda la parrilla): el punto al que apuntaba
+  se calculaba con el progreso de vuelta, que no vale dentro de una ruta. Ahora se mide en
+  metros sobre la propia ruta.
+- **Caídas en bucle**: un rival lento reaparecía antes de un hueco sin velocidad para pasarlo
+  y volvía a caer sin fin. Ahora reaparece más rápido y con más carrerilla, y si cae dos
+  veces seguidas se le deja pasado el obstáculo.
+- **Saltos imposibles para los personajes lentos**: los huecos de la carretera principal
+  pasan de 15–16 a 11–12 unidades y el labio es más alto; los de las rutas arriesgadas
+  siguen siendo largos.
+- **Los pads solo se activaban pisando el centro**: ahora valen en todo su ancho pintado.
+- **Reasignar teclas no liberaba las de fábrica** (flechas y WASD seguían activas siempre).
+- **Reasignar un botón táctil hacía dos acciones a la vez**.
+- **El turbo no tenía botón táctil**: ahora es un hueco táctil más, reasignable.
+- **Cajas y monedas flotando sobre huecos, cañones o el mar**: las cajas van en filas de
+  tres solo sobre carretera real; las monedas se omiten sobre los huecos.
+- **El reparto de objetos ignoraba la posición**: el último recibe sobre todo misil, rayo,
+  intercambio y terremoto; el líder, escudo, gel y mina.
+- **Los niveles de IA no cambiaban el ritmo**: `pace` y `accel` ahora se aplican.
+- **El contador de peligros por vuelta no se reiniciaba** entre carreras.
+- **Emojis en la interfaz**: las banderas son ahora códigos de idioma y se quitaron ⭐ y ⚡.
+- Flechas pintadas en la entrada de cada ruta alternativa.
 
 ## 4. Lo que sigue roto o falta
 
@@ -75,21 +103,17 @@ Del plan original, sin hacer todavía:
   o cierren ni agua que suba.
 - **Elementos vivos**: quedan los pilares móviles y un portal; no hay tráfico, criaturas ni
   plataformas móviles.
-- **Controles**: reasignar teclas no quita flechas/WASD; reasignar botones táctiles hace doble
-  acción; el turbo no tiene botón táctil.
-- **IA**: no derrapa, no usa turbo ni fusión; `pace`, `accel` y `drift` de los niveles casi no
-  se usan.
-- **Objetos**: 12 (el plan pide 14) y el reparto no depende de la posición.
+- **IA**: no derrapa, no usa turbo ni fusión.
+- **Objetos**: 12 (el plan pide 14).
 - **Fusión**: solo el jugador, sin alternar conductor/artillero, sin torreta de 360°.
 - **Modos**: no hay Gran Premio, fantasma de contrarreloj, arena, equipos ni eliminación.
 - **Garaje**: 19 carrocerías en la tabla (el tipo declara 24).
-- **Emojis y símbolos** en la interfaz (banderas, ⭐ ⚡ ♪).
 - **Decorado**: cada pista tiene el adorno de su estética (palmeras, árboles, ventanas de
   Windows, esferas cromadas…) sobre un suelo cuadriculado o sobre islotes en el mar, arcos en
   los carriles en túnel y obstáculos colgados en los tramos de vuelo. Sigue sin haber relieve
   ni edificios grandes propios de cada mundo.
-- **Tiempos de vuelta**: Bahía, Cascada y Gran Fusión rondan 90–94 s a velocidad base, algo
-  por encima del objetivo de 60–90 s si no se usan los turbos.
+- **Tiempos de vuelta**: Cascada ronda 94 s a velocidad base, algo por encima del objetivo
+  de 60–90 s si no se usan los turbos. Las demás quedan entre 75 y 87 s.
 
 ## 5. Lo que tienes que probar tú
 

@@ -3,14 +3,14 @@ import { createContext, useContext } from "react";
 export type Lang = "es" | "en" | "he" | "ja" | "zh" | "ar" | "fr" | "ru";
 
 export const LANGS: { code: Lang; label: string; flag: string; rtl?: boolean }[] = [
-  { code: "es", label: "Español", flag: "🇪🇸" },
-  { code: "en", label: "English", flag: "🇬🇧" },
-  { code: "he", label: "עברית", flag: "🇮🇱", rtl: true },
-  { code: "ja", label: "日本語", flag: "🇯🇵" },
-  { code: "zh", label: "中文", flag: "🇨🇳" },
-  { code: "ar", label: "العربية", flag: "🇸🇦", rtl: true },
-  { code: "fr", label: "Français", flag: "🇫🇷" },
-  { code: "ru", label: "Русский", flag: "🇷🇺" },
+  { code: "es", label: "Español", flag: "ES" },
+  { code: "en", label: "English", flag: "EN" },
+  { code: "he", label: "עברית", flag: "HE", rtl: true },
+  { code: "ja", label: "日本語", flag: "JA" },
+  { code: "zh", label: "中文", flag: "ZH" },
+  { code: "ar", label: "العربية", flag: "AR", rtl: true },
+  { code: "fr", label: "Français", flag: "FR" },
+  { code: "ru", label: "Русский", flag: "RU" },
 ];
 
 export type Dict = Record<string, string>;

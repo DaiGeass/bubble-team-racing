@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useGame, DEFAULT_KEYBINDS, DEFAULT_TOUCH, type Action, type TouchSlot } from "./store";
+import { useGame, DEFAULT_KEYBINDS, type Action } from "./store";
 
 export interface ControlState {
   steer: number; // -1 left .. +1 right (screen-correct)
@@ -92,18 +92,19 @@ export function useControls() {
     const t = touch.current;
     const st = useGame.getState().settings;
     const binds = { ...DEFAULT_KEYBINDS, ...(st.keybinds ?? {}) };
-    const held = (a: Action) => binds[a].some((c) => k[c]);
-    const touchSlot = (slot: TouchSlot) => t[TOUCH_KEY[(st.touchLayout ?? DEFAULT_TOUCH)[slot] ?? "item"]];
-
-    let left = !!(held("left") || touchSlot("padL") || k["ArrowLeft"] || k["KeyA"] || t.left);
-    let right = !!(held("right") || touchSlot("padR") || k["ArrowRight"] || k["KeyD"] || t.right);
-    const fwd = !!(held("gas") || touchSlot("gas") || k["ArrowUp"] || k["KeyW"] || t.up);
-    const back = !!(held("brake") || touchSlot("brake") || k["ArrowDown"] || k["KeyS"] || t.down);
-    const item = !!(held("item") || touchSlot("item") || t.item);
-    const swap = !!(held("swap") || touchSlot("swap") || t.swap);
-    const fuse = !!(held("fuse") || touchSlot("fuse") || t.fuse);
-    const turbo = !!(held("turbo") || t.turbo);
-    const drift = !!(held("drift") || touchSlot("drift") || t.drift);
+    // An action is on while one of its bound keys is down or its on-screen button
+    // is pressed. Nothing is hard-wired: rebinding a key frees the old one, and a
+    // touch slot does exactly the action it was given.
+    const on = (a: Action) => binds[a].some((code) => k[code]) || t[TOUCH_KEY[a]];
+    let left = on("left");
+    let right = on("right");
+    const fwd = on("gas");
+    const back = on("brake");
+    const item = on("item");
+    const swap = on("swap");
+    const fuse = on("fuse");
+    const turbo = on("turbo");
+    const drift = on("drift");
     if (st.invertSteer) {
       const flip = left;
       left = right;

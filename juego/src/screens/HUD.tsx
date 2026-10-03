@@ -64,7 +64,7 @@ const TOUCH_GLYPH: Record<Action, string> = {
   item: "\u25CF",
   swap: "\u21C4",
   fuse: "\u2715",
-  turbo: "\u26A1",
+  turbo: "\u21EA",
 };
 
 export default function HUD({ controls }: { controls: UseControlsReturn }) {
@@ -143,7 +143,7 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         </div>
         {telemetryOn && (
           <div className="flex gap-1.5 text-xs font-bold">
-            <span className="glass-panel rounded-full px-2.5 py-0.5 text-sky-900">⭐ {telemetry.score}</span>
+            <span className="glass-panel rounded-full px-2.5 py-0.5 text-sky-900">★ {telemetry.score}</span>
             <span className="glass-panel rounded-full px-2.5 py-0.5 text-amber-600">◉ {telemetry.coins}</span>
             {telemetry.rings > 0 && <span className="glass-panel rounded-full px-2.5 py-0.5 text-cyan-600">◎ {telemetry.rings}</span>}
           </div>
@@ -193,7 +193,7 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         </div>
         {/* drift-charged TURBO meter */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-extrabold uppercase tracking-wide text-sky-900/70">⚡ {t("turboBtn")}</span>
+          <span className="text-[10px] font-extrabold uppercase tracking-wide text-sky-900/70">{t("turboBtn")}</span>
           <div className="glass-panel h-3 flex-1 overflow-hidden rounded-full p-0.5">
             <div
               className="h-full rounded-full transition-[width] duration-150"
@@ -321,17 +321,17 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
 
       {/* ---------- touch steering + pedals: slots are remappable in Options ---------- */}
       <div className={`pointer-events-auto absolute bottom-3 flex items-end gap-2 sm:hidden ${layout.handed === "left" ? "left-[112px]" : "left-3"}`}>
-        {(["padL", "padR", "drift"] as TouchSlot[]).map((slot) => {
-          const action = layout.touchLayout[slot];
+        {(["padL", "padR", "drift", "turbo"] as TouchSlot[]).map((slot) => {
+          const action = layout.touchLayout[slot] ?? DEFAULT_TOUCH[slot];
           const glyph = TOUCH_GLYPH[action] ?? "·";
-          const dim = slot === "drift" ? 58 : 70;
+          const dim = slot === "drift" || slot === "turbo" ? 58 : 70;
           const size = `text-[${Math.round(dim * 0.42 * layout.scale)}px]`;
           return (
             <TouchButton
               key={slot}
               label={glyph}
               style={{ width: px(dim), height: px(dim) }}
-              className={`${size} text-sky-800 ${action === "drift" && telemetry.boosting ? "text-amber-500" : ""}`}
+              className={`${size} ${action === "turbo" && telemetry.turbo > 0.18 ? "text-amber-500" : "text-sky-800"}`}
               onDown={() => controls.setAction(action, true)}
               onUp={() => controls.setAction(action, false)}
             />
@@ -358,7 +358,7 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
 
       {/* ---------- desktop hints ---------- */}
       <div className="pointer-events-none absolute bottom-4 left-4 hidden text-[11px] font-semibold text-sky-900/60 sm:block">
-        ↑↓←→ / WASD · SHIFT {t("drift")} · SPACE {t("useItem")} · K ⚡{t("turboBtn")} · Q {t("swapRacer")} · F {t("fuse")} · ESC {t("pauseGame")}
+        ↑↓←→ / WASD · SHIFT {t("drift")} · SPACE {t("useItem")} · K {t("turboBtn")} · Q {t("swapRacer")} · F {t("fuse")} · ESC {t("pauseGame")}
       </div>
     </div>
   );

@@ -280,13 +280,20 @@ export function aimAhead(b: Body, route: number, look: number, latFrac: number, 
   if (route > 0 && paths[route]) {
     const rt = paths[route];
     const rel = progDelta(rt.t0, b.prog);
-    if (rel > rt.span + 0.004) {
+    if (b.path !== route && rel > rt.span + 0.004) {
       route = 0;
     } else {
-      const u = (rel + lookT) / rt.span;
-      if (u >= 0 && u <= 1) {
+      // Measured in metres along the route itself. A route is not the same
+      // length as the stretch of main road it replaces, so lap progress cannot
+      // be used to find a point on it.
+      const along = b.path === route ? b.idx * rt.ds : rel * main.length;
+      const i = Math.round((along + look) / rt.ds);
+      if (i >= 0 && i <= rt.n - 1) {
         pathId = route;
-        idx = Math.round(u * (rt.n - 1));
+        idx = i;
+      } else if (i > rt.n - 1) {
+        // past its far end: carry on along the main road from the junction
+        idx = mainIndexAt(rt.t0 + rt.span + (along + look - rt.length) / main.length);
       }
     }
   }
