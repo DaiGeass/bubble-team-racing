@@ -968,7 +968,7 @@ TRACKS.push(
 // length / average speed, so without this the short oval finished a lap in 20 s
 // while the long one took 45. Everything else (zones, shortcuts, portals, gaps,
 // item spawns) is expressed in track fractions, so it scales for free.
-const TARGET_LEN = 2000;
+const TARGET_LEN = 2300;
 for (const trk of TRACKS) {
   let len = 0;
   for (let i = 0; i < trk.points.length; i++) {
@@ -1021,7 +1021,7 @@ for (const trk of TRACKS) {
   // The route network: real side roads, four per lap, alternating sides. They
   // leave the carriageway, run alongside it and merge back in, so a lap can be
   // driven four different ways without touching a single teleport.
-  const want = 4;
+  const want = 6;
   const PULLS = [30, -28, 26, -30];
   const RISES = [4, 6, 3, 5];
   const SPAN = 0.075;
@@ -1039,6 +1039,23 @@ for (const trk of TRACKS) {
   // Two side roads on the same side of the same stretch would fight over the same
   // tarmac: their decks would overlap and the physics would offer two surfaces to
   // stand on. Keep the longer one, drop the shorter.
+  // optionally add a third fork if there is room, to multiply alternate routes
+  if (trk.forks.length < 3) {
+    for (let i = 0; i < 80; i++) {
+      const t0 = (i * 0.143 + 0.17 + phase * 0.041) % 1;
+      const t1 = t0 + 0.11;
+      if (t1 >= 1) continue;
+      const hitf = (a: number, b: number, c: number, d: number, pad: number) => !(b < c - pad || a > d + pad);
+      const overGap = (a: number, b: number, pad = 0.01) => trk.gaps!.some((g) => hitf(a, b, g.t0, g.t1, pad));
+      const usedBr = (a: number, b: number, pad = 0.01) => trk.branches.some((br) => hitf(a, b, br.t0, br.t1, pad));
+      const usedF = (a: number, b: number, pad = 0.01) => trk.forks.some((f) => hitf(a, b, f[0], f[1], pad));
+      if (overGap(t0, t1) || usedBr(t0, t1) || usedF(t0, t1)) continue;
+      if (trk.forks.some((f) => Math.abs(f[0] - t0) < 0.22)) continue;
+      trk.forks.push([t0, t1]);
+      break;
+    }
+  }
+
   for (let pass = 0; pass < 4; pass++) {
     const drop = new Set<Branch>();
     for (let i = 0; i < trk.branches.length; i++) {
