@@ -46,6 +46,12 @@ export interface CharacterDef {
   fusion: WeaponId;
   /** seconds between fusion shots, tuned per character */
   fusionRate: number;
+  /** extra shots in the salvo while fused */
+  fusionBurst: number;
+  /** how wide the salvo fans out, in radians */
+  fusionSpread: number;
+  /** extra slowdown a direct hit lands, 0..1 */
+  fusionKick: number;
 }
 
 // ---- color helpers: boost saturation so every racer pops ----
@@ -102,7 +108,7 @@ function vivid(hex: string, minL: number, maxL: number): string {
   return hslToHex(h, Math.min(1, s * 1.1 + 0.14), Math.min(maxL, Math.max(minL, l)));
 }
 
-type RawCharacter = Omit<CharacterDef, "fusion" | "fusionRate">;
+type RawCharacter = Omit<CharacterDef, "fusion" | "fusionRate" | "fusionBurst" | "fusionSpread" | "fusionKick">;
 
 const RAW_CHARACTERS: RawCharacter[] = [
   { id: "nova", name: "NOVA", form: "drop", eye: "sparkle", primary: "#22d3ee", secondary: "#e0fbff", accent: "#0e7490", speed: 3, accel: 4, handling: 4, weight: 2, role: "balanced", favorite: "orb" },
@@ -147,24 +153,60 @@ const fixEarColors: Record<string, { primary?: string; secondary?: string; accen
  * Fusion guns. The list is walked per character so every roster slot gets a
  * different turret; the rate makes a heavy hitter slower than a glass cannon.
  */
-const FUSION_GUNS: { w: WeaponId; rate: number }[] = [
-  { w: "missile", rate: 0.85 },
-  { w: "orb", rate: 0.7 },
-  { w: "beam", rate: 1.05 },
-  { w: "zap", rate: 0.95 },
-  { w: "wave", rate: 1.15 },
-  { w: "bubble", rate: 0.8 },
-  { w: "mine", rate: 1.25 },
-  { w: "slime", rate: 1 },
-  { w: "quake", rate: 1.35 },
-  { w: "magnet", rate: 0.9 },
-  { w: "ghost", rate: 1.1 },
-  { w: "swap", rate: 1.2 },
+/**
+ * Every character mans a different turret while fused, so fusion is a pairing
+ * decision instead of a shared missile stream. `burst` adds shots to the salvo,
+ * `spread` fans them out, `kick` is the extra slowdown a direct hit applies.
+ * All 28 entries are distinct: nobody shares a rate and a pattern.
+ */
+interface FusionSpec {
+  w: WeaponId;
+  rate: number;
+  burst: number;
+  spread: number;
+  kick: number;
+}
+
+const FUSION_SPECS: FusionSpec[] = [
+  { w: "missile", rate: 0.85, burst: 0, spread: 0, kick: 0.2 },
+  { w: "orb", rate: 0.7, burst: 1, spread: 0.12, kick: 0.15 },
+  { w: "beam", rate: 1.05, burst: 0, spread: 0, kick: 0.55 },
+  { w: "zap", rate: 0.95, burst: 1, spread: 0.05, kick: 0.4 },
+  { w: "wave", rate: 1.15, burst: 1, spread: 0.3, kick: 0.25 },
+  { w: "bubble", rate: 0.8, burst: 2, spread: 0.22, kick: 0.1 },
+  { w: "mine", rate: 1.25, burst: 0, spread: 0, kick: 0.35 },
+  { w: "slime", rate: 1.0, burst: 1, spread: 0.18, kick: 0.3 },
+  { w: "quake", rate: 1.35, burst: 0, spread: 0.4, kick: 0.6 },
+  { w: "magnet", rate: 0.9, burst: 1, spread: 0.08, kick: 0.2 },
+  { w: "ghost", rate: 1.1, burst: 2, spread: 0.34, kick: 0.12 },
+  { w: "swap", rate: 1.2, burst: 0, spread: 0.1, kick: 0.45 },
+  { w: "missile", rate: 0.75, burst: 2, spread: 0.26, kick: 0.28 },
+  { w: "orb", rate: 0.92, burst: 0, spread: 0.06, kick: 0.5 },
+  { w: "bubble", rate: 0.68, burst: 1, spread: 0.4, kick: 0.18 },
+  { w: "zap", rate: 1.18, burst: 2, spread: 0.02, kick: 0.35 },
+  { w: "beam", rate: 0.88, burst: 0, spread: 0.14, kick: 0.62 },
+  { w: "slime", rate: 1.32, burst: 1, spread: 0.32, kick: 0.22 },
+  { w: "mine", rate: 0.78, burst: 2, spread: 0.16, kick: 0.3 },
+  { w: "wave", rate: 0.98, burst: 0, spread: 0.28, kick: 0.42 },
+  { w: "ghost", rate: 1.42, burst: 1, spread: 0.1, kick: 0.08 },
+  { w: "quake", rate: 1.06, burst: 0, spread: 0.36, kick: 0.55 },
+  { w: "magnet", rate: 0.83, burst: 2, spread: 0.2, kick: 0.16 },
+  { w: "swap", rate: 1.28, burst: 1, spread: 0.12, kick: 0.48 },
+  { w: "missile", rate: 1.15, burst: 0, spread: 0.24, kick: 0.52 },
+  { w: "beam", rate: 0.72, burst: 1, spread: 0.1, kick: 0.4 },
+  { w: "bubble", rate: 1.24, burst: 2, spread: 0.38, kick: 0.14 },
+  { w: "zap", rate: 0.87, burst: 0, spread: 0.04, kick: 0.58 },
+  { w: "slime", rate: 1.12, burst: 1, spread: 0.26, kick: 0.26 },
 ];
+
+export function fusionSpec(charId: string): FusionSpec {
+  const i = RAW_CHARACTERS.findIndex((c) => c.id === charId);
+  return FUSION_SPECS[(i >= 0 ? i : 0) % FUSION_SPECS.length];
+}
 
 export const CHARACTERS: CharacterDef[] = RAW_CHARACTERS.map((c, i) => {
   const f = fixEarColors[c.id];
-  const gun = FUSION_GUNS[i % FUSION_GUNS.length];
+  const gun = FUSION_SPECS[i % FUSION_SPECS.length];
   return {
     ...c,
     primary: f?.primary ?? vivid(c.primary, 0.55, 0.66),
@@ -172,6 +214,9 @@ export const CHARACTERS: CharacterDef[] = RAW_CHARACTERS.map((c, i) => {
     accent: f?.accent ?? vivid(c.accent, 0.3, 0.44),
     fusion: gun.w,
     fusionRate: gun.rate,
+    fusionBurst: gun.burst,
+    fusionSpread: gun.spread,
+    fusionKick: gun.kick,
   };
 });
 

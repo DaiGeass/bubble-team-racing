@@ -27,6 +27,7 @@ import {
   zoneOfKind,
   craftSpeed,
   craftHandling,
+  fusionSpec,
   type CharacterDef,
   type WeaponId,
   type VehicleMode,
@@ -394,10 +395,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function spawnProjectile(type: WeaponId, owner: Racer, targetId: string | null) {
+  function spawnProjectile(type: WeaponId, owner: Racer, targetId: string | null, angle = 0) {
     const p = projectiles.find((x) => !x.active);
     if (!p) return;
-    const fwd = new THREE.Vector3(Math.sin(owner.heading), 0, Math.cos(owner.heading));
+    const heading = owner.heading + angle;
+    const fwd = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
     p.active = true;
     p.type = type;
     p.ownerId = owner.id;
@@ -434,6 +436,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const meta = WEAPON_META[gun];
     const muzzle = r.pos.clone().setY(r.y + 1.1);
     const aim = target && !protectedNow(target) ? target : null;
+    // the signature on top of the weapon family: extra shots, a wider fan and a
+    // heavier direct hit, all tuned per character
+    const spec = fusionSpec(activeChar(r).id);
+    const burst = spec.burst;
+    const spread = spec.spread;
     switch (gun) {
       case "beam": {
         // hitscan lance: damage now, no projectile to dodge
@@ -515,6 +522,18 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         if (target && r.fuseShots % 2 === 0) spawnProjectile("zap", r, target.id);
         break;
       }
+    }
+    // the character signature: extra rounds fanned around the aim, then the
+    // heavier direct hit that goes with them
+    if (burst > 0) {
+      for (let b = 0; b < burst; b++) {
+        const off = (b - (burst - 1) / 2) * (0.16 + spread);
+        spawnProjectile(gun, r, aim ? aim.id : null, off);
+      }
+    }
+    if (aim && spec.kick > 0) {
+      aim.speed *= 1 - Math.min(0.45, spec.kick * 0.28);
+      if (aim.isPlayer) addShake(0.12 + spec.kick * 0.18);
     }
   }
   function applyHit(r: Racer, spinner: boolean) {
