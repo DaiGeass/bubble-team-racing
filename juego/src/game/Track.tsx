@@ -633,7 +633,7 @@ function Lake({ theme }: { theme: ThemeDef }) {
 function Clouds({ theme }: { theme: ThemeDef }) {
   const clouds = useMemo(() => {
     const arr: [number, number, number, number][] = [];
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 12; i++) {
       const a = (i / 18) * Math.PI * 2;
       const r = 420 + Math.random() * 420;
       arr.push([Math.cos(a) * r, 26 + Math.random() * 26, Math.sin(a) * r, 5 + Math.random() * 6]);
@@ -691,7 +691,7 @@ function StartArch({ theme }: { theme: ThemeDef }) {
 
 /** Living scenery: rising glass bubbles, hot-air balloons, butterflies, pulsing zone gates. */
 function AmbientLife({ theme }: { theme: ThemeDef }) {
-  const BUB = 70;
+  const BUB = 42;
   const bubRef = useRef<THREE.InstancedMesh>(null);
   const bubData = useMemo(
     () =>
