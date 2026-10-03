@@ -38,6 +38,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Stamp the tag version into the app metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.tag || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          echo "building ${VERSION}"
+          cd juego
+          node -e '
+            const fs = require("fs");
+            const p = "src-tauri/tauri.conf.json";
+            const j = JSON.parse(fs.readFileSync(p, "utf8"));
+            j.version = process.argv[1];
+            fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
+          ' "$VERSION"
+          sed -i "s/^version = .*/version = \"${VERSION}\"/" src-tauri/Cargo.toml
+          grep -n '"version"' src-tauri/tauri.conf.json
+          head -4 src-tauri/Cargo.toml
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
