@@ -12,23 +12,23 @@ in a native window.
 
 | Platform | File on the release | Size |
 |---|---|---|
-| Windows installer | `Bubble.Team.Racing_1.0.0_x64-setup.exe` (NSIS, English/Spanish selector) | ~2.3 MB |
-| Windows MSI | `Bubble.Team.Racing_1.0.0_x64_en-US.msi` or `_x64_es-ES.msi` (WiX) | ~3.3 MB |
-| Linux package | `Bubble.Team.Racing_1.0.0_amd64.deb` | ~3.3 MB |
-| Linux portable | `Bubble.Team.Racing_1.0.0_amd64.AppImage` | ~82 MB |
+| Windows installer | `Bubble.Team.Racing_1.1.0_x64-setup.exe` (NSIS, English/Spanish selector) | ~2.3 MB |
+| Windows MSI | `Bubble.Team.Racing_1.1.0_x64_en-US.msi` or `_x64_es-ES.msi` (WiX) | ~3.3 MB |
+| Linux package | `Bubble.Team.Racing_1.1.0_amd64.deb` | ~3.3 MB |
+| Linux portable | `Bubble.Team.Racing_1.1.0_amd64.AppImage` | ~82 MB |
 
 Grab them from the [Releases page](https://github.com/DaiGeass/bubble-team-racing/releases).
 The AppImage runs straight away:
 
 ```sh
-chmod +x Bubble.Team.Racing_1.0.0_amd64.AppImage
-./Bubble.Team.Racing_1.0.0_amd64.AppImage
+chmod +x Bubble.Team.Racing_1.1.0_amd64.AppImage
+./Bubble.Team.Racing_1.1.0_amd64.AppImage
 ```
 
 Or install the package:
 
 ```sh
-sudo apt install ./Bubble.Team.Racing_1.0.0_amd64.deb
+sudo apt install ./Bubble.Team.Racing_1.1.0_amd64.deb
 ```
 
 ## Run it in a browser
