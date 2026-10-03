@@ -1734,15 +1734,16 @@ function BendChevrons({ theme }: { theme: ThemeDef }) {
         const turn = Math.atan2(path.tx[a] * path.tz[b] - path.tz[a] * path.tx[b], path.tx[a] * path.tx[b] + path.tz[a] * path.tz[b]);
         const radius = (2 * span * path.ds) / Math.max(1e-4, Math.abs(turn));
         if (radius > 85) continue;
-        // positive turn is a bend towards -lateral, so the outside is +lateral
-        const outer = turn > 0 ? 1 : -1;
+        // +lateral is the right-hand side and a positive turn is a bend to the right,
+        // so the outside of it is the left
+        const outer = turn > 0 ? -1 : 1;
         if (!(path.flags[i] & (outer === 1 ? F_WALL_POS : F_WALL_NEG))) continue;
         const off = (path.half[i] + 1.5) * outer;
         dummy.position.set(path.px[i] - path.tz[i] * off, path.py[i] + 1.9, path.pz[i] + path.tx[i] * off);
         // face the traffic coming into the bend
         dummy.rotation.set(0, Math.atan2(path.tx[i], path.tz[i]) + Math.PI, 0);
-        // the board faces back down the road, which already mirrors the texture once
-        dummy.scale.set(outer === 1 ? 1 : -1, 1, 1);
+        // the texture points right; a board on the right-hand outside marks a bend to the left
+        dummy.scale.set(outer === 1 ? -1 : 1, 1, 1);
         dummy.updateMatrix();
         out.push(dummy.matrix.clone());
       }

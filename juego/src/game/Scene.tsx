@@ -31,7 +31,7 @@ import {
   type VehicleMode,
 } from "../data";
 import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, sectorMix, plainStretches, FLY_BASE, FLY_UP, FLY_DOWN, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
-import { moveBody, makeResult, placeBody, respawnBody, aimAhead, collideBodies, progDelta, GRAVITY, type Body, type StepOpts } from "../physics";
+import { moveBody, makeResult, placeBody, respawnBody, aimAhead, bendAhead, collideBodies, progDelta, GRAVITY, type Body, type StepOpts } from "../physics";
 import { emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
 
@@ -74,6 +74,11 @@ interface Racer extends Body {
   /** ribbon the AI has decided to take, 0 for the main loop, and the junction it last decided at */
   aiRoute: number;
   aiSeen: number;
+  /** lateral line it is holding, smoothed, and its own preferred offset from the ideal one */
+  aiLat: number;
+  aiLane: number;
+  /** race clock when it was last hit, so nobody is hit twice in a row */
+  lastHit: number;
   /** how far above the cruising line the pilot is holding the plane */
   flyOff: number;
   /** being fired by a cannon: a scripted arc from where it was to where it lands */
@@ -199,7 +204,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         id: isPlayer ? "player" : `ai-${i}`,
         isPlayer,
         main: isPlayer ? mainChar : aiChar,
-        partner: isPlayer ? partnerChar : null,
+        partner: isPlayer ? partnerChar : CHARACTERS[(i * 5 + 12) % CHARACTERS.length],
         activeIsPartner: false,
         vehicle: isPlayer
           ? vehicleCfg
@@ -220,6 +225,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         airborne: false,
         groundY: 0,
         slopeAlong: 0,
+        lat: 0,
+        half: 10,
         touching: false,
         path: 0,
         idx: 0,
@@ -237,6 +244,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         padCd: 0,
         aiRoute: 0,
         aiSeen: -1,
+        aiLat: 0,
+        aiLane: (((i * 7) % 5) - 2) * 0.7,
+        lastHit: -1e9,
         flyOff: 0,
         launch: null,
         heading: 0,
@@ -669,6 +679,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       emitDebris({ position: r.pos.clone().setY(r.y + 0.7), color: body.accent, count: 5, speed: 9, spread: 1.1, size: 0.26, life: 3.5 });
       if (r.isPlayer) { addShake(0.8); sfx.bump(); }
     }
+    r.lastHit = raceClock.current;
     r.stunTimer = spinner ? 1.25 : 0.95;
     r.speed *= spinner ? 0.35 : 0.55;
     r.boostTimer = 0;
@@ -678,6 +689,43 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.isPlayer) {
       addShake(0.4);
       sfx.hit();
+    }
+  }
+
+  /**
+   * Whether an opponent holding an item should use it now. Attacks need a
+   * victim in range who has not just been hit; traps need someone on its tail;
+   * speed is kept for a straight.
+   */
+  function wantsItem(r: Racer, mercy: number, straight: boolean): boolean {
+    const fair = (o: Racer | null) => !!o && raceClock.current - o.lastHit > mercy * 1000 && !protectedNow(o);
+    const tailed = () => racers.some((o) => o !== r && !o.finished && r.total - o.total > 0.002 && r.total - o.total < 0.03);
+    switch (r.weapon) {
+      case "orb":
+        return straight && r.boostTimer <= 0;
+      case "missile":
+        return fair(findTargetAhead(r, 0.25));
+      case "beam":
+        return fair(findTargetAhead(r, 0.12));
+      case "zap":
+        return fair(findTargetAhead(r, 0.28));
+      case "swap":
+        return fair(findTargetAhead(r, 0.45));
+      case "magnet":
+        return !!findTargetAhead(r, 0.08);
+      case "slime":
+      case "mine":
+        return tailed();
+      case "bubble":
+        return !r.shieldActive && (tailed() || !!findTargetAhead(r, 0.05));
+      case "ghost":
+        return r.ghostTimer <= 0 && (tailed() || !straight);
+      case "quake":
+        return racers.some((o) => o !== r && !o.finished && Math.abs(o.total - r.total) < 0.15 && fair(o));
+      case "wave":
+        return racers.some((o) => o !== r && !o.finished && o.mode === r.mode && o.pos.distanceToSquared(r.pos) < 100 && fair(o));
+      default:
+        return true;
     }
   }
 
@@ -890,7 +938,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     for (let i = 0; i < r.ringCd.length; i++) if (r.ringCd[i] > 0) r.ringCd[i] -= dt;
     if (r.padCd > 0) r.padCd -= dt;
     if (r.aiMistake > 0) r.aiMistake -= dt;
-    else if (!r.isPlayer && Math.random() < AI_PROFILES[useGame.getState().settings.aiSkill].mistake * dt) r.aiMistake = 0.5 + Math.random();
+    else if (!r.isPlayer && Math.random() < AI_PROFILES[useGame.getState().settings.aiSkill].hesitate * dt) r.aiMistake = 0.6 + Math.random() * 0.6;
     if (r.portalCd > 0) r.portalCd -= dt;
     if (r.magnetTimer > 0) r.magnetTimer -= dt;
     if (r.ghostTimer > 0) r.ghostTimer -= dt;
@@ -979,65 +1027,139 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         throttleIn = r.stunTimer > 0 ? 0 : 1;
       }
     } else if (!r.isPlayer) {
-      // every opponent runs the skill profile the player picked, with a small
-      // per-racer personality offset so a field of pros is not a mirror clone
+      // every opponent drives properly whatever the level: the level decides how
+      // hard it pushes and how much it gets out of each thing it does
       const ai = AI_PROFILES[useGame.getState().settings.aiSkill];
-      const wobble = Math.sin(clockRef.current * 0.0006 + r.aiPhase);
-      const weave = wobble * ai.weave * (1 + r.aiQuirk);
-      // lower skill runs a wider line and drifts wider on corners
-      const sloppy = r.aiMistake > 0 ? Math.min(0.5, r.aiMistake * 0.4) : 0;
-      // route choice: decided once per junction, a little before reaching it
       const all = getPaths();
+
+      // route choice: decided once per junction, a little before reaching it
       if (r.aiSeen > 0 && (!all[r.aiSeen] || progDelta(all[r.aiSeen].t0, r.prog) > 0.05)) r.aiSeen = -1;
       if (r.aiRoute === 0) {
         for (let k = 1; k < all.length; k++) {
           const rel = progDelta(all[k].t0, r.prog);
           if (rel > -0.03 && rel < 0 && r.aiSeen !== k) {
             r.aiSeen = k;
-            // a cut with no barriers is a gamble: only the sharper drivers try it, and not often
-            const risky = all[k].def?.kind === "cut" ? 0.45 : 1;
-            if (Math.random() < Math.min(0.9, ai.gateUse * 1.5) * risky) r.aiRoute = k;
+            // a cut with no barriers is a gamble the careful levels rarely take
+            if (Math.random() < (all[k].def?.kind === "cut" ? ai.cutUse : ai.routeUse)) r.aiRoute = k;
           }
         }
       }
+
+      // ---- the line: inside of the bend it is in, by as much as the level dares ----
+      const room = Math.max(1, r.half - 2.6);
+      const near = bendAhead(r.path, r.idx, 55);
+      const far = bendAhead(r.path, r.idx, 120);
+      // +lateral is the right-hand side of the road, and a bend to the left is negative: same sign
+      let line = Math.sign(near) * Math.min(1, Math.abs(near) / 0.7) * ai.line * room + r.aiLane * (1 - Math.min(1, Math.abs(near) / 0.5));
+
+      // a drift slides the kart towards the inside by itself: go in from the middle of the road
+      if (Math.abs(near) >= ai.driftFrom || r.isDrifting) line *= 0.2;
+
+      // unit vectors of the road under it, to place things relative to its own lane
+      const here = all[r.path] ?? all[0];
+      const hi = Math.min(here.n - 1, Math.max(0, r.idx));
+      const tx = here.tx[hi];
+      const tz = here.tz[hi];
+      const reach = 16 + Math.abs(r.speed) * 0.9;
+
+      // a boost pad coming up on this road is worth a change of line
+      for (const pad of pads) {
+        if (pad.kind === "cannon" || Math.abs(pad.pos.y - r.y) > 3) continue;
+        const dx = pad.pos.x - r.pos.x;
+        const dz = pad.pos.z - r.pos.z;
+        const ahead = dx * tx + dz * tz;
+        if (ahead < 4 || ahead > 75) continue;
+        const padLat = r.lat + (-dx * tz + dz * tx);
+        if (Math.abs(padLat) < room + 1) line = padLat;
+      }
+
+      // ---- go round whatever is in the way: traffic, hazards, mines, slower karts ----
+      const dodge = (x: number, y: number, z: number, radius: number) => {
+        if (Math.abs(y - r.y) > 3) return;
+        const dx = x - r.pos.x;
+        const dz = z - r.pos.z;
+        const ahead = dx * tx + dz * tz;
+        if (ahead < 1 || ahead > reach) return;
+        const at = r.lat + (-dx * tz + dz * tx);
+        const clear = radius + 2.3;
+        if (Math.abs(at - line) > clear) return;
+        // pass on the side with more road
+        const left = at + clear;
+        const right = at - clear;
+        line = left <= room && (right < -room || Math.abs(left - line) <= Math.abs(right - line)) ? left : right >= -room ? right : at > 0 ? -room : room;
+      };
+      for (const tr of traffic) dodge(tr.pos.x, tr.pos.y, tr.pos.z, 1.6);
+      if (r.mode === "land") for (const hz of hazardState.positions) dodge(hz.x, hz.y, hz.z, 1.4);
+      for (const pd of puddles) if (pd.active && pd.ownerId !== r.id) dodge(pd.pos.x, pd.pos.y, pd.pos.z, 1.1);
+      for (const o of racers) if (o !== r && !o.finished && o.speed < r.speed - 2) dodge(o.pos.x, o.y, o.pos.z, 0.9);
+
+      line = THREE.MathUtils.clamp(line, -room, room);
+      r.aiLat += (line - r.aiLat) * Math.min(1, dt * 3.5);
+
       // aim along the road it is taking, in 3D: the bridge and the road under it are different roads
-      const lookDist = 12 + Math.abs(r.speed) * (0.3 + ai.lookahead * 7) * (r.aiLookahead / 0.036);
-      r.aiRoute = aimAhead(r, r.aiRoute, lookDist, THREE.MathUtils.clamp(weave * 1.6 + sloppy, -0.85, 0.85), aimV);
+      // look less far ahead inside a bend, or the aim point cuts the corner for it
+      const lookDist = 9 + Math.abs(r.speed) * (Math.abs(near) > 0.4 ? 0.3 : 0.5);
+      r.aiRoute = aimAhead(r, r.aiRoute, lookDist, THREE.MathUtils.clamp(r.aiLat / room, -0.95, 0.95), aimV);
+      // an aim point that is not in front is one it would circle for ever: take the main road instead
+      if (r.aiRoute > 0 && (aimV.x - r.pos.x) * tx + (aimV.z - r.pos.z) * tz < 3) {
+        r.aiRoute = 0;
+        aimAhead(r, 0, lookDist, THREE.MathUtils.clamp(r.aiLat / room, -0.95, 0.95), aimV);
+      }
       const desired = Math.atan2(aimV.x - r.pos.x, aimV.z - r.pos.z);
-      steerIn = THREE.MathUtils.clamp(wrapAngle(desired - r.heading) * ai.steerGain, -1, 1);
-      // flying: line up with the next ring, as well as the profile allows
+      const err = wrapAngle(desired - r.heading);
+      // steer at the aim point, and lean back towards the line it is meant to be on
+      // (+lateral is to the right, and steering right is negative)
+      steerIn = THREE.MathUtils.clamp(err * 3.4 - (r.aiLat - r.lat) * 0.09, -1, 1);
+
+      // flying: line up with the next ring
       if (r.mode === "plane") {
         let want = 0;
-        let near = 0.2;
+        let next = 0.2;
         for (const ring of skyRings) {
           const d = progDelta(r.prog, ring.prog);
-          if (d > 0 && d < near) {
-            near = d;
+          if (d > 0 && d < next) {
+            next = d;
             want = ring.offset - FLY_BASE;
           }
         }
-        const reach = 5 + ai.steerGain * 2.5;
-        r.flyOff += THREE.MathUtils.clamp(want * (0.6 + ai.drift * 0.4) - r.flyOff, -reach * dt, reach * dt);
+        r.flyOff += THREE.MathUtils.clamp(want * (0.7 + 0.3 * ai.line) - r.flyOff, -10 * dt, 10 * dt);
       }
-      // pros lift when they have the room, beginners floor it into the barrier
-      throttleIn = r.stunTimer > 0 ? 0 : Math.abs(wrapAngle(desired - r.heading)) > 0.55 && ai.steerGain < 3 ? 0.55 : 1;
 
-      const player = racers[0];
-      const gap = player.total - (r.total);
-      const rb = mode.rubberband * ai.rubberband;
-      r.aiMult = gap > 0.05 ? 1 + 0.2 * rb : gap < -0.1 ? 1 - 0.13 * rb : 1;
+      // ---- throttle: flat out, except pointing the wrong way, hesitating, or late off the line ----
+      throttleIn = Math.abs(err) > 0.8 ? 0.55 : 1;
+      if (r.aiMistake > 0) throttleIn = Math.min(throttleIn, 0.65);
+      if (raceClock.current < ai.reaction * 1000 * (0.6 + ((r.aiLane + 1.4) / 2.8) * 0.8)) throttleIn = 0;
+      if (r.stunTimer > 0) throttleIn = 0;
 
+      // ---- drift through the bends that are worth it, for as long as the level holds one ----
+      const onRoad = r.mode !== "plane" && !r.airborne && !r.touching && r.aiMistake <= 0;
+      // never into a jump: the road has to be whole for a good way ahead
+      // and never where there are no barriers to catch a slide
+      const whole = r.path === 0 ? plainRoadAt(r.prog + 35 / all[0].length, 45) : !all[r.path].def?.holes?.length && all[r.path].def?.walls !== false;
+      if (!r.isDrifting) {
+        driftHeld = onRoad && whole && Math.abs(near) >= ai.driftFrom && steerIn * -near > 0 && Math.abs(r.steerSmooth) > 0.3;
+      } else {
+        // let go at the exit of the bend, or once it has what this level comes for
+        driftHeld = onRoad && whole && r.driftCharge < ai.driftHold && Math.abs(bendAhead(r.path, r.idx, 26)) > 0.14;
+      }
+
+      // ---- turbo: on a straight, once the bar is where this level likes it ----
+      turboPressed = r.turboMeter >= Math.min(0.99, ai.turboAt) && Math.abs(far) < 0.3 && onRoad && whole && r.boostTimer <= 0;
+
+      // ---- catch-up: by how much it presses on when you are ahead, and eases off when you are behind ----
+      const gap = racers[0].total - r.total;
+      r.aiMult = 1 + mode.rubberband * (ai.catchUp * THREE.MathUtils.clamp(gap / 0.15, 0, 1) - ai.wait * THREE.MathUtils.clamp(-gap / 0.2, 0, 1));
+
+      // ---- items: each one used for what it is for ----
       if (r.weapon) {
         r.aiWeaponDelay -= dt;
-        if (r.aiWeaponDelay <= 0) {
-          // aim for someone in front when the profile is sharp enough to bother
-          const victim = ai.itemDelay < 1 ? findTargetAhead(r, 0.4) : null;
-          fireWeapon(r, victim ? victim.id : null);
-          r.aiWeaponDelay = ai.itemDelay * (0.7 + Math.random() * 0.6);
-        }
-      } else if (Math.random() < 0.02 * mode.itemFrequency) {
-        r.aiWeaponDelay = 0.4 + Math.random();
+        if (r.aiWeaponDelay <= 0 && wantsItem(r, ai.mercy, Math.abs(far) < 0.35)) itemPressed = true;
+      } else {
+        r.aiWeaponDelay = ai.itemDelay * (0.7 + Math.random() * 0.6);
       }
+
+      // ---- fusion: with someone to shoot at and the partner ready ----
+      if (r.partner && r.fuseTimer <= 0 && r.fuseCd <= 0 && Math.random() < ai.fuse * dt && findTargetAhead(r, 0.12)) fusePressed = true;
     }
 
     if (r.stunTimer > 0) {
@@ -1050,8 +1172,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     r.steerSmooth += (steerIn - r.steerSmooth) * Math.min(1, dt * response);
 
     // ---- drift ----
-    if (r.isPlayer) {
-      const wantsDrift = driftHeld && Math.abs(r.steerSmooth) > 0.3 && r.speed > st.maxSpeed * 0.3 && r.mode !== "plane";
+    {
+      // it takes real lock to start a drift, but once sliding a little is enough to keep it
+      const wantsDrift = driftHeld && Math.abs(r.steerSmooth) > (r.isDrifting ? 0.12 : 0.3) && r.speed > st.maxSpeed * 0.3 && r.mode !== "plane";
       if (wantsDrift) {
         r.isDrifting = true;
         r.driftCharge = Math.min(1.5, r.driftCharge + dt);
@@ -1063,8 +1186,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           r.boostTimer = big ? 1.05 : 0.6;
           r.boostMult = big ? 1.65 : 1.3;
           r.boostsUsed++;
-          addShake(big ? 0.32 : 0.16);
-          sfx.boost();
+          if (r.isPlayer) {
+            addShake(big ? 0.32 : 0.16);
+            sfx.boost();
+          }
           emitParticles({
             position: r.pos.clone().setY(r.y + 0.4),
             color: big ? WEAPON_META.orb.color : theme.glow,
@@ -1387,7 +1512,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
 
     // ---- FUSION (Crash Tag Team style): the partner mans their own turret ----
-    if (r.isPlayer && r.fuseTimer > 0) {
+    if (r.fuseTimer > 0) {
       r.fuseTimer -= dt;
       r.fuseGun -= dt;
       const gunner = r.partner ?? r.main;
@@ -1395,20 +1520,28 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const rate = gunner.fusionRate || 0.85;
       if (r.fuseGun <= 0) {
         r.fuseGun = rate;
-        const target = findTargetAhead(r, 0.35);
-        r.fuseShots = (r.fuseShots ?? 0) + 1;
-        fireFusionGun(r, gun, target);
-        sfx.boost();
-        const fwd2 = new THREE.Vector3(Math.sin(r.heading), 0, Math.cos(r.heading));
-        emitParticles({
-          position: r.pos.clone().addScaledVector(fwd2, 1.4).setY(r.y + 1.1),
-          color: WEAPON_META[gun].glow,
-          count: 8,
-          speed: 2.5,
-          spread: 0.5,
-          size: 0.18,
-          life: 0.4,
-        });
+        let target = findTargetAhead(r, 0.35);
+        // an opponent's turret gives whoever it has just hit the same respite its items do
+        const spare = r.isPlayer ? 0 : AI_PROFILES[settings.aiSkill].mercy * 1000 + 1200;
+        if (target && raceClock.current - target.lastHit < spare) target = null;
+        // no fair target for an opponent's turret: hold fire and look again shortly
+        if (!r.isPlayer && !target) {
+          r.fuseGun = 0.4;
+        } else {
+          r.fuseShots = (r.fuseShots ?? 0) + 1;
+          fireFusionGun(r, gun, target);
+          if (r.isPlayer) sfx.boost();
+          const fwd2 = new THREE.Vector3(Math.sin(r.heading), 0, Math.cos(r.heading));
+          emitParticles({
+            position: r.pos.clone().addScaledVector(fwd2, 1.4).setY(r.y + 1.1),
+            color: WEAPON_META[gun].glow,
+            count: 8,
+            speed: 2.5,
+            spread: 0.5,
+            size: 0.18,
+            life: 0.4,
+          });
+        }
       }
       if (r.fuseTimer <= 0) {
         r.fuseCd = 11;
@@ -1416,8 +1549,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       }
     }
 
-    // ---- player actions ----
-    if (r.isPlayer) {
+    // ---- actions: the same buttons for the player and for the opponents ----
+    {
+      const mine = r.isPlayer;
       if (itemPressed) fireWeapon(r);
       if (turboPressed && r.turboMeter > 0.18) {
         const power = r.turboMeter;
@@ -1425,8 +1559,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         r.boostTimer = Math.max(r.boostTimer, 0.7 + power * 1.6);
         r.boostMult = Math.max(r.boostMult, 1.35 + power * 0.5);
         r.boostsUsed++;
-        addShake(0.28 + power * 0.25);
-        sfx.boost();
+        if (mine) {
+          addShake(0.28 + power * 0.25);
+          sfx.boost();
+        }
         emitParticles({ position: r.pos.clone().setY(r.y + 0.5), color: WEAPON_META.orb.glow, count: 26 + power * 20, speed: 5, spread: 1.1, size: 0.24, life: 0.6 });
       }
       if (fusePressed && r.partner && r.fuseTimer <= 0 && r.fuseCd <= 0) {
@@ -1438,12 +1574,14 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         r.turboMeter = Math.min(1, r.turboMeter + 0.5);
         r.boostTimer = Math.max(r.boostTimer, 0.7);
         r.boostMult = Math.max(r.boostMult, 1.3);
-        addShake(0.35);
-        sfx.swap();
+        if (mine) {
+          addShake(0.35);
+          sfx.swap();
+        }
         emitParticles({ position: r.pos.clone().setY(r.y + 1), color: theme.glow, count: 40, speed: 5.5, spread: 1.4, size: 0.26, life: 0.85 });
         emitParticles({ position: r.pos.clone().setY(r.y + 1), color: (r.partner ? r.partner : r.main).primary, count: 22, speed: 4, spread: 1.1, size: 0.2, life: 0.7 });
       }
-      if (swapPressed && r.tagCooldown <= 0 && r.partner) {
+      if (mine && swapPressed && r.tagCooldown <= 0 && r.partner) {
         r.activeIsPartner = !r.activeIsPartner;
         r.tagCooldown = TAG_COOLDOWN_MAX;
         r.swapInvuln = 0.9;

@@ -43,6 +43,9 @@ export interface Body {
   groundY: number;
   /** rise per metre in the direction the body is pointing */
   slopeAlong: number;
+  /** metres off the centre line of the road it is on, and that road's half-width */
+  lat: number;
+  half: number;
 }
 
 export interface StepOpts {
@@ -221,6 +224,8 @@ function stand(b: Body, g: Ground, _res: StepResult) {
   b.path = g.path;
   b.idx = g.idx;
   b.groundY = g.y;
+  b.lat = g.lat;
+  b.half = g.half;
   const sgn = Math.sin(b.heading) * g.tx + Math.cos(b.heading) * g.tz;
   b.slopeAlong = g.slope * sgn;
   // only the middle of the road is a place worth coming back to
@@ -248,6 +253,8 @@ export function placeBody(b: Body, pathId: number, idx: number, lat = 0) {
   b.total += progDelta(b.prog, p.prog[i]);
   b.prog = p.prog[i];
   b.groundY = _p.y;
+  b.lat = lat;
+  b.half = p.half[i];
   b.slopeAlong = p.slope[i];
   b.safePath = pathId;
   b.safeIdx = i;
@@ -284,9 +291,9 @@ export function aimAhead(b: Body, route: number, look: number, latFrac: number, 
       route = 0;
     } else {
       // Measured in metres along the route itself. A route is not the same
-      // length as the stretch of main road it replaces, so lap progress cannot
-      // be used to find a point on it.
-      const along = b.path === route ? b.idx * rt.ds : rel * main.length;
+      // length as the stretch of main road it replaces, so from the main road
+      // the position is carried over as a share of the way between the junctions.
+      const along = b.path === route ? b.idx * rt.ds : (rel / rt.span) * rt.length;
       const i = Math.round((along + look) / rt.ds);
       if (i >= 0 && i <= rt.n - 1) {
         pathId = route;
@@ -300,6 +307,27 @@ export function aimAhead(b: Body, route: number, look: number, latFrac: number, 
   const p = paths[pathId];
   pathPoint(pathId, idx, latFrac * Math.max(0, p.half[Math.min(p.n - 1, idx)] - 2.6), out);
   return route;
+}
+
+/**
+ * How much the road turns over the next `dist` metres from a sample, in
+ * radians: negative is a bend to the left, positive to the right.
+ */
+export function bendAhead(pathId: number, idx: number, dist: number): number {
+  const p = getPaths()[pathId];
+  if (!p) return 0;
+  const step = Math.max(1, Math.round(9 / p.ds));
+  const n = Math.max(1, Math.round(dist / (step * p.ds)));
+  let sum = 0;
+  let a = p.closed ? ((idx % p.n) + p.n) % p.n : Math.min(p.n - 1, Math.max(0, idx));
+  for (let k = 0; k < n; k++) {
+    let b = a + step;
+    if (p.closed) b %= p.n;
+    else if (b >= p.n) break;
+    sum += Math.atan2(p.tx[a] * p.tz[b] - p.tz[a] * p.tx[b], p.tx[a] * p.tx[b] + p.tz[a] * p.tz[b]);
+    a = b;
+  }
+  return sum;
 }
 
 /** Circle-against-circle shove between two bodies on the same floor. Returns the closing speed, 0 if apart. */

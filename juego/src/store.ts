@@ -301,7 +301,7 @@ const defaultSettings: Settings = {
   steerAssist: true,
   bloom: !isSmall,
   controlPreset: "A",
-  aiSkill: "pro",
+  aiSkill: "amateur",
   invertSteer: false,
   shake: 1,
   telemetry: true,

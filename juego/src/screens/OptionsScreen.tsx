@@ -121,7 +121,7 @@ export default function OptionsScreen() {
         <div className="glass-panel space-y-3 rounded-3xl p-5">
           {tab === "game" && (
             <>
-              <Row label={`Dificultad IA · ${AI_PROFILES[settings.aiSkill ?? "pro"].name}`}>
+              <Row label={`Dificultad IA · ${AI_PROFILES[settings.aiSkill ?? "amateur"].name}`}>
                 {AI_SKILL_LIST.map((id: AiSkillId) => (
                   <button
                     key={id}
@@ -134,9 +134,7 @@ export default function OptionsScreen() {
               </Row>
               <p className="px-1 text-xs text-sky-900/70">
                 {t("aiHelp")}{" "}
-                {AI_PROFILES[settings.aiSkill ?? "pro"].name}: ritmo {Math.round(AI_PROFILES[settings.aiSkill ?? "pro"].pace * 100)}% · error {Math.round(
-                  AI_PROFILES[settings.aiSkill ?? "pro"].mistake * 100
-                )}%/s · atajos {Math.round(AI_PROFILES[settings.aiSkill ?? "pro"].gateUse * 100)}%/s
+                {AI_PROFILES[settings.aiSkill ?? "amateur"].name}: ritmo {Math.round(AI_PROFILES[settings.aiSkill ?? "amateur"].pace * 100)}% · te espera {Math.round(AI_PROFILES[settings.aiSkill ?? "amateur"].wait * 100)}% · rutas {Math.round(AI_PROFILES[settings.aiSkill ?? "amateur"].routeUse * 100)}%
               </p>
               <Row label="Gas automático">
                 <Toggle on={settings.autoGas} onClick={() => setSettings({ autoGas: !settings.autoGas })} />
@@ -182,7 +180,7 @@ export default function OptionsScreen() {
                       touchLayout: DEFAULT_TOUCH,
                       touchScale: 1,
                       handed: "right",
-                      aiSkill: "pro",
+                      aiSkill: "amateur",
                       invertSteer: false,
                       shake: 1,
                       motionBlur: 0,

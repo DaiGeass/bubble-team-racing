@@ -527,36 +527,49 @@ export interface GameMode {
 
 export type AiSkillId = "rookie" | "amateur" | "pro" | "ace";
 
+/**
+ * A difficulty level. Every level drives properly: takes the inside of a bend,
+ * goes round traffic and hazards, drifts, fires its turbo on a straight and
+ * uses each item for what it is for. What changes with the level is how hard
+ * it pushes, how much it gets out of each of those, and how it treats you.
+ */
 export interface AiProfile {
   id: AiSkillId;
   name: string;
-  /** steering authority, 1 = sloppy, higher = tighter lines */
-  steerGain: number;
-  /** how early they look ahead along the road */
-  lookahead: number;
-  /** lateral weave amplitude while cruising */
-  weave: number;
-  /** top speed multiplier applied to their max speed */
+  /** top speed and acceleration, as a share of the kart's own */
   pace: number;
-  /** acceleration multiplier */
   accel: number;
-  /** seconds between item decisions; low means they shoot the moment they can */
+  /** how much of the road's width it uses to straighten a bend, 0..1 */
+  line: number;
+  /** how sharp a bend has to be (radians over the next 55 units) before it drifts */
+  driftFrom: number;
+  /** seconds it holds a drift: under 0.85 it only ever gets the small mini-turbo */
+  driftHold: number;
+  /** turbo bar level at which it fires */
+  turboAt: number;
+  /** seconds it takes to decide what to do with an item */
   itemDelay: number;
-  /** chance per second of making a small mistake (wide line, missed boost) */
-  mistake: number;
-  /** how often they gamble on a shortcut gate, per second */
-  gateUse: number;
-  /** drift competence 0..1 */
-  drift: number;
-  /** rubberband strength; ace AI cheats hardest */
-  rubberband: number;
+  /** seconds a racer who has just been hit is left alone */
+  mercy: number;
+  /** chance to take an alternate route at a junction, and a risky cut with no barriers */
+  routeUse: number;
+  cutUse: number;
+  /** speed it gains while you are ahead of it, and gives up while you are behind */
+  catchUp: number;
+  wait: number;
+  /** seconds late off the line */
+  reaction: number;
+  /** hesitations per second: a lift of the throttle, never a swerve */
+  hesitate: number;
+  /** chance per second to fuse with its partner when it has someone to shoot at */
+  fuse: number;
 }
 
 export const AI_PROFILES: Record<AiSkillId, AiProfile> = {
-  rookie: { id: "rookie", name: "ROOKIE", steerGain: 1.5, lookahead: 0.024, weave: 0.4, pace: 0.86, accel: 0.85, itemDelay: 2.4, mistake: 0.12, gateUse: 0.05, drift: 0.2, rubberband: 0.6 },
-  amateur: { id: "amateur", name: "AMATEUR", steerGain: 2, lookahead: 0.03, weave: 0.28, pace: 0.94, accel: 0.93, itemDelay: 1.5, mistake: 0.05, gateUse: 0.16, drift: 0.5, rubberband: 0.85 },
-  pro: { id: "pro", name: "PRO", steerGain: 2.5, lookahead: 0.04, weave: 0.18, pace: 1.01, accel: 1, itemDelay: 0.9, mistake: 0.02, gateUse: 0.3, drift: 0.8, rubberband: 1.05 },
-  ace: { id: "ace", name: "ACE", steerGain: 3.2, lookahead: 0.052, weave: 0.1, pace: 1.07, accel: 1.07, itemDelay: 0.5, mistake: 0.004, gateUse: 0.5, drift: 1, rubberband: 1.35 },
+  rookie: { id: "rookie", name: "FÁCIL", pace: 0.9, accel: 0.9, line: 0.55, driftFrom: 0.9, driftHold: 0.5, turboAt: 1, itemDelay: 2.2, mercy: 10, routeUse: 0.35, cutUse: 0.03, catchUp: 0.02, wait: 0.14, reaction: 0.7, hesitate: 0.05, fuse: 0.03 },
+  amateur: { id: "amateur", name: "NORMAL", pace: 0.96, accel: 0.96, line: 0.7, driftFrom: 0.7, driftHold: 0.95, turboAt: 0.8, itemDelay: 1.3, mercy: 5, routeUse: 0.5, cutUse: 0.12, catchUp: 0.07, wait: 0.08, reaction: 0.4, hesitate: 0.025, fuse: 0.08 },
+  pro: { id: "pro", name: "DIFÍCIL", pace: 1, accel: 1, line: 0.82, driftFrom: 0.55, driftHold: 1.2, turboAt: 0.6, itemDelay: 0.7, mercy: 1.5, routeUse: 0.65, cutUse: 0.3, catchUp: 0.12, wait: 0.03, reaction: 0.15, hesitate: 0.008, fuse: 0.15 },
+  ace: { id: "ace", name: "EXPERTO", pace: 1.05, accel: 1.06, line: 0.9, driftFrom: 0.45, driftHold: 1.4, turboAt: 0.45, itemDelay: 0.4, mercy: 0, routeUse: 0.75, cutUse: 0.5, catchUp: 0.18, wait: 0, reaction: 0, hesitate: 0, fuse: 0.25 },
 };
 
 export const AI_SKILL_LIST: AiSkillId[] = ["rookie", "amateur", "pro", "ace"];

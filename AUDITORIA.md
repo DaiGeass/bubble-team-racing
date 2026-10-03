@@ -62,6 +62,47 @@ Longitud en unidades; un kart recorre unas 27 por segundo sin turbo.
 - **Ambiente.** Nubes, globos, burbujas y gotas ya rodean la pista (antes estaban agrupados
   en el origen, fuera de la vista), y en el mar saltan peces junto a los carriles de barco.
 
+## 2c. La IA y los niveles de dificultad
+
+La IA se reescribió con una regla: **fácil no es torpe**. Los cuatro niveles conducen bien;
+lo que cambia es cuánto aprietan y cómo te tratan.
+
+Lo que hacen todos los niveles:
+
+- toman el interior de la curva y vuelven a su carril en la recta;
+- esquivan el tráfico, los pilares móviles, las minas y a los karts más lentos, pasando por
+  el lado con más sitio;
+- derrapan en las curvas que lo merecen y sueltan el mini-turbo a la salida;
+- disparan el turbo en recta, nunca antes de un salto ni donde no hay barreras;
+- van a por los pads de turbo;
+- usan cada objeto para lo que es: misil, rayo e intercambio solo con alguien delante a
+  tiro; gel y mina solo con alguien pegado detrás; el turbo en recta;
+- corren en pareja y se fusionan cuando tienen a quién disparar.
+
+Lo que cambia con el nivel (`AI_PROFILES` en `data.ts`):
+
+| | Fácil | Normal | Difícil | Experto |
+|---|---|---|---|---|
+| Ritmo (velocidad punta) | 90 % | 96 % | 100 % | 105 % |
+| Cuánto apura el interior de la curva | 55 % | 70 % | 82 % | 90 % |
+| Cuánto aguanta el derrape | 0,5 s (mini-turbo pequeño) | 0,95 s | 1,2 s | 1,4 s |
+| Dispara el turbo con la barra al | 100 % | 80 % | 60 % | 45 % |
+| Tarda en usar un objeto | 2,2 s | 1,3 s | 0,7 s | 0,4 s |
+| Deja en paz al que acaba de recibir | 10 s | 5 s | 1,5 s | 0 s |
+| Te espera si vas detrás | 14 % | 8 % | 3 % | 0 % |
+| Aprieta si vas delante | 2 % | 7 % | 12 % | 18 % |
+| Toma rutas / atajos sin barreras | 35 % / 3 % | 50 % / 12 % | 65 % / 30 % | 75 % / 50 % |
+| Tarda en salir | 0,7 s | 0,4 s | 0,15 s | 0 s |
+| Titubeos (levanta el pie, nunca volantazo) | 1 cada 20 s | 1 cada 40 s | 1 cada 2 min | nunca |
+
+Medido en Bosque Colgante, 2 vueltas, 5 rivales: en Fácil el líder rueda a 82 s por vuelta y
+en Difícil a 71 s; en los dos niveles 0 caídas y entre 1 y 1,6 toques de pared por rival. Los
+rivales encadenan entre 7 y 8 mini-turbos en esas dos vueltas.
+
+Bugs que aparecieron al medir y se arreglaron: la IA tomaba las curvas por fuera (signo
+invertido), se quedaba dando vueltas al final de una ruta más larga que el tramo que
+sustituye, y los chevrones de curva estaban en el interior en vez de en el exterior.
+
 ## 3. Cómo se mide
 
 Tres herramientas en `juego/tools/`:
@@ -120,12 +161,12 @@ Del plan original, sin hacer todavía:
   enciende dos pilares móviles más en tramos de carretera normal. No hay caminos que se abran
   o cierren ni agua que suba.
 - **Elementos vivos**: hay tráfico, pilares móviles, peces que saltan y un portal; no hay
-  plataformas móviles ni criaturas que crucen la carretera. La IA no esquiva el tráfico.
+  plataformas móviles ni criaturas que crucen la carretera.
 - **Rutas ramificadas**: todas las rutas salen de la carretera principal y vuelven a ella.
   No hay rutas que se bifurquen a su vez; el motor no lo admite todavía.
-- **IA**: no derrapa, no usa turbo ni fusión.
+- **IA**: no cambia de personaje en carrera (el relevo es solo del jugador) y no apunta la torreta: dispara al rival de delante.
 - **Objetos**: 12 (el plan pide 14).
-- **Fusión**: solo el jugador, sin alternar conductor/artillero, sin torreta de 360°.
+- **Fusión**: los rivales ya se fusionan; sigue sin alternar conductor/artillero y sin torreta de 360°.
 - **Modos**: no hay Gran Premio, fantasma de contrarreloj, arena, equipos ni eliminación.
 - **Garaje**: 19 carrocerías en la tabla (el tipo declara 24).
 - **Decorado**: cada pista tiene el adorno de su estética (palmeras, árboles, ventanas de

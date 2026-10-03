@@ -32,7 +32,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     traffic: 3,
     routes: [
       { from: "climbA", to: "climbB", draw: (t) => t.bypass("L", 123, -4, 10), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
-      { from: "climbA", to: "climbB", draw: (t) => t.bypass("R", 123, 13, 10), kind: "high", pads: [["mid", "boost"]] },
+      { from: "climbA", to: "climbB", draw: (t) => t.bypass("R", 123, 10, 10), kind: "high", pads: [["mid", "boost"]] },
       { from: "homeA", to: "homeB", draw: (t) => t.bypass("R", 133, 8), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
     ],
   }),
@@ -59,7 +59,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     traffic: 3,
     routes: [
       { from: "hairA", to: "hairB", width: 13, walls: false, draw: (t) => t.go(18, 0.9).left(50, 40, 1.5).left(80, 40, 6.1).left(50, 40, 2.2).go(18, 1.05) },
-      { from: "ridgeA", to: "ridgeB", draw: (t) => t.bypass("L", 123, 14, 12), kind: "high", pads: [["mid", "boost"]] },
+      { from: "ridgeA", to: "ridgeB", draw: (t) => t.bypass("L", 123, 10, 12), kind: "high", pads: [["mid", "boost"]] },
       {
         from: "top", to: "merge", width: 12, walls: false,
         draw: (t) => t.go(20, -1).left(45, 70, -2.5).go(120, -8).mark("gap").go(60, -8).go(190, -11.4).left(45, 70, -2.5).go(20, -0.6),
