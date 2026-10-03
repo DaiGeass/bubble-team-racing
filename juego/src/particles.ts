@@ -10,12 +10,21 @@ export interface ParticleBurstRequest {
   life: number;
   gravity?: number;
   upBias?: number;
+  /** debris falls onto the road and bounces instead of dropping through it */
+  ground?: boolean;
+  /** 0 = boxy chassis chunk, 1 = fine spark */
+  shape?: number;
 }
 
 const queue: ParticleBurstRequest[] = [];
 
 export function emitParticles(req: ParticleBurstRequest) {
   queue.push(req);
+}
+
+/** Chassis panels torn off a kart: they fall, bounce twice and stay on the road. */
+export function emitDebris(req: Omit<ParticleBurstRequest, "ground">) {
+  queue.push({ ...req, ground: true, shape: 0, gravity: req.gravity ?? 22, upBias: req.upBias ?? 0.35 });
 }
 
 export function drainParticleQueue(): ParticleBurstRequest[] {

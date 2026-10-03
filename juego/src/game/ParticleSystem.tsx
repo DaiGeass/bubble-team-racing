@@ -2,6 +2,7 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { drainParticleQueue } from "../particles";
+import { nearestT, surfaceYAt } from "../trackCurve";
 
 const POOL = 260;
 
@@ -13,6 +14,10 @@ interface PData {
   size: number;
   gravity: number;
   active: boolean;
+  /** settles on the road like a piece of chassis */
+  ground: boolean;
+  shape: number;
+  settled: boolean;
 }
 
 export default function ParticleSystem() {
@@ -28,6 +33,9 @@ export default function ParticleSystem() {
         size: 0.2,
         gravity: 9,
         active: false,
+        ground: false,
+        shape: 1,
+        settled: false,
       })),
     []
   );
@@ -53,6 +61,9 @@ export default function ParticleSystem() {
         p.maxLife = p.life;
         p.size = req.size * (0.6 + Math.random() * 0.8);
         p.gravity = req.gravity ?? 9;
+        p.ground = !!req.ground;
+        p.shape = req.shape ?? 1;
+        p.settled = false;
         if (meshRef.current) meshRef.current.setColorAt(idx, color);
       }
     }
@@ -78,9 +89,31 @@ export default function ParticleSystem() {
       }
       p.vel.y -= p.gravity * dt;
       p.pos.addScaledVector(p.vel, dt);
+      if (p.ground && !p.settled) {
+        // chassis debris lands on the road and skids to a stop
+        const gy = surfaceYAt(nearestT(p.pos, undefined as any)) + p.size * 0.45;
+        if (p.pos.y <= gy) {
+          p.pos.y = gy;
+          if (Math.abs(p.vel.y) < 1.2) {
+            p.settled = true;
+            p.vel.set(0, 0, 0);
+          } else {
+            p.vel.y = -p.vel.y * 0.32;
+            p.vel.x *= 0.66;
+            p.vel.z *= 0.66;
+          }
+        }
+      }
       const t = p.life / p.maxLife;
       dummy.position.copy(p.pos);
-      dummy.scale.setScalar(p.size * t);
+      if (p.settled) {
+        // flat panel lying on the tarmac
+        dummy.scale.set(p.size * 1.5, p.size * 0.28, p.size * 1.1);
+        dummy.rotation.set(0, p.pos.x * 0.7 + p.pos.z * 0.3, 0);
+      } else {
+        dummy.scale.setScalar(p.size * t);
+        dummy.rotation.set(p.pos.y * 2.3, p.pos.x * 1.7, p.pos.z * 1.1);
+      }
       dummy.updateMatrix();
       meshRef.current?.setMatrixAt(i, dummy.matrix);
     }

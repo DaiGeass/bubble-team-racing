@@ -21,19 +21,21 @@ function TouchButton({
   label,
   className = "",
   color,
+  style,
   onDown,
   onUp,
 }: {
   label: string;
   className?: string;
   color?: string;
+  style?: React.CSSProperties;
   onDown: () => void;
   onUp: () => void;
 }) {
   return (
     <button
       className={`glass-btn flex select-none items-center justify-center rounded-full font-bold leading-none active:scale-95 ${className}`}
-      style={color ? { color, textShadow: `0 0 12px ${color}` } : undefined}
+      style={{ ...style, ...(color ? { color, textShadow: `0 0 12px ${color}` } : {}) }}
       onPointerDown={(e) => {
         e.preventDefault();
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -81,7 +83,12 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
   // re-render forever under zustand's Object.is comparison
   const touchLayout = useGame((s) => s.settings.touchLayout);
   const handed = useGame((s) => s.settings.handed);
-  const layout = { touchLayout: touchLayout ?? DEFAULT_TOUCH, handed };
+  const touchScale = useGame((s) => s.settings.touchScale);
+  const telemetryOn = useGame((s) => s.settings.telemetry);
+  const motionBlur = useGame((s) => s.settings.motionBlur);
+  const layout = { touchLayout: touchLayout ?? DEFAULT_TOUCH, handed, scale: touchScale ?? 1 };
+  // every pad, including the weapon cluster, is sized from the Options slider
+  const px = (n: number) => `${Math.round(n * layout.scale)}px`;
 
   useEffect(() => setCdKey((k) => k + 1), [telemetry.countdown]);
 
@@ -90,6 +97,17 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 select-none">
+      {/* ---------- speed blur: cheap streaks that grow with velocity ---------- */}
+      {motionBlur > 0 && (
+        <div
+          className="absolute inset-0 mix-blend-screen"
+          style={{
+            opacity: motionBlur * speedPct * 0.55,
+            background:
+              "radial-gradient(ellipse at center, transparent 42%, rgba(255,255,255,0.5) 78%, rgba(255,255,255,0.85) 100%)",
+          }}
+        />
+      )}
       {/* ---------- top left: lap / position / mode ---------- */}
       <div className="pointer-events-auto absolute left-3 top-3 flex items-stretch gap-2">
         <div className="glass-panel relative flex flex-col items-center rounded-2xl px-3 py-1.5">
@@ -123,11 +141,13 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         <div className="glass-panel rounded-2xl px-4 py-1">
           <span className="font-mono text-xl font-bold text-sky-900">{formatTime(telemetry.timeMs)}</span>
         </div>
-        <div className="flex gap-1.5 text-xs font-bold">
-          <span className="glass-panel rounded-full px-2.5 py-0.5 text-sky-900">⭐ {telemetry.score}</span>
-          <span className="glass-panel rounded-full px-2.5 py-0.5 text-amber-600">◉ {telemetry.coins}</span>
-          {telemetry.rings > 0 && <span className="glass-panel rounded-full px-2.5 py-0.5 text-cyan-600">◎ {telemetry.rings}</span>}
-        </div>
+        {telemetryOn && (
+          <div className="flex gap-1.5 text-xs font-bold">
+            <span className="glass-panel rounded-full px-2.5 py-0.5 text-sky-900">⭐ {telemetry.score}</span>
+            <span className="glass-panel rounded-full px-2.5 py-0.5 text-amber-600">◉ {telemetry.coins}</span>
+            {telemetry.rings > 0 && <span className="glass-panel rounded-full px-2.5 py-0.5 text-cyan-600">◎ {telemetry.rings}</span>}
+          </div>
+        )}
       </div>
 
       {/* ---------- top right: minimap + buttons ---------- */}
@@ -140,7 +160,7 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
             ❚❚
           </button>
         </div>
-        <Minimap />
+        {telemetryOn && <Minimap />}
       </div>
 
       {/* ---------- standings (desktop) ---------- */}
@@ -186,7 +206,7 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
           </div>
           <span className="font-mono text-[10px] font-bold text-sky-900/70">{Math.round(telemetry.turbo * 100)}%</span>
         </div>
-        <div className="text-center font-mono text-xs font-bold text-sky-900/70">{telemetry.speedKph} km/h</div>
+        {telemetryOn && <div className="text-center font-mono text-xs font-bold text-sky-900/70">{telemetry.speedKph} km/h</div>}
       </div>
 
       {/* ---------- fusion turret health bar ---------- */}
@@ -242,8 +262,8 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
 
       {/* ---------- weapon + tag swap + fusion ---------- */}
       <div className="pointer-events-auto absolute bottom-24 right-3 flex items-center gap-2 sm:bottom-6 sm:right-4">
-        <div className="relative h-14 w-14">
-          <svg className="absolute inset-0 h-14 w-14 -rotate-90">
+        <div className="relative" style={{ width: px(56), height: px(56) }}>
+          <svg className="absolute inset-0 -rotate-90" style={{ width: px(56), height: px(56) }} viewBox="0 0 56 56">
             <circle cx="28" cy="28" r="24" stroke="rgba(255,255,255,0.55)" strokeWidth="4" fill="none" />
             <circle
               cx="28"
@@ -258,15 +278,16 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
             />
           </svg>
           <TouchButton
-            label="⇄"
-            className="absolute inset-0 h-14 w-14 text-xl text-sky-800"
-            onDown={() => controls.setTouch("swap", true)}
-            onUp={() => controls.setTouch("swap", false)}
+            label={TOUCH_GLYPH[layout.touchLayout.swap] ?? "⇄"}
+            className="absolute inset-0 text-xl text-sky-800"
+            style={{ width: px(56), height: px(56) }}
+            onDown={() => controls.setAction(layout.touchLayout.swap, true)}
+            onUp={() => controls.setAction(layout.touchLayout.swap, false)}
           />
         </div>
         {/* FUSION — partner mans the turret */}
-        <div className={`relative h-14 w-14 ${telemetry.fused ? "animate-pulse" : ""}`}>
-          <svg className="absolute inset-0 h-14 w-14 -rotate-90">
+        <div className={`relative ${telemetry.fused ? "animate-pulse" : ""}`} style={{ width: px(56), height: px(56) }}>
+          <svg className="absolute inset-0 -rotate-90" style={{ width: px(56), height: px(56) }} viewBox="0 0 56 56">
             <circle cx="28" cy="28" r="24" stroke="rgba(255,255,255,0.55)" strokeWidth="4" fill="none" />
             <circle
               cx="28"
@@ -281,18 +302,20 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
             />
           </svg>
           <TouchButton
-            label="✚"
-            className={`absolute inset-0 h-14 w-14 text-xl ${telemetry.fused ? "text-amber-500" : "text-purple-700"}`}
-            onDown={() => controls.setTouch("fuse", true)}
-            onUp={() => controls.setTouch("fuse", false)}
+            label={TOUCH_GLYPH[layout.touchLayout.fuse] ?? "✚"}
+            className={`absolute inset-0 text-xl ${telemetry.fused ? "text-amber-500" : "text-purple-700"}`}
+            style={{ width: px(56), height: px(56) }}
+            onDown={() => controls.setAction(layout.touchLayout.fuse, true)}
+            onUp={() => controls.setAction(layout.touchLayout.fuse, false)}
           />
         </div>
         <TouchButton
-          label={w ? w.glyph : "·"}
-          color={w ? w.color : undefined}
-          className={`h-20 w-20 text-4xl ${w ? "animate-pulse" : "opacity-40"}`}
-          onDown={() => controls.setTouch("item", true)}
-          onUp={() => controls.setTouch("item", false)}
+          label={TOUCH_GLYPH[layout.touchLayout.item] ?? (w ? w.glyph : "·")}
+          color={w && layout.touchLayout.item === "item" ? w.color : undefined}
+          className={`text-4xl ${w ? "animate-pulse" : "opacity-40"}`}
+          style={{ width: px(80), height: px(80) }}
+          onDown={() => controls.setAction(layout.touchLayout.item, true)}
+          onUp={() => controls.setAction(layout.touchLayout.item, false)}
         />
       </div>
 
@@ -301,11 +324,13 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         {(["padL", "padR", "drift"] as TouchSlot[]).map((slot) => {
           const action = layout.touchLayout[slot];
           const glyph = TOUCH_GLYPH[action] ?? "·";
-          const size = slot === "drift" ? "h-[58px] w-[58px] text-2xl" : "h-[70px] w-[70px] text-3xl";
+          const dim = slot === "drift" ? 58 : 70;
+          const size = `text-[${Math.round(dim * 0.42 * layout.scale)}px]`;
           return (
             <TouchButton
               key={slot}
               label={glyph}
+              style={{ width: px(dim), height: px(dim) }}
               className={`${size} text-sky-800 ${action === "drift" && telemetry.boosting ? "text-amber-500" : ""}`}
               onDown={() => controls.setAction(action, true)}
               onUp={() => controls.setAction(action, false)}
@@ -317,11 +342,13 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         {(["gas", "brake"] as TouchSlot[]).map((slot) => {
           const action = layout.touchLayout[slot];
           const big = slot === "gas";
+          const dim = big ? 86 : 48;
           return (
             <TouchButton
               key={slot}
               label={TOUCH_GLYPH[action] ?? "·"}
-              className={`${big ? "h-[86px] w-[86px] text-4xl text-emerald-600" : "h-12 w-12 text-xl text-rose-500"}`}
+              style={{ width: px(dim), height: px(dim) }}
+              className={`${big ? "text-emerald-600" : "text-rose-500"} text-[${Math.round(dim * 0.46 * layout.scale)}px]`}
               onDown={() => controls.setAction(action, true)}
               onUp={() => controls.setAction(action, false)}
             />

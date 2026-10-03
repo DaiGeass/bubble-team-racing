@@ -140,6 +140,25 @@ export const DEFAULT_KEYBINDS: Record<Action, string[]> = {
   brake: ["ArrowDown", "KeyS"],
 };
 
+/**
+ * The two named layouts offered in Options. Picking one really does move the
+ * keys: previously the preset was only saved and the bindings never changed.
+ */
+export const PRESET_KEYBINDS: Record<"A" | "B", Record<Action, string[]>> = {
+  A: DEFAULT_KEYBINDS,
+  B: {
+    item: ["KeyE"],
+    drift: ["Space"],
+    swap: ["KeyQ"],
+    fuse: ["KeyF"],
+    turbo: ["KeyK", "KeyJ"],
+    left: ["ArrowLeft", "KeyA"],
+    right: ["ArrowRight", "KeyD"],
+    gas: ["ArrowUp", "KeyW"],
+    brake: ["ArrowDown", "KeyS"],
+  },
+};
+
 export const DEFAULT_TOUCH: Record<TouchSlot, Action> = {
   padL: "left",
   padR: "right",
@@ -326,6 +345,16 @@ export const useGame = create<GameState>((set, get) => ({
   setSettings: (v) =>
     set((s) => {
       const next = { ...s.settings, ...v };
+      // choosing a layout also installs its key bindings
+      if (v.controlPreset && v.controlPreset !== s.settings.controlPreset) {
+        next.keybinds = PRESET_KEYBINDS[v.controlPreset];
+      }
+      savePrefs("tsc_settings", next);
+      return { settings: next };
+    }),
+  setKeybinds: (kb) =>
+    set((s) => {
+      const next = { ...s.settings, keybinds: kb };
       savePrefs("tsc_settings", next);
       return { settings: next };
     }),

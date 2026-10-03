@@ -32,7 +32,7 @@ import {
   type VehicleMode,
 } from "../data";
 import { nearestT, trackPointAt, trackTangentAt, lateralOffsetFrom, corridorBounds, branchCenterAt, getActiveTrack, getShortcuts, surfaceYAt, trackFrameAt, halfWidthAt, trapPhase, trapTransform, inGapPit, gapExitT } from "../trackCurve";
-import { emitParticles, addShake, shakeState } from "../particles";
+import { emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
 
 const TAG_COOLDOWN_MAX = 3.6;
@@ -554,6 +554,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       r.explodeTimer = 0.8;
       emitParticles({ position: r.pos.clone().setY(r.y + 1.2), color: theme.glow, count: 60, speed: 8, spread: 2, size: 0.3, life: 0.9 });
       emitParticles({ position: r.pos.clone().setY(r.y + 1.2), color: WEAPON_META.quake.glow, count: 40, speed: 10, spread: 2.2, size: 0.26, life: 0.7 });
+      // the chassis comes apart: panels in the body's own colours fall to the road
+      const body = activeChar(r);
+      emitDebris({ position: r.pos.clone().setY(r.y + 0.9), color: body.primary, count: 9, speed: 7, spread: 1.5, size: 0.42, life: 4.5 });
+      emitDebris({ position: r.pos.clone().setY(r.y + 0.8), color: body.secondary, count: 6, speed: 5.5, spread: 1.3, size: 0.34, life: 4 });
+      emitDebris({ position: r.pos.clone().setY(r.y + 0.7), color: body.accent, count: 5, speed: 9, spread: 1.1, size: 0.26, life: 3.5 });
       if (r.isPlayer) { addShake(0.8); sfx.bump(); }
     }
     r.stunTimer = spinner ? 1.25 : 0.95;
@@ -1736,7 +1741,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     );
     camera.lookAt(camLook.current);
     const cam = camera as THREE.PerspectiveCamera;
-    const targetFov = 64 + speedKick * 9 + s * 10 + (player.boostTimer > 0 ? 5 : 0);
+    // the Options "speed blur" slider widens the lens as well, so the streaks
+    // in the HUD and the camera pull together at high speed
+    const targetFov = 64 + speedKick * (9 + settings.motionBlur * 14) + s * 10 + (player.boostTimer > 0 ? 5 : 0);
     if (Math.abs(cam.fov - targetFov) > 0.05) {
       cam.fov = THREE.MathUtils.lerp(cam.fov, targetFov, 0.12);
       cam.updateProjectionMatrix();
