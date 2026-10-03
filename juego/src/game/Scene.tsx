@@ -1051,7 +1051,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // planes fly: hold the altitude profile whatever the ground does
       r.airborne = false;
       r.vy = 0;
-      r.y = THREE.MathUtils.lerp(r.y, rideY, 0.12);
+      r.y = THREE.MathUtils.lerp(r.y, rideY, 0.08);
     } else {
       // vertical speed needed to stay glued to the surface over this frame, capped so a
       // discontinuity (respawn, warp exit, zone change) can never fling the car upward
@@ -1061,7 +1061,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // Hulls bob a few centimetres above their target height, which would otherwise
       // flicker the flag every frame, so the launch test needs real separation there.
       const bobbing = r.mode === "boat" || r.mode === "sub";
-      if (!r.airborne && need < fall - 0.5 && (!bobbing || rideY - r.y > 0.3)) r.airborne = true;
+      if (!r.airborne && need < fall - 0.9 && (!bobbing || rideY - r.y > 0.5)) r.airborne = true;
       if (r.airborne) {
         r.vy = fall;
         r.y += r.vy * dt;
@@ -1072,7 +1072,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         }
       } else {
         r.y = rideY;
-        r.vy = THREE.MathUtils.lerp(r.vy, need, 0.4);
+        r.vy = THREE.MathUtils.lerp(r.vy, need, 0.25);
       }
     }
     r.groundY = groundY;

@@ -225,8 +225,11 @@ export function lanesAt(t: number): Lane[] {
 
 /** The lane a lateral offset belongs to, and how far outside it is when it does not. */
 export function laneAt(t: number, offset: number): { lane: Lane; inside: boolean; outBy: number } {
-  const lanes = lanesAt(t);
-  for (const l of lanes) if (offset >= l.min && offset <= l.max) return { lane: l, inside: true, outBy: 0 };
+  const lanes = lanesAt(t).slice().sort((a, b) => a.min - b.min);
+  // small tolerance: makes transitions into a side road at its very mouth feel
+  // less "jumpy" without making the whole track wider
+  const TOL = 0.6;
+  for (const l of lanes) if (offset >= l.min - TOL && offset <= l.max + TOL) return { lane: l, inside: true, outBy: 0 };
   let best = lanes[0];
   let bestD = Infinity;
   for (const l of lanes) {
