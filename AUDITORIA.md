@@ -71,11 +71,11 @@ y `tsc` limpio. Encima se le aplica, **sistema por sistema y sin duplicar nada**
 | IA | OK | OK | OK | OK + cebo | de (3) |
 | Objetos | 8 | **12** | 8 | 8 | **12 → 14** (fase 4) |
 | Transformaciones | 4 modos | 4 modos | 4 modos | 4 modos (sub fusionado) | 4 modos, de A |
-| Fusión | MEDIO | MEDIO | MEDIO | MEDIO | se completa (fase 4) |
-| Pistas | 10 | **14** | 10 | 8 | **14** |
+| Fusión | MEDIO | MEDIO | MEDIO | MEDIO | **arma propia para cada uno de los 28** |
+| Pistas | 10 | **14** | 10 | 8 | **14**, todas de ~2000 unidades y 60–90 s |
 | Rutas alternativas | atajos volados | atajos volados | atajos volados | **ramas reales** | **ramas reales + relieve real**, los atajos vuelan siguiendo la carretera |
 | Personajes | 25 | 25 | 25 | **28** | **28**, se eligen 12 al inicio y 16 al final |
-| Garaje | 11 carrocerías | 12 | 12 | 9 | **19 + acabados nuevos** |
+| Garaje | 11 carrocerías | 12 | 12 | 9 | **24 carrocerías + 6 acabados** |
 | Botes y aviones | sin stats | sin stats | sin stats | **con stats** | **21 artefactos con stats** |
 | Botes/aviones/sub | 3 + 3, sin stats | 3 + 3, sin stats | 3 + 3, sin stats | **4 + 4 con stats** | **7 + 7 + 7 con stats** |
 | Menús | OK | OK | OK | **OK + UI por estética** | de (3) |
@@ -117,14 +117,23 @@ segundos.
 
 | Prueba | Resultado |
 |---|---|
-| `vite build` en las 4 | OK |
-| `tsc --noEmit` en las 4 | 0 errores |
-| Carrera completa 3 vueltas | termina, **0 errores de consola** |
-| Modos visitados | land, boat, plane |
+| `vite build` | OK |
+| `tsc --noEmit` | 0 errores |
+| Carrera completa 3 vueltas | **termina**: 5:14 de autopilot, pantalla de resultados con posición, tiempo, monedas, anillos, bono y récord |
+| Modos visitados | land, boat, plane, sub |
+| Vuelta de la IA | **67–74 s** en las 14 pistas (objetivo 60–90 s) |
 | A/flecha izquierda | gira izquierda (medido contra la tangente) |
 | D/flecha derecha | gira derecha |
 | Pared | offset clavado, 0 cambios de signo, sin vibración |
-| Derrape | 2 niveles; `turboMeter` llega a 1 |
+| Derrape | 3 niveles; `turboMeter` llega a 1 |
+| Atasco | `minSpeed` 13,4 en carrera y 5,1 en autopilot de 120 s: nadie se queda clavado |
+| Huecos | rampa, labio, foso y pared de salida; el rescate saca del foso a la pista |
+| Altura libre de cámara | mínima 1,6 en las 14 pistas (antes −1,3) |
+| NaN | 0 en las 14 pistas |
+| Rutas | 11–14 atajos apilados, 2 huecos y 2 portales por pista, **0 solapamientos** |
+| Puertas de puerto | siempre lanzan hacia delante: nunca se salta media vuelta |
+| i18n | 0 claves que falten en los 8 idiomas (auditoría automática) |
+| Opciones | las tres pestañas (Juego, Controles, Táctil) abren y persisten sin errores |
 
 **Lo que no se puede medir aquí**: los 60 fps. SwiftShader renderiza por software a 4–9 fps,
 así que el rendimiento hay que comprobarlo en un navegador con GPU.
@@ -139,15 +148,23 @@ así que el rendimiento hay que comprobarlo en un navegador con GPU.
 - [x] **Fase 1.2b** — Fuera la instrumentación de pruebas
 - [x] **Fase 1.3** — Estadísticas por bote, avión y submarino de `(3)`
 - [x] **Fase 1.4** — Personajes COBALT, KIWI y MAGMA de `(3)` → 28 en total
-- [ ] **Fase 1.5** — Interfaz por estética de `(3)` (`ui`: glass / y2k / win98)
-- [ ] **Fase 1.6** — Modo `endurance` de `(3)`
+- [x] **Fase 1.5** — Interfaz por estética de `(3)` + 3 estéticas nuevas (`dreamcore`, `cyberpunk`, `noir`) con su propia piel CSS
+- [x] **Fase 1.6** — Modo `endurance` de `(3)` y modo `duel`
 - [x] **Fase 2 — Arreglos obligatorios** (pared, atajos por la carretera, cámara fuera del terreno, bote sin parpadeo)
 - [x] **Fase 3 — Pistas verticales** — las 14 pistas suben de 0 a 12-32 unidades de altura, el terreno sigue la carretera, la física tiene gravedad y saltos, el minimapa sombrea por altura
-- [ ] **Fase 4 — Completar según la visión**
-  - [x] Modelos: 19 carrocerías y 7 + 7 + 7 artefactos con stats e i18n
+- [x] **Fase 4 — Completar según la visión**
+  - [x] Modelos: 24 carrocerías y 7 + 7 + 7 artefactos con stats e i18n
   - [x] Estéticas mutables: la paleta, la luz y la vegetación cambian en cada vuelta
-  - [ ] Acabados del garaje (vidrio, cromo, translúcido, mate)
-  - [ ] Reasignación táctil real y modo `endurance`
+  - [x] Acabados del garaje: 6 (sólido, brillante, mate, cromo, cristal, holográfico)
+  - [x] Reasignación real de teclado y de los 8 huecos táctiles, con presets que instalan su asignación
+  - [x] Opciones conectadas: IA, gas automático, asistencia, sacudida, vibración de velocidad, volumen, bloom, telemetría, idioma, mano, tamaño de botones
+  - [x] Fusión con torreta propia para los 28 personajes (cadencia, ráfaga, dispersión e impacto)
+  - [x] IA por niveles: rookie, amateur, pro y ace
+  - [x] 12 atajos apilados por vuelta (barrera baja, calzadas y puentes), 2 huecos y 2 portales por pista
+  - [x] Huecos de verdad: rampa, labio, foso y pared; la física y la carretera comparten la misma curva
+  - [x] Reaparición por atasco:contramuro y por falta de progreso
+  - [x] Destrucción con chasis: las explosiones sueltan paneles que caen, rebotan y quedan en la calzada
+  - [x] Vueltas de 60–90 s: las 14 pistas normalizadas a ~2000 unidades
 
 ### Lo que tienes que probar tú
 
@@ -155,4 +172,6 @@ Al final de cada fase te doy una lista corta. Para esta fase:
 
 1. Abre el juego en Chrome y Firefox.
 2. Mide fps en escritorio: objetivo **60 fps**.
-3. Prueba en móvil o con las DevTools en modo táctil.
+3. Salta los dos huecos de cada pista a tope: si el foso te traga, el rescate te devuelve a la pista.
+4. En Opciones → Táctil, reasigna un hueco y comprueba que el botón cambia de dibujo y de acción.
+5. Explota a un rival y mira los paneles: deberían quedarse tumbados en la calzada.

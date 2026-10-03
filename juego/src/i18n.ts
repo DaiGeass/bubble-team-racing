@@ -246,7 +246,7 @@ const es: Dict = {
   invertSteer: "Invertir dirección",
   cameraShake: "Sacudida de cámara",
   speedBlur: "Vibración de velocidad",
-  bloomFx: "Bloom",
+  bloomFx: "Resplandor",
   telemetryFx: "Telemetría",
   pressAKey: "Pulsa una tecla…",
   preset: "Preset",
@@ -381,7 +381,7 @@ const fr: Dict = {
   invertSteer: "Inverser la direction",
   cameraShake: "Secousse de caméra",
   speedBlur: "Flou de vitesse",
-  bloomFx: "Bloom",
+  bloomFx: "Halo lumineux",
   telemetryFx: "Télémétrie",
   pressAKey: "Appuie sur une touche…",
   preset: "Préréglage",
@@ -516,7 +516,7 @@ const ru: Dict = {
   invertSteer: "Инверсия руля",
   cameraShake: "Тряска камеры",
   speedBlur: "Размытие скорости",
-  bloomFx: "Bloom",
+  bloomFx: "Свечение",
   telemetryFx: "Телеметрия",
   pressAKey: "Нажмите клавишу…",
   preset: "Предустановка",
@@ -659,7 +659,7 @@ const ja: Dict = {
   handedness: "利き手",
   rightHanded: "右手",
   leftHanded: "左手",
-  aesthetics: "Patricia",
+  aesthetics: "世界観",
   autoGas: "オートアクセル",
   bloomOn: "ブルーム",
   boosterPart: "ブースター",
@@ -1109,5 +1109,9 @@ export function useI18n() {
 
 export function ordinal(n: number, t: (k: string) => string) {
   const suffix = n === 1 ? t("st") : n === 2 ? t("nd") : n === 3 ? t("rd") : t("th");
+  if (!suffix || suffix === `st` || suffix === `nd` || suffix === `rd` || suffix === `th`) {
+    // language without latin ordinal suffixes: keep the digit on its own
+    return `${n}`;
+  }
   return `${n}${suffix}`;
 }
