@@ -62,6 +62,10 @@ export interface Telemetry {
   fused: boolean;
   fusionHp: number; // 0..1 turret partner health
   turbo: number; // 0..1 drift-charged turbo meter
+  /** mini-turbo level the current drift has reached, 0..3 */
+  driftLevel: number;
+  /** until when (Date.now()) error windows cover the screen */
+  popupUntil: number;
   shortcutFlash: number; // timestamp of the last alternative-path jump
 }
 
@@ -88,6 +92,8 @@ const defaultTelemetry: Telemetry = {
   fused: false,
   fusionHp: 1,
   turbo: 0,
+  driftLevel: 0,
+  popupUntil: 0,
   shortcutFlash: 0,
 };
 

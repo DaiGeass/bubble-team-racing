@@ -108,6 +108,40 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
           }}
         />
       )}
+      {/* ---------- error windows: someone has covered your screen ---------- */}
+      {Date.now() < telemetry.popupUntil &&
+        [
+          [8, 18, 34, -3], [46, 10, 30, 2], [22, 44, 38, 1], [58, 40, 30, -2], [34, 26, 32, 4], [10, 58, 28, 2], [62, 62, 30, -1],
+        ].map(([x, y, w, rot], i) => (
+          <div
+            key={i}
+            className="pop-in absolute shadow-xl"
+            style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, transform: `rotate(${rot}deg)`, background: "#c0c0c0", border: "2px solid #ffffff", borderRightColor: "#404040", borderBottomColor: "#404040" }}
+          >
+            <div className="flex items-center justify-between px-2 py-1 text-xs font-bold text-white" style={{ background: "#000080" }}>
+              <span>Error</span>
+              <span className="px-1" style={{ background: "#c0c0c0", color: "#000" }}>×</span>
+            </div>
+            <div className="flex items-center gap-3 px-3 py-4 text-black">
+              <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full text-lg font-black text-white" style={{ background: "#d40000" }}>!</span>
+              <span className="font-mono text-xs">0x{(0xbad0 + i * 4919).toString(16).toUpperCase()}</span>
+            </div>
+          </div>
+        ))}
+
+      {/* ---------- drift: one light per mini-turbo level reached ---------- */}
+      {telemetry.driftLevel > 0 && (
+        <div className="absolute bottom-28 left-1/2 flex -translate-x-1/2 gap-2 sm:bottom-20">
+          {["#8be9ff", "#ffb347", "#ff5fd2"].map((c, i) => (
+            <span
+              key={i}
+              className="h-4 w-9 rounded-full"
+              style={{ background: i < telemetry.driftLevel ? c : "rgba(255,255,255,0.3)", boxShadow: i < telemetry.driftLevel ? `0 0 14px ${c}` : "none", border: "2px solid rgba(255,255,255,0.8)" }}
+            />
+          ))}
+        </div>
+      )}
+
       {/* ---------- top left: lap / position / mode ---------- */}
       <div className="pointer-events-auto absolute left-3 top-3 flex items-stretch gap-2">
         <div className="glass-panel relative flex flex-col items-center rounded-2xl px-3 py-1.5">

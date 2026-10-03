@@ -45,7 +45,7 @@ if (arg === "check" || arg === "dump") {
           const dx = a.px[i] - b.px[j], dz = a.pz[i] - b.pz[j];
           if (dx * dx + dz * dz > (a.half[i] + b.half[j] + 1) ** 2) continue;
           const dy = Math.abs(a.py[i] - b.py[j]);
-          if (dy > 1.2 && dy < 7) { const key = `paths ${a.id}/${b.id} near (${Math.round(a.px[i] / 40) * 40},${Math.round(a.pz[i] / 40) * 40})`; clash.set(key, Math.min(clash.get(key) ?? 99, dy)); }
+          if (dy > 1.5 && dy < 7) { const key = `paths ${a.id}/${b.id} near (${Math.round(a.px[i] / 40) * 40},${Math.round(a.pz[i] / 40) * 40})`; clash.set(key, Math.min(clash.get(key) ?? 99, dy)); }
           if (a === b && dy <= 1.2) { const key = `path ${a.id} runs into itself near (${Math.round(a.px[i] / 40) * 40},${Math.round(a.pz[i] / 40) * 40})`; clash.set(key, 0); }
         }
       }

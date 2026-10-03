@@ -17,6 +17,8 @@ export interface KartVisualState {
   fused?: boolean;
   ghost?: boolean;
   magnet?: boolean;
+  /** where the fusion turret points, relative to the nose */
+  turretAim?: number;
   exploding?: boolean;
 }
 
@@ -672,7 +674,7 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
     if (altPilot.current) altPilot.current.visible = usePartner;
     if (turret.current) {
       turret.current.visible = fused;
-      turret.current.rotation.y = Math.sin(t.current * 2.2) * 0.5;
+      turret.current.rotation.y = st?.turretAim ?? 0;
     }
     if (gunnerMain.current) gunnerMain.current.visible = fused && usePartner;
     if (gunnerAlt.current) gunnerAlt.current.visible = fused && !usePartner;

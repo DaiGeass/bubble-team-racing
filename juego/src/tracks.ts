@@ -327,4 +327,74 @@ export const DESIGNED_TRACKS: TrackDef[] = [
       { from: "landA", to: "landB", draw: (t) => t.bypass("R", 263, -3), kind: "low", pads: [["mid", "boost"]] },
     ],
   }),
+
+  // CHROME CLOVER — four straights and four full loops. Every loop climbs and
+  // brings the road back across the straight it came from, a floor higher, so
+  // the lap is one long descent that keeps passing over itself.
+  design({
+    id: "trebol", theme: "y2k", difficulty: 3, start: [0, 28, 0, 0], hazards: 3,
+    draw: (t) => {
+      t.mark("a1").go(BYPASS + 73, -16).mark("b1").go(70, -4).left(270, 70, 20);
+      t.go(110, -7).mark("run").go(40, -3).mark("jump").go(170, -10).left(270, 70, 20);
+      t.mark("a3").go(BYPASS + 73, -16).mark("b3").go(70, -4).left(270, 70, 20);
+      t.go(160, -10).mark("last").go(160, -10).left(270, 70, 20);
+    },
+    holes: [["jump", 11]],
+    sectors: [["run", "vapor"], ["a3", "liquid"], ["last", "dreamcore"]],
+    traffic: 3,
+    pads: [["a1", "boost", 1.45, 30], ["run", "boost", 1.5], ["last", "boost"]],
+    routes: [
+      { from: "a1", to: "b1", draw: (t) => t.bypass("R", 73, -4, -16), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "a3", to: "b3", draw: (t) => t.bypass("R", 73, 4, -16), kind: "high", pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
+
+  // CRATER — starts on the rim, forty units up, and goes down the inside of
+  // the crater in two full turns. Three lanes across the floor, and a cannon
+  // back up to the rim.
+  design({
+    id: "crater", theme: "sunset", difficulty: 3, start: [0, 40, 0, 0], hazards: 2,
+    draw: (t) =>
+      t.go(50).mark("go").go(150).mark("spiral")
+        .right(720, 70, -36).mark("pit")
+        .go(150)
+        .left(180, 90)
+        .mark("floorA").go(BYPASS + 171).mark("floorB")
+        .mark("c0").go(8).mark("air")
+        .left(180, 90, 36).mark("land").go(6),
+    holes: [["air", 270]],
+    kick: 0,
+    cannons: [["c0", "land", 40]],
+    sectors: [["spiral", "vapor"], ["pit", "cyberpunk"], ["floorB", "sunset"]],
+    traffic: 2,
+    pads: [["go", "boost"], ["pit", "boost", 1.5, -250], ["pit", "boost", 1.5, -560]],
+    routes: [
+      { from: "floorA", to: "floorB", draw: (t) => t.bypass("L", 171, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "floorA", to: "floorB", draw: (t) => t.bypass("R", 171, -2.5), kind: "low", pads: [["mid", "boost"]] },
+    ],
+  }),
+
+  // ROLLER COASTER — a long climb to forty-eight units, two falls of sixteen
+  // on the way back down, a jump between them and a weave through the valley.
+  design({
+    id: "montana", theme: "sunset", difficulty: 2, start: [0, 8, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(50).mark("go").go(210)
+        .left(90, 90, 6)
+        .mark("climbA").go(BYPASS + 323, 34).mark("climbB").go(15)
+        .left(90, 90)
+        .go(60).drop(-16).go(100).mark("j1").go(60).drop(-16)
+        .left(90, 90, -4)
+        .weave("R", 30, 150, -4).go(75).mark("run").go(40).mark("j2").go(100)
+        .left(90, 90)
+        .go(32),
+    holes: [["j1", 10], ["j2", 9]],
+    sectors: [["climbA", "dreamcore"], ["j1", "vapor"], ["run", "sunset"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["climbB", "boost"], ["run", "boost", 1.5]],
+    routes: [
+      { from: "climbA", to: "climbB", draw: (t) => t.bypass("L", 323, -5, 34), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "climbA", to: "climbB", draw: (t) => t.bypass("R", 323, 8, 34), kind: "high", pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
 ];

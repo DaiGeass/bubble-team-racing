@@ -10,7 +10,7 @@ export type EyeStyle = "sparkle" | "sharp" | "visor" | "sleepy";
 export type RoleId = "speed" | "handler" | "heavy" | "balanced" | "trickster" | "tech";
 export type WeaponId =
   | "orb" | "missile" | "bubble" | "slime" | "beam" | "zap" | "mine" | "wave"
-  | "swap" | "magnet" | "ghost" | "quake";
+  | "swap" | "magnet" | "ghost" | "quake" | "freeze" | "steal" | "popup" | "giant" | "warp";
 export type ShapeId =
   | "kart" | "hover" | "buggy" | "jet" | "cruiser" | "moto" | "ufo"
   | "coupe" | "van" | "formula" | "bubble" | "rocket" | "mono"
@@ -460,12 +460,13 @@ export function craftHandling(id: string | undefined, fallback: number): number 
 
 export const WEAPONS: WeaponId[] = [
   "orb", "missile", "bubble", "slime", "beam", "zap", "mine", "wave", "swap", "magnet", "ghost", "quake",
+  "freeze", "steal", "popup", "giant", "warp",
 ];
 
 /** drop weights inside item boxes (rarer = stronger) */
 export const WEAPON_WEIGHTS: Record<WeaponId, number> = {
   orb: 20, missile: 16, bubble: 12, slime: 10, beam: 9, zap: 9, mine: 7, wave: 5,
-  swap: 4, magnet: 8, ghost: 7, quake: 5,
+  swap: 4, magnet: 8, ghost: 7, quake: 5, freeze: 7, steal: 6, popup: 6, giant: 4, warp: 5,
 };
 
 /**
@@ -475,7 +476,7 @@ export const WEAPON_WEIGHTS: Record<WeaponId, number> = {
  */
 const WEAPON_LEAN: Record<WeaponId, number> = {
   orb: 0.5, missile: 0.9, bubble: -0.8, slime: -0.9, beam: 0.6, zap: 1, mine: -1, wave: 0,
-  swap: 1, magnet: 0.3, ghost: 0.2, quake: 0.8,
+  swap: 1, magnet: 0.3, ghost: 0.2, quake: 0.8, freeze: 0.7, steal: 0.5, popup: 0.4, giant: 1, warp: 1,
 };
 
 /** Draw an item. `behind` is 0 for the leader and 1 for the last racer. */
@@ -505,7 +506,135 @@ export const WEAPON_META: Record<WeaponId, { glyph: string; color: string; glow:
   magnet: { glyph: "∪", color: "#fb923c", glow: "#ffd9b0" },
   ghost: { glyph: "◌", color: "#e0e7ff", glow: "#ffffff" },
   quake: { glyph: "☲", color: "#a16207", glow: "#fde68a" },
+  freeze: { glyph: "❄", color: "#7dd3fc", glow: "#e0f2fe" },
+  steal: { glyph: "⤺", color: "#a78bfa", glow: "#ddd6fe" },
+  popup: { glyph: "▣", color: "#94a3b8", glow: "#e2e8f0" },
+  giant: { glyph: "⬆", color: "#f97316", glow: "#fed7aa" },
+  warp: { glyph: "⟫", color: "#2dd4bf", glow: "#99f6e4" },
 };
+
+// ---------------------------------------------------------------------------
+// Fusion turrets: one shot per character, and no two alike. `kind` is how it
+// leaves the turret, `effect` what it does to whoever it hits.
+// ---------------------------------------------------------------------------
+
+/**
+ * bolt: straight shots at the target. homing: a shot that follows it. fan: a
+ * spread. rear: fired backwards at whoever is chasing. lance: an instant beam.
+ * nova: a burst all around the kart. mortar: dropped in the target's path.
+ */
+export type ShotKind = "bolt" | "homing" | "fan" | "rear" | "lance" | "nova" | "mortar";
+/**
+ * stun: stops it briefly. spin: spins it out. slow: drags it. freeze: stops it
+ * dead. drain: takes its speed for the shooter. shove: knocks it sideways.
+ * lift: throws it in the air. coins: takes its coins. steal: takes its item.
+ * blind: covers its view. burn: saps its speed for a while. tug: hauls it back.
+ */
+export type ShotEffect = "stun" | "spin" | "slow" | "freeze" | "drain" | "shove" | "lift" | "coins" | "steal" | "blind" | "burn" | "tug";
+
+export interface FusionShot {
+  name: string;
+  kind: ShotKind;
+  effect: ShotEffect;
+  color: string;
+  /** seconds between volleys */
+  rate: number;
+  /** shots per volley */
+  count: number;
+  /** strength of the effect, about 0.6 to 1.4 */
+  power: number;
+}
+
+export const FUSION_SHOTS: Record<string, FusionShot> = {
+  nova: { name: "SPLASH", kind: "bolt", effect: "slow", color: "#22d3ee", rate: 0.7, count: 2, power: 0.8 },
+  blip: { name: "STARSHOT", kind: "homing", effect: "spin", color: "#fde047", rate: 1.2, count: 1, power: 1 },
+  mochi: { name: "MOCHI BOMB", kind: "mortar", effect: "slow", color: "#f9a8d4", rate: 1.3, count: 1, power: 1.3 },
+  kori: { name: "ICE LANCE", kind: "lance", effect: "freeze", color: "#a5b4fc", rate: 1.6, count: 1, power: 1 },
+  zepp: { name: "LEAF STORM", kind: "fan", effect: "shove", color: "#4ade80", rate: 1.2, count: 5, power: 0.9 },
+  pixl: { name: "GLITCH", kind: "homing", effect: "blind", color: "#c084fc", rate: 1.7, count: 1, power: 1 },
+  fizz: { name: "BUBBLE TRAP", kind: "bolt", effect: "lift", color: "#38bdf8", rate: 1.1, count: 1, power: 1 },
+  brum: { name: "FIREBALL", kind: "bolt", effect: "burn", color: "#fb923c", rate: 0.95, count: 1, power: 1.1 },
+  lumo: { name: "PRISM BEAM", kind: "lance", effect: "drain", color: "#67e8f9", rate: 1.2, count: 1, power: 1 },
+  tiko: { name: "FLAME FAN", kind: "fan", effect: "burn", color: "#f87171", rate: 1.0, count: 3, power: 0.8 },
+  sola: { name: "SOLAR FLARE", kind: "nova", effect: "blind", color: "#fbbf24", rate: 2.0, count: 1, power: 1.1 },
+  nixe: { name: "DATA LEECH", kind: "homing", effect: "steal", color: "#34d399", rate: 1.9, count: 1, power: 1 },
+  yuki: { name: "SNOWBALL", kind: "bolt", effect: "freeze", color: "#c7e4ff", rate: 1.4, count: 1, power: 0.8 },
+  taro: { name: "ACORN", kind: "mortar", effect: "spin", color: "#fdba74", rate: 1.5, count: 1, power: 1 },
+  vexa: { name: "SHARD BURST", kind: "fan", effect: "stun", color: "#f472b6", rate: 1.1, count: 3, power: 0.9 },
+  rook: { name: "THUNDERCLOUD", kind: "nova", effect: "stun", color: "#a78bfa", rate: 2.2, count: 1, power: 1.2 },
+  pepa: { name: "POP", kind: "rear", effect: "shove", color: "#c4b5fd", rate: 0.9, count: 2, power: 1 },
+  kiko: { name: "TIDE PULL", kind: "lance", effect: "tug", color: "#5eead4", rate: 1.3, count: 1, power: 1 },
+  onyx: { name: "GRAVITY WELL", kind: "nova", effect: "tug", color: "#4f6bff", rate: 2.0, count: 1, power: 1.1 },
+  pipi: { name: "COIN SNATCH", kind: "homing", effect: "coins", color: "#fb7185", rate: 1.0, count: 1, power: 1 },
+  aquos: { name: "WAKE", kind: "rear", effect: "slow", color: "#0ea5e9", rate: 1.0, count: 2, power: 1 },
+  ember: { name: "METEOR", kind: "mortar", effect: "burn", color: "#f59e0b", rate: 1.4, count: 1, power: 1.2 },
+  mist: { name: "FOG BANK", kind: "rear", effect: "blind", color: "#a5f3fc", rate: 1.8, count: 1, power: 1 },
+  terra: { name: "ROCKSLIDE", kind: "rear", effect: "spin", color: "#84cc16", rate: 1.5, count: 3, power: 0.9 },
+  prism: { name: "RAINBOW RAIL", kind: "lance", effect: "lift", color: "#e879f9", rate: 1.3, count: 1, power: 1 },
+  cobalt: { name: "TWIN CANNON", kind: "bolt", effect: "spin", color: "#2b5cff", rate: 0.85, count: 2, power: 0.8 },
+  kiwi: { name: "SEED SPRAY", kind: "fan", effect: "coins", color: "#c6ff4f", rate: 1.0, count: 4, power: 0.8 },
+  magma: { name: "ERUPTION", kind: "nova", effect: "burn", color: "#ff2d00", rate: 1.9, count: 1, power: 1.3 },
+};
+
+export function fusionShot(charId: string): FusionShot {
+  return FUSION_SHOTS[charId] ?? FUSION_SHOTS.nova;
+}
+
+// ---------------------------------------------------------------------------
+// What each garage part does. Nothing in the garage is only for looks except
+// the paint and the finish.
+// ---------------------------------------------------------------------------
+
+export interface PartEffect {
+  /** top speed, acceleration and turning, as multipliers */
+  speed?: number;
+  accel?: number;
+  turn?: number;
+  /** how fast a drift charges its mini-turbo */
+  drift?: number;
+  /** how fast the turbo bar fills */
+  turbo?: number;
+  /** how long and how strong a boost is */
+  boostTime?: number;
+  boostPower?: number;
+  /** share of the slowdown from slime, mines and hits that gets through */
+  grip?: number;
+}
+
+export const WHEEL_EFFECTS: Record<WheelStyle, PartEffect> = {
+  classic: {},
+  sporty: { accel: 1.08 },
+  glow: { turbo: 1.25 },
+  chrome: { speed: 1.03 },
+  spike: { turn: 1.06, grip: 0.6 },
+};
+
+export const SPOILER_EFFECTS: Record<SpoilerId, PartEffect> = {
+  none: { speed: 1.015 },
+  wing: { turn: 1.08, speed: 0.985 },
+  fin: { drift: 1.2 },
+};
+
+export const BOOSTER_EFFECTS: Record<BoosterId, PartEffect> = {
+  single: { boostTime: 1.15 },
+  twin: { boostPower: 1.06 },
+  neon: { turbo: 1.3 },
+};
+
+/** The effect of a part as short labels for the garage: [name of the stat as an i18n key, signed percentage]. */
+export function partLabels(e: PartEffect): [string, string][] {
+  const out: [string, string][] = [];
+  const pct = (v: number) => `${v >= 1 ? "+" : "−"}${Math.abs(Math.round((v - 1) * 1000) / 10)}%`;
+  if (e.speed) out.push(["speed", pct(e.speed)]);
+  if (e.accel) out.push(["accel", pct(e.accel)]);
+  if (e.turn) out.push(["handling", pct(e.turn)]);
+  if (e.drift) out.push(["drift", pct(e.drift)]);
+  if (e.turbo) out.push(["turboBtn", pct(e.turbo)]);
+  if (e.boostTime) out.push(["turboBtn", pct(e.boostTime)]);
+  if (e.boostPower) out.push(["turboBtn", pct(e.boostPower)]);
+  if (e.grip) out.push(["weight", pct(2 - e.grip)]);
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // Race modes
@@ -569,7 +698,7 @@ export const AI_PROFILES: Record<AiSkillId, AiProfile> = {
   rookie: { id: "rookie", name: "FÁCIL", pace: 0.9, accel: 0.9, line: 0.55, driftFrom: 0.9, driftHold: 0.5, turboAt: 1, itemDelay: 2.2, mercy: 10, routeUse: 0.35, cutUse: 0.03, catchUp: 0.02, wait: 0.14, reaction: 0.7, hesitate: 0.05, fuse: 0.03 },
   amateur: { id: "amateur", name: "NORMAL", pace: 0.96, accel: 0.96, line: 0.7, driftFrom: 0.7, driftHold: 0.95, turboAt: 0.8, itemDelay: 1.3, mercy: 5, routeUse: 0.5, cutUse: 0.12, catchUp: 0.07, wait: 0.08, reaction: 0.4, hesitate: 0.025, fuse: 0.08 },
   pro: { id: "pro", name: "DIFÍCIL", pace: 1, accel: 1, line: 0.82, driftFrom: 0.55, driftHold: 1.2, turboAt: 0.6, itemDelay: 0.7, mercy: 1.5, routeUse: 0.65, cutUse: 0.3, catchUp: 0.12, wait: 0.03, reaction: 0.15, hesitate: 0.008, fuse: 0.15 },
-  ace: { id: "ace", name: "EXPERTO", pace: 1.05, accel: 1.06, line: 0.9, driftFrom: 0.45, driftHold: 1.4, turboAt: 0.45, itemDelay: 0.4, mercy: 0, routeUse: 0.75, cutUse: 0.5, catchUp: 0.18, wait: 0, reaction: 0, hesitate: 0, fuse: 0.25 },
+  ace: { id: "ace", name: "EXPERTO", pace: 1.05, accel: 1.06, line: 0.9, driftFrom: 0.45, driftHold: 1.5, turboAt: 0.45, itemDelay: 0.4, mercy: 0, routeUse: 0.75, cutUse: 0.5, catchUp: 0.18, wait: 0, reaction: 0, hesitate: 0, fuse: 0.25 },
 };
 
 export const AI_SKILL_LIST: AiSkillId[] = ["rookie", "amateur", "pro", "ace"];

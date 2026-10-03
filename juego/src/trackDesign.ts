@@ -152,7 +152,7 @@ export const BYPASS = 177;
 interface RouteSpec {
   from: string;
   to: string;
-  draw: (t: Turtle) => void;
+  draw: (t: Turtle) => unknown;
   width?: number;
   walls?: boolean;
   tunnel?: boolean;
@@ -171,7 +171,7 @@ interface DesignSpec {
   difficulty: 1 | 2 | 3;
   /** x, y, z and heading in degrees of the start line */
   start: [number, number, number, number];
-  draw: (t: Turtle) => void;
+  draw: (t: Turtle) => unknown;
   width?: number;
   floor?: number;
   sea?: number;

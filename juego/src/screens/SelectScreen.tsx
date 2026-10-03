@@ -30,6 +30,11 @@ import {
   type SubId,
   type VehicleMode,
   type FinishId,
+  WHEEL_EFFECTS,
+  SPOILER_EFFECTS,
+  BOOSTER_EFFECTS,
+  partLabels,
+  fusionShot,
 } from "../data";
 import { setActiveTrack } from "../trackCurve";
 import { Bubbles, GlassButton, Panel, PrimaryButton, StatBar } from "../ui/common";
@@ -182,6 +187,13 @@ export default function SelectScreen() {
                     <span className="w-16 opacity-70">{t("weight")}</span>
                     <StatBar value={(tab === "racer" ? mainChar : partnerChar).weight} color="#4ade80" />
                   </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="w-16 opacity-70">{t("fuse")}</span>
+                    <span className="flex items-center gap-1.5 rounded-full bg-white/50 px-2 py-0.5 text-[10px] font-extrabold tracking-wide">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: fusionShot((tab === "racer" ? mainChar : partnerChar).id).color }} />
+                      {fusionShot((tab === "racer" ? mainChar : partnerChar).id).name}
+                    </span>
+                  </div>
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-xs font-bold text-sky-800">
                   <span style={{ color: WEAPON_META[(tab === "racer" ? mainChar : partnerChar).favorite].color, fontSize: 18 }}>
@@ -309,6 +321,9 @@ export default function SelectScreen() {
                         }`}
                       >
                         {wl}
+                        <span className="mt-0.5 block text-[9px] font-semibold normal-case opacity-70">
+                          {partLabels(WHEEL_EFFECTS[wl as WheelStyle]).map(([k, v]) => `${t(k)} ${v}`).join(" · ") || "—"}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -326,6 +341,9 @@ export default function SelectScreen() {
                           }`}
                         >
                           {t(`sp_${sp}`)}
+                        <span className="mt-0.5 block text-[9px] font-semibold normal-case opacity-70">
+                          {partLabels(SPOILER_EFFECTS[sp as SpoilerId]).map(([k, v]) => `${t(k)} ${v}`).join(" · ") || "—"}
+                        </span>
                         </button>
                       ))}
                     </div>
@@ -342,6 +360,9 @@ export default function SelectScreen() {
                           }`}
                         >
                           {t(`bo_${bo}`)}
+                        <span className="mt-0.5 block text-[9px] font-semibold normal-case opacity-70">
+                          {partLabels(BOOSTER_EFFECTS[bo as BoosterId]).map(([k, v]) => `${t(k)} ${v}`).join(" · ") || "—"}
+                        </span>
                         </button>
                       ))}
                     </div>

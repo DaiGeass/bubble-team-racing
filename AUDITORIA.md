@@ -169,6 +169,50 @@ caídas; carreras de 3 vueltas en el juego real en las 11, todas terminan, 0 err
 consola y 5 caídas de rivales en total. A velocidad base una vuelta a las tres nuevas dura
 107–113 s.
 
+## 2g. Estadísticas, objetos, torreta, derrape y victoria
+
+**Estadísticas que hacen algo.** Todo lo que se ve en la ficha del personaje y en el garaje
+entra en `statsFor()`:
+
+| Dato | Efecto |
+|---|---|
+| Velocidad, aceleración, manejo | velocidad punta, aceleración y giro; el manejo además carga antes el derrape |
+| Peso | más peso: 4,5 % menos de aceleración y 1,2 % más de punta por punto, cuesta más empujarlo y pierde un 8 % menos por punto al recibir un golpe |
+| Ruedas | sporty +8 % aceleración · glow +25 % barra de turbo · chrome +3 % punta · spike +6 % giro y −40 % de frenazo por golpes y gel |
+| Alerón | sin alerón +1,5 % punta · wing +8 % giro, −1,5 % punta · fin +20 % carga de derrape |
+| Propulsor | single +15 % duración del turbo · twin +6 % potencia · neon +30 % barra de turbo |
+| Carrocería, barco, avión, submarino | ya tenían efecto (velocidad y manejo por modelo) |
+| Color y acabado | solo aspecto |
+
+El garaje muestra el efecto debajo de cada pieza.
+
+**Objetos: 17.** A los 12 que había se suman hielo (congela al de delante), ladrón (le
+quita el objeto), ventanas (tapa la pantalla de los de delante con ventanas de error; a un
+rival le hace titubear), gigante (crece, va más rápido, es intocable y aplasta a quien
+toca) y salto (teletransporta un tramo adelante). La IA usa cada uno cuando tiene sentido.
+
+**Torreta: un disparo distinto por personaje.** 28 disparos, cada uno con su nombre, su
+color, su forma de salir (recto, teledirigido, abanico, hacia atrás, rayo instantáneo,
+onda alrededor, mortero) y su efecto (aturdir, trompo, frenar, congelar, robar velocidad,
+empujar, lanzar al aire, quitar monedas, robar objeto, cegar, quemar, tirar hacia atrás).
+No hay dos personajes con la misma combinación. La torreta gira los 360° hacia el rival más
+cercano, dispara quien NO conduce, y cambiar de piloto en plena fusión cambia el disparo.
+La ficha del personaje muestra el suyo.
+
+**Derrape de 3 niveles.** Cuanto más giras, antes carga. Cada nivel se anuncia con un
+destello de su color (azul, naranja, rosa), un clic y una luz en pantalla; al soltar da 0,6 s
+a ×1,3, 1,0 s a ×1,5 o 1,4 s a ×1,7 y llena un 10, 20 o 34 % de la barra de turbo.
+
+**Victoria.** Al cruzar la meta el kart da saltos y la cámara gira a su alrededor; si quedas
+en el podio además da vueltas sobre sí mismo y cae confeti.
+
+**Tres pistas más (14):** Trébol Cromado (cuatro bucles completos que cruzan cada uno sobre
+su propia recta), Cráter (bajada en espiral de dos vueltas por dentro del cráter y cañón de
+vuelta al borde) y Montaña Rusa (subida a 48, dos caídas de 16 y dos saltos).
+
+Bug encontrado al probar: un pad de turbo justo antes de un cañón impedía que el cañón
+disparase y toda la parrilla caía al hueco. Los cañones ya disparan siempre.
+
 ## 3. Cómo se mide
 
 Tres herramientas en `juego/tools/`:
@@ -231,8 +275,7 @@ Del plan original, sin hacer todavía:
 - **Rutas ramificadas**: todas las rutas salen de la carretera principal y vuelven a ella.
   No hay rutas que se bifurquen a su vez; el motor no lo admite todavía.
 - **IA**: no cambia de personaje en carrera (el relevo es solo del jugador) y no apunta la torreta: dispara al rival de delante.
-- **Objetos**: 12 (el plan pide 14).
-- **Fusión**: los rivales ya se fusionan; sigue sin alternar conductor/artillero y sin torreta de 360°.
+- **Fusión**: la torreta apunta sola al rival más cercano; no se apunta a mano.
 - **Modos**: no hay Gran Premio, fantasma de contrarreloj, arena, equipos ni eliminación.
 - **Garaje**: 19 carrocerías en la tabla (el tipo declara 24).
 - **Decorado**: cada pista tiene el adorno de su estética (palmeras, árboles, ventanas de

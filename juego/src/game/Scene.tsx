@@ -25,7 +25,12 @@ import {
   zoneAt,
   craftSpeed,
   craftHandling,
-  fusionSpec,
+  fusionShot,
+  WHEEL_EFFECTS,
+  SPOILER_EFFECTS,
+  BOOSTER_EFFECTS,
+  type FusionShot,
+  type ShotEffect,
   type CharacterDef,
   type WeaponId,
   type VehicleMode,
@@ -106,6 +111,15 @@ interface Racer extends Body {
   hazardCd: number;
   magnetTimer: number;
   ghostTimer: number;
+  /** grown huge: faster, untouchable, flattens whoever it touches */
+  giantTimer: number;
+  /** frozen solid, and burning (losing speed) */
+  frozenTimer: number;
+  burnTimer: number;
+  /** mini-turbo level the current drift has reached, 0..3 */
+  driftLevel: number;
+  /** where the turret is pointing, relative to the nose */
+  turretAim: number;
   fuseShots: number;
   explodeTimer: number;
   exploding: boolean;
@@ -140,6 +154,11 @@ interface Projectile {
   ownerId: string;
   life: number;
   targetId: string | null;
+  /** a turret shot: what it does on a hit, how hard, and its colour */
+  effect: ShotEffect | null;
+  power: number;
+  color: string;
+  homing: boolean;
 }
 
 interface Puddle {
@@ -149,6 +168,9 @@ interface Puddle {
   ignoreUntil: number;
   life: number;
   kind: "slime" | "mine";
+  /** dropped by a turret: what it does to whoever drives into it */
+  effect: ShotEffect | null;
+  power: number;
 }
 
 function activeChar(r: Racer) {
@@ -159,17 +181,40 @@ function shapeBonus(shape: VehicleConfig["shape"]) {
   return SHAPES.find((s) => s.id === shape)?.bonus ?? { speed: 0, handling: 0 };
 }
 
+/**
+ * What a racer can do, from the character driving and the kart it is driving.
+ * Every number on the character card and every part in the garage is in here:
+ * speed, acceleration and handling are what they say; weight makes a kart
+ * slower to get going and a little faster flat out, harder to shove and harder
+ * to stop with a hit.
+ */
 function statsFor(char: CharacterDef, vehicle: VehicleConfig) {
   const b = shapeBonus(vehicle.shape);
   const water = vehicle.shape === "cruiser" || vehicle.shape === "hover";
+  const parts = [WHEEL_EFFECTS[vehicle.wheel] ?? {}, SPOILER_EFFECTS[vehicle.spoiler ?? "none"] ?? {}, BOOSTER_EFFECTS[vehicle.booster ?? "single"] ?? {}];
+  const mul = (k: "speed" | "accel" | "turn" | "drift" | "turbo" | "boostTime" | "boostPower" | "grip") => parts.reduce((acc, p) => acc * (p[k] ?? 1), 1);
+  const heavy = char.weight - 3; // -2 .. +2
   return {
-    maxSpeed: 17 + char.speed * 2.7 + b.speed * 1.6,
-    accel: 11 + char.accel * 3.4,
-    turnRate: 1.75 + char.handling * 0.4 + b.handling * 0.28,
+    maxSpeed: (17 + char.speed * 2.7 + b.speed * 1.6) * mul("speed") * (1 + heavy * 0.012),
+    accel: (11 + char.accel * 3.4) * mul("accel") * (1 - heavy * 0.045),
+    turnRate: (1.75 + char.handling * 0.4 + b.handling * 0.28) * mul("turn"),
     boatBonus: water ? 1.12 : 1,
     planeBonus: vehicle.shape === "jet" ? 1.18 : 1,
+    /** how fast a drift charges: good handling charges sooner */
+    driftRate: (0.8 + char.handling * 0.07) * mul("drift"),
+    turboRate: mul("turbo"),
+    boostTime: mul("boostTime"),
+    boostPower: mul("boostPower"),
+    /** share of a slowdown that gets through: heavy karts and spiked tyres shrug more of it off */
+    grip: mul("grip") * (1 - heavy * 0.08),
   };
 }
+
+/** Charge at which a drift reaches each of its three mini-turbo levels. */
+const DRIFT_LEVELS = [0.35, 0.85, 1.45];
+/** What each level gives: seconds of boost, speed multiplier, share of the turbo bar. */
+const DRIFT_BOOST: [number, number, number][] = [[0.6, 1.3, 0.1], [1.0, 1.5, 0.2], [1.4, 1.7, 0.34]];
+const DRIFT_COLOURS = ["#8be9ff", "#ffb347", "#ff5fd2"];
 
 export default function Scene({ controls: controlsApi }: { controls: UseControlsReturn }) {
   const { poll } = controlsApi;
@@ -275,6 +320,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         hazardCd: 0,
         magnetTimer: 0,
         ghostTimer: 0,
+        giantTimer: 0,
+        frozenTimer: 0,
+        burnTimer: 0,
+        driftLevel: 0,
+        turretAim: 0,
         fuseShots: 0,
         explodeTimer: 0,
         exploding: false,
@@ -417,6 +467,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     r.stunTimer = 0;
     r.isDrifting = false;
     r.driftCharge = 0;
+    r.driftLevel = 0;
     r.aiRoute = 0;
     r.swapInvuln = Math.max(r.swapInvuln, 1.5);
     r.t = r.prog;
@@ -429,14 +480,14 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
   const PROJ_POOL = 18;
   const projectiles = useMemo<Projectile[]>(
-    () => Array.from({ length: PROJ_POOL }, () => ({ active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), type: "orb" as WeaponId, ownerId: "", life: 0, targetId: null })),
+    () => Array.from({ length: PROJ_POOL }, () => ({ active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), type: "orb" as WeaponId, ownerId: "", life: 0, targetId: null, effect: null, power: 1, color: "#ffffff", homing: false })),
     []
   );
   const projRefs = useMemo(() => Array.from({ length: PROJ_POOL }, () => ({ current: null as THREE.Group | null })), []);
 
   const PUDDLE_POOL = 10;
   const puddles = useMemo<Puddle[]>(
-    () => Array.from({ length: PUDDLE_POOL }, () => ({ active: false, pos: new THREE.Vector3(0, -999, 0), ownerId: "", ignoreUntil: 0, life: 0, kind: "slime" as const })),
+    () => Array.from({ length: PUDDLE_POOL }, () => ({ active: false, pos: new THREE.Vector3(0, -999, 0), ownerId: "", ignoreUntil: 0, life: 0, kind: "slime" as const, effect: null, power: 1 })),
     []
   );
   const puddleRefs = useMemo(() => Array.from({ length: PUDDLE_POOL }, () => ({ current: null as THREE.Group | null })), []);
@@ -463,6 +514,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const started = useRef(false);
   const raceClock = useRef(0);
   const finishedOnce = useRef(false);
+  /** the little celebration after the flag: the kart hops and spins while the camera circles it */
+  const victory = useRef<null | { t: number; podium: boolean; heading: number; y: number }>(null);
   const frame = useRef(0);
   const clockRef = useRef(0);
   const camPos = useRef(new THREE.Vector3(0, 6, -14));
@@ -507,6 +560,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     p.type = type;
     p.ownerId = owner.id;
     p.targetId = targetId;
+    p.effect = null;
+    p.power = 1;
+    p.color = WEAPON_META[type].color;
+    p.homing = type === "missile";
     p.life = 3.2;
     p.pos.copy(owner.pos).addScaledVector(fwd, 1.6).setY(owner.y + 0.7);
     p.vel.copy(fwd).multiplyScalar(type === "missile" ? 40 : 30);
@@ -528,117 +585,193 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   }
 
   function protectedNow(r: Racer) {
-    return r.shieldActive || r.swapInvuln > 0 || r.ghostTimer > 0;
+    return r.shieldActive || r.swapInvuln > 0 || r.ghostTimer > 0 || r.giantTimer > 0;
   }
 
-  /**
-   * Fusion turrets are not one gun recoloured: each character fires their own
-   * weapon with their own signature. Heavier guns trade rate for a bigger payoff.
-   */
-  function fireFusionGun(r: Racer, gun: WeaponId, target: Racer | null) {
-    const meta = WEAPON_META[gun];
-    const muzzle = r.pos.clone().setY(r.y + 1.1);
-    const aim = target && !protectedNow(target) ? target : null;
-    // the signature on top of the weapon family: extra shots, a wider fan and a
-    // heavier direct hit, all tuned per character
-    const spec = fusionSpec(activeChar(r).id);
-    const burst = spec.burst;
-    const spread = spec.spread;
-    switch (gun) {
-      case "beam": {
-        // hitscan lance: damage now, no projectile to dodge
-        spawnProjectile("beam", r, target ? target.id : null);
-        if (aim) {
-          const p1 = aim.pos.clone().setY(aim.y + 1);
-          for (let i = 0; i < 8; i++) {
-            emitParticles({ position: muzzle.clone().lerp(p1, i / 8), color: meta.color, count: 4, speed: 1.6, spread: 0.35, size: 0.2, life: 0.35, gravity: 0 });
-          }
-          aim.speed *= 0.8;
-          aim.stunTimer = Math.max(aim.stunTimer, 0.5);
-        }
-        break;
-      }
-      case "zap": {
-        spawnProjectile("zap", r, target ? target.id : null);
-        if (aim) {
-          const p1 = aim.pos.clone().setY(aim.y + 1);
-          for (let i = 0; i < 6; i++) {
-            emitParticles({ position: muzzle.clone().lerp(p1, i / 6), color: meta.color, count: 3, speed: 2, spread: 0.5, size: 0.17, life: 0.4, gravity: 0 });
-          }
-          aim.stunTimer = Math.max(aim.stunTimer, 0.75);
-          aim.speed *= 0.72;
-          if (aim.isPlayer) addShake(0.3);
-        }
-        break;
-      }
-      case "wave": {
-        // rear-guard shockwave: punishes whoever is drafting behind you
-        for (let i = -1; i <= 1; i += 2) spawnProjectile("wave", r, null);
-        emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: meta.glow, count: 26, speed: 7, spread: 0.5, size: 0.26, life: 0.6, gravity: 0 });
-        if (r.isPlayer) addShake(0.22);
-        break;
-      }
-      case "orb": {
-        spawnProjectile("orb", r, target ? target.id : null);
-        spawnProjectile("orb", r, null);
-        break;
-      }
-      case "bubble": {
-        spawnProjectile("bubble", r, target ? target.id : null);
-        if (target) spawnProjectile("bubble", r, target.id);
-        break;
-      }
-      case "mine": {
-        spawnProjectile("mine", r, target ? target.id : null);
-        break;
-      }
-      case "quake": {
-        // ground slam right under the turret
-        spawnProjectile("quake", r, target ? target.id : null);
-        emitParticles({ position: r.pos.clone().setY(r.y + 0.2), color: meta.color, count: 30, speed: 6, spread: 1.2, size: 0.24, life: 0.7 });
-        break;
-      }
-      case "slime": {
-        spawnProjectile("slime", r, target ? target.id : null);
-        spawnProjectile("slime", r, target ? target.id : null);
-        spawnProjectile("slime", r, null);
-        break;
-      }
-      case "magnet": {
-        spawnProjectile("magnet", r, target ? target.id : null);
-        break;
-      }
-      case "ghost": {
-        spawnProjectile("ghost", r, target ? target.id : null);
-        if (r.isPlayer) {
-          r.ghostTimer = Math.max(r.ghostTimer, 1.4);
-        }
-        break;
-      }
-      case "swap": {
-        spawnProjectile("swap", r, target ? target.id : null);
-        break;
-      }
-      default: {
-        // every second volley is missile + lightning for the classic fusion feel
-        spawnProjectile("missile", r, target ? target.id : null);
-        if (target && r.fuseShots % 2 === 0) spawnProjectile("zap", r, target.id);
-        break;
+  /** Nearest rival all round the kart, or only behind it: the turret turns the full circle. */
+  function findTurretTarget(r: Racer, behindOnly: boolean): Racer | null {
+    let best: Racer | null = null;
+    let bd = 70 * 70;
+    const fx = Math.sin(r.heading);
+    const fz = Math.cos(r.heading);
+    for (const o of racers) {
+      if (o === r || o.finished || o.launch || Math.abs(o.y - r.y) > 9) continue;
+      const dx = o.pos.x - r.pos.x;
+      const dz = o.pos.z - r.pos.z;
+      if (behindOnly && dx * fx + dz * fz > 0) continue;
+      const d = dx * dx + dz * dz;
+      if (d < bd) {
+        bd = d;
+        best = o;
       }
     }
-    // the character signature: extra rounds fanned around the aim, then the
-    // heavier direct hit that goes with them
-    if (burst > 0) {
-      for (let b = 0; b < burst; b++) {
-        const off = (b - (burst - 1) / 2) * (0.16 + spread);
-        spawnProjectile(gun, r, aim ? aim.id : null, off);
-      }
+    return best;
+  }
+
+  /** A turret shot lands: each character's does its own thing to the victim. */
+  function applyShot(v: Racer, owner: Racer, effect: ShotEffect, power: number, color: string) {
+    if (protectedNow(v)) {
+      v.shieldActive = false;
+      v.shieldTimer = 0;
+      emitParticles({ position: v.pos.clone().setY(v.y + 0.9), color: theme.glow, count: 14, speed: 3.2, spread: 1.2, size: 0.2, life: 0.5 });
+      return;
     }
-    if (aim && spec.kick > 0) {
-      aim.speed *= 1 - Math.min(0.45, spec.kick * 0.28);
-      if (aim.isPlayer) addShake(0.12 + spec.kick * 0.18);
+    // a fused pair takes it on the turret's health instead
+    if (v.fuseTimer > 0) return applyHit(v, false);
+    v.lastHit = raceClock.current;
+    const give = statsFor(activeChar(v), v.vehicle).grip;
+    switch (effect) {
+      case "stun":
+        v.stunTimer = Math.max(v.stunTimer, 0.8 * power);
+        v.speed *= 1 - 0.3 * give;
+        break;
+      case "spin":
+        v.stunTimer = Math.max(v.stunTimer, 1.2 * power);
+        v.speed *= 1 - 0.6 * give;
+        break;
+      case "slow":
+        v.slowTimer = Math.max(v.slowTimer, 1.6 * power * give);
+        break;
+      case "freeze":
+        v.frozenTimer = Math.max(v.frozenTimer, 1.4 * power);
+        break;
+      case "drain": {
+        const taken = Math.abs(v.speed) * 0.4 * power;
+        v.speed *= 1 - 0.4 * power;
+        owner.speed += taken;
+        owner.boostTimer = Math.max(owner.boostTimer, 0.8);
+        owner.boostMult = Math.max(owner.boostMult, 1.4);
+        break;
+      }
+      case "shove": {
+        const dx = v.pos.x - owner.pos.x;
+        const dz = v.pos.z - owner.pos.z;
+        const d = Math.hypot(dx, dz) || 1;
+        v.pos.x += (dx / d) * 3.4 * power * give;
+        v.pos.z += (dz / d) * 3.4 * power * give;
+        v.speed *= 0.86;
+        break;
+      }
+      case "lift":
+        v.vy = 9 * power;
+        v.airborne = true;
+        v.speed *= 0.8;
+        break;
+      case "coins": {
+        const n = Math.min(v.coins, Math.round(3 * power));
+        v.coins -= n;
+        owner.coins += n;
+        v.speed *= 0.9;
+        break;
+      }
+      case "steal":
+        if (v.weapon && !owner.weapon) {
+          owner.weapon = v.weapon;
+          v.weapon = null;
+          if (owner.isPlayer) useGame.getState().setTelemetry({ weapon: owner.weapon });
+          if (v.isPlayer) useGame.getState().setTelemetry({ weapon: null });
+        } else {
+          v.stunTimer = Math.max(v.stunTimer, 0.5);
+        }
+        break;
+      case "blind":
+        blind(v, 2.4 * power);
+        break;
+      case "burn":
+        v.burnTimer = Math.max(v.burnTimer, 2.6 * power * give);
+        break;
+      case "tug":
+        v.speed *= 1 - 0.5 * power * give;
+        owner.boostTimer = Math.max(owner.boostTimer, 0.6);
+        owner.boostMult = Math.max(owner.boostMult, 1.3);
+        break;
+    }
+    emitParticles({ position: v.pos.clone().setY(v.y + 0.8), color, count: 18, speed: 4, spread: 1.3, size: 0.22, life: 0.55 });
+    if (v.isPlayer) {
+      addShake(0.25);
+      sfx.hit();
     }
   }
+
+  /** Cover a racer's view: error windows over the player's screen, a spell of hesitation for an opponent. */
+  function blind(v: Racer, seconds: number) {
+    if (v.isPlayer) useGame.getState().setTelemetry({ popupUntil: Date.now() + seconds * 1000 });
+    else v.aiMistake = Math.max(v.aiMistake, seconds * 0.8);
+  }
+
+  /** One volley from the turret. Every character's shot leaves it and lands in its own way. */
+  function fireShot(r: Racer, shot: FusionShot, target: Racer | null) {
+    const from = r.pos.clone().setY(r.y + 1.2);
+    const aimAt = target ? Math.atan2(target.pos.x - r.pos.x, target.pos.z - r.pos.z) : r.heading + (shot.kind === "rear" ? Math.PI : 0);
+    const launch = (angle: number, homing: boolean) => {
+      const p = projectiles.find((x) => !x.active);
+      if (!p) return;
+      p.active = true;
+      p.type = "missile";
+      p.ownerId = r.id;
+      p.targetId = homing && target ? target.id : null;
+      p.homing = homing;
+      p.effect = shot.effect;
+      p.power = shot.power;
+      p.color = shot.color;
+      p.life = 2.6;
+      p.pos.copy(from);
+      p.vel.set(Math.sin(angle), 0, Math.cos(angle)).multiplyScalar(homing ? 40 : 52);
+      // lead the shot up or down to the height of what it is aimed at
+      if (target) p.vel.y = ((target.y - r.y) / Math.max(6, from.distanceTo(target.pos))) * 52;
+    };
+    switch (shot.kind) {
+      case "bolt":
+      case "rear":
+        for (let i = 0; i < shot.count; i++) launch(aimAt + (i - (shot.count - 1) / 2) * 0.07, false);
+        break;
+      case "fan":
+        for (let i = 0; i < shot.count; i++) launch(aimAt + (i - (shot.count - 1) / 2) * 0.2, false);
+        break;
+      case "homing":
+        for (let i = 0; i < shot.count; i++) launch(aimAt + (i - (shot.count - 1) / 2) * 0.3, true);
+        break;
+      case "lance":
+        // an instant beam: it lands the moment it is fired
+        if (target) {
+          const to = target.pos.clone().setY(target.y + 1);
+          for (let i = 0; i <= 10; i++) emitParticles({ position: from.clone().lerp(to, i / 10), color: shot.color, count: 3, speed: 1.2, spread: 0.3, size: 0.2, life: 0.35, gravity: 0 });
+          applyShot(target, r, shot.effect, shot.power, shot.color);
+        }
+        break;
+      case "nova":
+        // a burst all round: everyone within reach gets it
+        for (let k = 0; k < 16; k++) {
+          const a = (k / 16) * Math.PI * 2;
+          emitParticles({ position: from.clone().add(new THREE.Vector3(Math.sin(a) * 4, -0.6, Math.cos(a) * 4)), color: shot.color, count: 3, speed: 6, spread: 0.6, size: 0.24, life: 0.5, gravity: 0 });
+        }
+        for (const o of racers) {
+          if (o === r || o.finished || Math.abs(o.y - r.y) > 5) continue;
+          if (o.pos.distanceToSquared(r.pos) < 15 * 15) applyShot(o, r, shot.effect, shot.power, shot.color);
+        }
+        break;
+      case "mortar":
+        // lobbed into the road in front of the target, to be driven into
+        if (target) {
+          const pd = puddles.find((x) => !x.active);
+          if (pd) {
+            pd.active = true;
+            pd.kind = shot.effect === "slow" ? "slime" : "mine";
+            pd.effect = shot.effect;
+            pd.power = shot.power;
+            pd.ownerId = r.id;
+            pd.ignoreUntil = performance.now() + 400;
+            pd.life = 9;
+            const lead = Math.max(6, Math.abs(target.speed) * 0.45);
+            pd.pos.set(target.pos.x + Math.sin(target.heading) * lead, target.groundY + 0.1, target.pos.z + Math.cos(target.heading) * lead);
+            emitParticles({ position: pd.pos.clone().setY(pd.pos.y + 3), color: shot.color, count: 14, speed: 2, spread: 0.8, size: 0.24, life: 0.5 });
+          }
+        }
+        break;
+    }
+    emitParticles({ position: from, color: shot.color, count: 8, speed: 2.5, spread: 0.5, size: 0.18, life: 0.4 });
+  }
+
   function applyHit(r: Racer, spinner: boolean) {
     if (protectedNow(r)) {
       r.shieldActive = false;
@@ -685,7 +818,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
     r.lastHit = raceClock.current;
     r.stunTimer = spinner ? 1.25 : 0.95;
-    r.speed *= spinner ? 0.35 : 0.55;
+    r.speed *= 1 - (spinner ? 0.65 : 0.45) * statsFor(activeChar(r), r.vehicle).grip;
     r.boostTimer = 0;
     r.boostMult = 1;
     emitParticles({ position: r.pos.clone().setY(r.y + 0.7), color: "#ffffff", count: 22, speed: 4.5, spread: 1.6, size: 0.22, life: 0.65 });
@@ -726,6 +859,16 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         return r.ghostTimer <= 0 && (tailed() || !straight);
       case "quake":
         return racers.some((o) => o !== r && !o.finished && Math.abs(o.total - r.total) < 0.15 && fair(o));
+      case "freeze":
+        return fair(findTargetAhead(r, 0.25));
+      case "steal":
+        return racers.some((o) => o !== r && !o.finished && !!o.weapon && o.total > r.total && o.total - r.total < 0.4 && fair(o));
+      case "popup":
+        return racers.some((o) => o !== r && !o.finished && o.total > r.total && fair(o));
+      case "giant":
+        return racers.some((o) => o !== r && !o.finished && Math.abs(o.total - r.total) < 0.04);
+      case "warp":
+        return straight && r.path === 0 && r.mode === "land";
       case "wave":
         return racers.some((o) => o !== r && !o.finished && o.mode === r.mode && o.pos.distanceToSquared(r.pos) < 100 && fair(o));
       default:
@@ -768,6 +911,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       if (puddle) {
         const fwd = new THREE.Vector3(Math.sin(r.heading), 0, Math.cos(r.heading));
         puddle.active = true;
+        puddle.effect = null;
         puddle.kind = "slime";
         puddle.ownerId = r.id;
         puddle.ignoreUntil = performance.now() + 1000;
@@ -835,6 +979,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       if (mine) {
         const fwd = new THREE.Vector3(Math.sin(r.heading), 0, Math.cos(r.heading));
         mine.active = true;
+        mine.effect = null;
         mine.kind = "mine";
         mine.ownerId = r.id;
         mine.ignoreUntil = performance.now() + 1100;
@@ -897,6 +1042,84 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         addShake(0.55);
         sfx.hit();
       }
+    } else if (w === "freeze") {
+      // ice: the racer in front is frozen where it is
+      const target = findTargetAhead(r, 0.3);
+      if (target && !protectedNow(target)) {
+        target.frozenTimer = 1.7;
+        target.lastHit = raceClock.current;
+        emitParticles({ position: target.pos.clone().setY(target.y + 1), color: col, count: 30, speed: 3, spread: 1.4, size: 0.24, life: 0.8, gravity: 0 });
+        if (target.isPlayer) {
+          addShake(0.3);
+          sfx.hit();
+        }
+      } else if (target) {
+        target.shieldActive = false;
+        target.shieldTimer = 0;
+      }
+      if (r.isPlayer) sfx.item();
+    } else if (w === "steal") {
+      // thief: takes the item of the nearest racer ahead who has one, or failing that some coins
+      let victim: Racer | null = null;
+      let near = 0.5;
+      for (const o of racers) {
+        const gap = o.total - r.total;
+        if (o !== r && !o.finished && o.weapon && gap > 0 && gap < near && !protectedNow(o)) {
+          near = gap;
+          victim = o;
+        }
+      }
+      if (victim) {
+        r.weapon = victim.weapon;
+        victim.weapon = null;
+        if (victim.isPlayer) useGame.getState().setTelemetry({ weapon: null });
+        if (r.isPlayer) useGame.getState().setTelemetry({ weapon: r.weapon });
+        emitParticles({ position: victim.pos.clone().setY(victim.y + 1), color: col, count: 20, speed: 4, spread: 1.2, size: 0.22, life: 0.6 });
+      } else {
+        const rich = findTargetAhead(r, 0.3);
+        if (rich) {
+          const n = Math.min(rich.coins, 4);
+          rich.coins -= n;
+          r.coins += n;
+        }
+      }
+      if (r.isPlayer) sfx.swap();
+    } else if (w === "popup") {
+      // error windows over the screen of everyone ahead
+      for (const o of racers) {
+        const gap = o.total - r.total;
+        if (o === r || o.finished || gap <= 0 || gap > 0.5 || protectedNow(o)) continue;
+        blind(o, 3.2);
+        emitParticles({ position: o.pos.clone().setY(o.y + 1.4), color: col, count: 10, speed: 2, spread: 1, size: 0.3, life: 0.6, gravity: 0 });
+      }
+      if (r.isPlayer) sfx.item();
+    } else if (w === "giant") {
+      // grow: faster, nothing sticks to it, and it flattens whoever it touches
+      r.giantTimer = 6;
+      r.stunTimer = 0;
+      r.slowTimer = 0;
+      r.frozenTimer = 0;
+      r.burnTimer = 0;
+      emitParticles({ position: r.pos.clone().setY(r.y + 1), color: col, count: 34, speed: 5, spread: 1.6, size: 0.28, life: 0.8 });
+      if (r.isPlayer) {
+        addShake(0.3);
+        sfx.boost();
+      }
+    } else if (w === "warp") {
+      // jump a stretch further down the main road, onto a place it is safe to land
+      emitParticles({ position: r.pos.clone().setY(r.y + 0.8), color: col, count: 28, speed: 5, spread: 1.4, size: 0.24, life: 0.6 });
+      placeBody(r, 0, safeAhead(mainIndexAt(r.prog + 0.035)));
+      r.t = r.prog;
+      r.course = r.heading;
+      r.speed = Math.max(r.speed, statsFor(activeChar(r), r.vehicle).maxSpeed * 0.9);
+      r.boostTimer = Math.max(r.boostTimer, 0.9);
+      r.boostMult = Math.max(r.boostMult, 1.4);
+      r.launch = null;
+      emitParticles({ position: r.pos.clone().setY(r.y + 0.8), color: WEAPON_META.warp.glow, count: 28, speed: 5, spread: 1.4, size: 0.24, life: 0.6 });
+      if (r.isPlayer) {
+        addShake(0.3);
+        sfx.swap();
+      }
     } else if (w === "wave") {
       // shockwave: shove and slow everyone close by
       emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: WEAPON_META.wave.color, count: 34, speed: 6, spread: 2, size: 0.24, life: 0.6 });
@@ -946,6 +1169,15 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.portalCd > 0) r.portalCd -= dt;
     if (r.magnetTimer > 0) r.magnetTimer -= dt;
     if (r.ghostTimer > 0) r.ghostTimer -= dt;
+    if (r.giantTimer > 0) r.giantTimer -= dt;
+    if (r.burnTimer > 0) r.burnTimer -= dt;
+    if (r.frozenTimer > 0) {
+      // frozen solid: no drive, no steering, and it grinds to a halt
+      r.frozenTimer -= dt;
+      r.stunTimer = Math.max(r.stunTimer, 0.1);
+      r.speed *= Math.max(0, 1 - 4 * dt);
+      if (frame.current % 4 === 0) emitParticles({ position: r.pos.clone().setY(r.y + 0.9), color: "#e0f2fe", count: 2, speed: 0.8, spread: 0.8, size: 0.2, life: 0.5, gravity: 0 });
+    }
 
     // ---- fired by a cannon: a scripted arc, nothing else happens until it lands ----
     if (r.launch) {
@@ -1178,36 +1410,46 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const response = settings.steerAssist ? 9.5 : 7;
     r.steerSmooth += (steerIn - r.steerSmooth) * Math.min(1, dt * response);
 
-    // ---- drift ----
+    // ---- drift: three mini-turbo levels, and it fills the turbo bar ----
     {
       // it takes real lock to start a drift, but once sliding a little is enough to keep it
       const wantsDrift = driftHeld && Math.abs(r.steerSmooth) > (r.isDrifting ? 0.12 : 0.3) && r.speed > st.maxSpeed * 0.3 && r.mode !== "plane";
       if (wantsDrift) {
         r.isDrifting = true;
-        r.driftCharge = Math.min(1.5, r.driftCharge + dt);
-        r.turboMeter = Math.min(1, r.turboMeter + dt * 0.36); // drift recharges the turbo bar
+        // the harder the lock, the faster it charges; good handling and a fin charge faster still
+        r.driftCharge = Math.min(1.7, r.driftCharge + dt * st.driftRate * (0.7 + Math.abs(r.steerSmooth) * 0.6));
+        r.turboMeter = Math.min(1, r.turboMeter + dt * 0.3 * st.turboRate);
+        const level = r.driftCharge >= DRIFT_LEVELS[2] ? 3 : r.driftCharge >= DRIFT_LEVELS[1] ? 2 : r.driftCharge >= DRIFT_LEVELS[0] ? 1 : 0;
+        if (level > r.driftLevel) {
+          // each level announces itself: a flash of its colour, and a click you can time the release to
+          r.driftLevel = level;
+          emitParticles({ position: r.pos.clone().setY(r.y + 0.4), color: DRIFT_COLOURS[level - 1], count: 14, speed: 3.5, spread: 0.9, size: 0.2, life: 0.4 });
+          if (r.isPlayer) {
+            sfx.click();
+            addShake(0.06 * level);
+          }
+        }
+        // sparks off the back wheels in the colour of the level reached
+        if (frame.current % 3 === 0) {
+          const colour = r.driftLevel ? DRIFT_COLOURS[r.driftLevel - 1] : "#ffffff";
+          emitParticles({ position: r.pos.clone().addScaledVector(new THREE.Vector3(Math.sin(r.heading), 0, Math.cos(r.heading)), -1.1).setY(r.y + 0.25), color: colour, count: 2, speed: 2.2, spread: 0.7, size: 0.13 + r.driftLevel * 0.03, life: 0.3 });
+        }
       } else if (r.isDrifting) {
         r.isDrifting = false;
-        if (r.driftCharge > 0.3) {
-          const big = r.driftCharge > 0.85;
-          r.boostTimer = big ? 1.05 : 0.6;
-          r.boostMult = big ? 1.65 : 1.3;
+        if (r.driftLevel > 0) {
+          const [time, power, bar] = DRIFT_BOOST[r.driftLevel - 1];
+          r.boostTimer = Math.max(r.boostTimer, time * st.boostTime);
+          r.boostMult = Math.max(r.boostMult, 1 + (power - 1) * st.boostPower);
+          r.turboMeter = Math.min(1, r.turboMeter + bar * st.turboRate);
           r.boostsUsed++;
           if (r.isPlayer) {
-            addShake(big ? 0.32 : 0.16);
+            addShake(0.12 + r.driftLevel * 0.08);
             sfx.boost();
           }
-          emitParticles({
-            position: r.pos.clone().setY(r.y + 0.4),
-            color: big ? WEAPON_META.orb.color : theme.glow,
-            count: big ? 30 : 16,
-            speed: 4.5,
-            spread: 0.8,
-            size: 0.22,
-            life: 0.6,
-          });
+          emitParticles({ position: r.pos.clone().setY(r.y + 0.4), color: DRIFT_COLOURS[r.driftLevel - 1], count: 12 + r.driftLevel * 8, speed: 4.5, spread: 0.8, size: 0.22, life: 0.6 });
         }
         r.driftCharge = 0;
+        r.driftLevel = 0;
       }
     }
 
@@ -1219,6 +1461,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.mode === "sub") effMax *= st.boatBonus * 0.9 * craftSpeed(r.vehicle.sub, 1);
     if (r.mode === "plane") effMax *= st.planeBonus * 1.12 * craftSpeed(r.vehicle.plane, 1);
     if (r.slowTimer > 0) effMax *= 0.55;
+    if (r.burnTimer > 0) {
+      effMax *= 0.75;
+      if (frame.current % 4 === 0) emitParticles({ position: r.pos.clone().setY(r.y + 0.7), color: "#fb923c", count: 2, speed: 1.6, spread: 0.5, size: 0.18, life: 0.4, upBias: 1.4 });
+    }
+    if (r.giantTimer > 0) effMax *= 1.1;
 
     // hills cost speed going up and give it back coming down
     const hill = r.airborne || r.mode === "plane" ? 0 : THREE.MathUtils.clamp(r.slopeAlong, -0.35, 0.35);
@@ -1318,8 +1565,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     r.pitch = THREE.MathUtils.lerp(r.pitch, nose, r.mode === "plane" ? 0.05 : r.airborne ? 0.1 : 0.25);
 
     // ---- pads painted on the road ----
-    if (r.padCd <= 0 && !r.airborne) {
+    if (!r.airborne) {
       for (const pad of pads) {
+        // a cannon always fires: having just crossed a boost pad must not let anyone drive into the gap behind it
+        if (pad.kind !== "cannon" && r.padCd > 0) continue;
         const px = pad.pos.x - r.pos.x;
         const pz = pad.pos.z - r.pos.z;
         if (Math.abs(pad.pos.y - r.y) > 2) continue;
@@ -1478,7 +1727,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       if (r.mode === "plane") continue;
       const hitR = p.kind === "mine" ? 1.9 : 1.5;
       if (p.pos.distanceTo(r.pos) < hitR) {
-        if (p.kind === "mine") {
+        const dropper = p.effect ? racers.find((o) => o.id === p.ownerId) : null;
+        if (p.effect && dropper) {
+          applyShot(r, dropper, p.effect, p.power, WEAPON_META[p.kind].color);
+        } else if (p.kind === "mine") {
           applyHit(r, true);
           emitParticles({ position: p.pos.clone().setY(p.pos.y + 0.5), color: WEAPON_META.mine.glow, count: 28, speed: 5, spread: 1.6, size: 0.24, life: 0.7 });
         } else if (!protectedNow(r)) {
@@ -1532,32 +1784,27 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.fuseTimer > 0) {
       r.fuseTimer -= dt;
       r.fuseGun -= dt;
-      const gunner = r.partner ?? r.main;
-      const gun = gunner.fusion;
-      const rate = gunner.fusionRate || 0.85;
+      // the one who is not driving mans the turret: swap seats and the shot changes
+      const gunner = r.activeIsPartner ? r.main : r.partner ?? r.main;
+      const shot = fusionShot(gunner.id);
+      let target = findTurretTarget(r, shot.kind === "rear");
+      // an opponent's turret gives whoever it has just hit the same respite its items do
+      const spare = r.isPlayer ? 0 : AI_PROFILES[settings.aiSkill].mercy * 1000 + 1200;
+      if (target && raceClock.current - target.lastHit < spare) target = null;
+      // the barrel follows the target round
+      const bearing = target ? wrapAngle(Math.atan2(target.pos.x - r.pos.x, target.pos.z - r.pos.z) - r.heading) : shot.kind === "rear" ? Math.PI : 0;
+      r.turretAim += wrapAngle(bearing - r.turretAim) * Math.min(1, dt * 8);
       if (r.fuseGun <= 0) {
-        r.fuseGun = rate;
-        let target = findTargetAhead(r, 0.35);
-        // an opponent's turret gives whoever it has just hit the same respite its items do
-        const spare = r.isPlayer ? 0 : AI_PROFILES[settings.aiSkill].mercy * 1000 + 1200;
-        if (target && raceClock.current - target.lastHit < spare) target = null;
         // no fair target for an opponent's turret: hold fire and look again shortly
         if (!r.isPlayer && !target) {
           r.fuseGun = 0.4;
-        } else {
+        } else if (target || shot.kind === "nova") {
+          r.fuseGun = shot.rate;
           r.fuseShots = (r.fuseShots ?? 0) + 1;
-          fireFusionGun(r, gun, target);
+          fireShot(r, shot, target);
           if (r.isPlayer) sfx.boost();
-          const fwd2 = new THREE.Vector3(Math.sin(r.heading), 0, Math.cos(r.heading));
-          emitParticles({
-            position: r.pos.clone().addScaledVector(fwd2, 1.4).setY(r.y + 1.1),
-            color: WEAPON_META[gun].glow,
-            count: 8,
-            speed: 2.5,
-            spread: 0.5,
-            size: 0.18,
-            life: 0.4,
-          });
+        } else {
+          r.fuseGun = 0.3;
         }
       }
       if (r.fuseTimer <= 0) {
@@ -1573,8 +1820,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       if (turboPressed && r.turboMeter > 0.18) {
         const power = r.turboMeter;
         r.turboMeter = 0;
-        r.boostTimer = Math.max(r.boostTimer, 0.7 + power * 1.6);
-        r.boostMult = Math.max(r.boostMult, 1.35 + power * 0.5);
+        r.boostTimer = Math.max(r.boostTimer, (0.7 + power * 1.6) * st.boostTime);
+        r.boostMult = Math.max(r.boostMult, 1 + (0.35 + power * 0.5) * st.boostPower);
         r.boostsUsed++;
         if (mine) {
           addShake(0.28 + power * 0.25);
@@ -1662,12 +1909,17 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     r.visual.current.fused = r.fuseTimer > 0;
     r.visual.current.ghost = r.ghostTimer > 0;
     r.visual.current.magnet = r.magnetTimer > 0;
+    r.visual.current.turretAim = r.turretAim;
+    r.visual.current.stunned = r.stunTimer > 0 && r.frozenTimer <= 0;
 
     if (r.group.current) {
       r.group.current.position.set(r.pos.x, r.y, r.pos.z);
       r.group.current.rotation.order = "YXZ";
       r.group.current.rotation.y = r.heading;
       r.group.current.rotation.x = r.mode === "plane" ? 0 : -r.pitch;
+      // a giant is a giant
+      const size = r.giantTimer > 0 ? 1 + 0.7 * Math.min(1, r.giantTimer * 2, (6 - r.giantTimer) * 4) : 1;
+      r.group.current.scale.setScalar(size);
     }
   }
 
@@ -1726,7 +1978,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         const b = racers[j];
         if (b.finished || b.exploding || b.ghostTimer > 0) continue;
         if (a.mode !== b.mode) continue;
-        const hit = collideBodies(a, b, 2 + activeChar(a).weight, 2 + activeChar(b).weight);
+        const hit = collideBodies(a, b, 2 + activeChar(a).weight + (a.giantTimer > 0 ? 12 : 0), 2 + activeChar(b).weight + (b.giantTimer > 0 ? 12 : 0));
+        if (hit > 0 && a.giantTimer > 0 !== b.giantTimer > 0) {
+          const small = a.giantTimer > 0 ? b : a;
+          if (small.stunTimer <= 0) applyHit(small, true);
+        }
         if (hit > 4 && (a.isPlayer || b.isPlayer) && a.bumpCd <= 0 && b.bumpCd <= 0) {
           a.bumpCd = 0.4;
           b.bumpCd = 0.4;
@@ -1751,7 +2007,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         continue;
       }
       // homing
-      if (p.type === "missile" && p.targetId) {
+      if (p.homing && p.targetId) {
         const target = racers.find((r) => r.id === p.targetId);
         if (target && !target.finished) {
           const to = target.pos.clone().setY(target.y + 0.7).sub(p.pos).normalize();
@@ -1760,15 +2016,17 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       }
       p.pos.addScaledVector(p.vel, dt);
       if (frame.current % 2 === 0) {
-        emitParticles({ position: p.pos.clone(), color: WEAPON_META[p.type].glow, count: 1, speed: 0.6, spread: 0.2, size: 0.14, life: 0.3, gravity: 0 });
+        emitParticles({ position: p.pos.clone(), color: p.color, count: 1, speed: 0.6, spread: 0.2, size: 0.16, life: 0.3, gravity: 0 });
       }
       for (const r of racers) {
         if (r.id === p.ownerId || r.finished) continue;
         const d = Math.hypot(r.pos.x - p.pos.x, r.pos.z - p.pos.z);
         if (d < 1.7 && Math.abs(r.y + 0.6 - p.pos.y) < 2.2) {
-          applyHit(r, p.type === "missile");
+          const owner = racers.find((o) => o.id === p.ownerId);
+          if (p.effect && owner) applyShot(r, owner, p.effect, p.power, p.color);
+          else applyHit(r, p.type === "missile");
           p.active = false;
-          emitParticles({ position: p.pos.clone(), color: WEAPON_META[p.type].color, count: 20, speed: 4.5, spread: 1.4, size: 0.22, life: 0.6 });
+          emitParticles({ position: p.pos.clone(), color: p.color, count: 20, speed: 4.5, spread: 1.4, size: 0.22, life: 0.6 });
           break;
         }
       }
@@ -1898,7 +2156,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           life: 1.2,
         });
       }
-      window.setTimeout(() => useGame.getState().goto("results"), 2400);
+      victory.current = { t: 0, podium: position <= 3, heading: player.heading, y: player.y };
+      window.setTimeout(() => useGame.getState().goto("results"), 3600);
     }
 
     if (frame.current % 2 === 0 && !finishedOnce.current) {
@@ -1916,6 +2175,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         fused: player.fuseTimer > 0,
         fusionHp: player.fuseTimer > 0 ? Math.max(0, player.fusionHp) : 1,
         turbo: player.turboMeter,
+        driftLevel: player.driftLevel,
         shieldActive: protectedNow(player),
         boosting: player.boostTimer > 0,
         activeIsPartner: player.activeIsPartner,
@@ -1923,6 +2183,23 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         rings: player.rings,
         standings: sorted.map((r) => ({ id: r.id, name: activeChar(r).name, isPlayer: r.isPlayer, progress: r.total, lap: Math.min(r.lap, mode.laps), color: r.vehicle.body })),
       });
+    }
+
+    // ---- victory: hops and a spin on the spot, with confetti for a podium ----
+    if (victory.current) {
+      const v = victory.current;
+      v.t += Math.min(deltaRaw, 0.1);
+      const hop = Math.abs(Math.sin(v.t * 6.5)) * (v.podium ? 1.5 : 0.6) * Math.max(0, 1 - v.t / 3.6);
+      if (player.group.current) {
+        player.group.current.position.set(player.pos.x, v.y + hop, player.pos.z);
+        player.group.current.rotation.y = v.heading + (v.podium ? v.t * 5.2 : Math.sin(v.t * 5) * 0.5);
+        player.group.current.rotation.x = 0;
+        player.group.current.rotation.z = Math.sin(v.t * 13) * 0.12;
+      }
+      player.visual.current.boosting = v.podium;
+      if (v.podium && frame.current % 5 === 0) {
+        emitParticles({ position: player.pos.clone().setY(v.y + 2.6), color: theme.particles[frame.current % theme.particles.length], count: 7, speed: 5, spread: 2.4, size: 0.24, life: 1.1, upBias: 1.2 });
+      }
     }
 
     // minimap snapshot
@@ -1954,6 +2231,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       .setY(player.y)
       .addScaledVector(fwd, -dist - speedKick * 1.4)
       .add(new THREE.Vector3(0, height + speedKick * 0.5, 0));
+    if (victory.current) {
+      // swing round to the front of the kart and circle it
+      const a = victory.current.heading + Math.PI * 0.75 + victory.current.t * 0.9;
+      desired.set(player.pos.x + Math.sin(a) * 7.5, victory.current.y + 3.2, player.pos.z + Math.cos(a) * 7.5);
+    }
     // never let the chase camera sink into a hill: lift it to clear the road
     // surface behind the car, and never drop it below the car either
     // the floor is whatever road is under the camera on the player's level, so
@@ -1966,6 +2248,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const look = player.pos.clone()
       .setY(THREE.MathUtils.lerp(player.y, aheadY, 0.8) + 1.2)
       .addScaledVector(fwd, 7);
+    if (victory.current) look.set(player.pos.x, victory.current.y + 1.2, player.pos.z);
     // Smoothing by elapsed time, not per frame: at 20 fps the camera used to
     // trail three times as far behind as at 60.
     const ease = (rate: number) => 1 - Math.exp(-rate * dt);
