@@ -702,6 +702,7 @@ function AmbientLife({ theme }: { theme: ThemeDef }) {
         speed: 0.9 + Math.random() * 1.6,
         size: 0.25 + Math.random() * 0.75,
         wob: Math.random() * Math.PI * 2,
+        kind: Math.random() < 0.25 ? "air" : "water",
       })),
     []
   );
@@ -753,8 +754,11 @@ function AmbientLife({ theme }: { theme: ThemeDef }) {
         const b = bubData[i];
         b.y += b.speed * dt;
         if (b.y > 30) b.y = -1;
-        dummy.position.set(b.x + Math.sin(t * 0.7 + b.wob) * 1.6, b.y, b.z + Math.cos(t * 0.55 + b.wob) * 1.6);
-        dummy.scale.setScalar(b.size);
+        const tTrack = raceSnapshot.racers[0]?.t ?? 0;
+        const { a } = biomeMix(tTrack);
+        const rate = a.prop === "coral" ? 1.8 : a.prop === "rock" && a.fog.includes("#cfe9f2") ? 0.9 : 1.0;
+        dummy.position.set(b.x + Math.sin(t * 0.7 * rate + b.wob) * 1.6, b.y * (b.kind === "water" ? 0.6 : 1), b.z + Math.cos(t * 0.55 * rate + b.wob) * 1.6);
+        dummy.scale.setScalar(b.size * (a.prop === "coral" ? 0.7 : 1));
         dummy.updateMatrix();
         m.setMatrixAt(i, dummy.matrix);
       }
