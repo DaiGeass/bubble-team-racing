@@ -2,3 +2,6 @@
 juego/node_modules/
 juego/dist/
 juego/.harness/
+juego/src-tauri/target/
+juego/src-tauri/gen/
+juego/src-tauri/Cargo.lock

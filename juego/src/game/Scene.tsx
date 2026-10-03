@@ -303,13 +303,15 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const t = (i + 0.5) / count;
       const zone = zoneAt(t);
       if (zone) continue; // no boxes inside water/sky zones
+      // the box has to sit inside the pickup radius, so a car driving the middle
+      // of the road still collects it; sides just nudge it off the racing line
       const side = i % 3 === 0 ? 1 : i % 3 === 1 ? -1 : 0;
       const center = trackPointAt(t);
       const tangent = trackTangentAt(t);
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
       boxes.push({
         t,
-        pos: center.clone().addScaledVector(normal, side * TRACK_WIDTH * 0.3),
+        pos: center.clone().addScaledVector(normal, side * TRACK_WIDTH * 0.09),
         active: mode.itemsEnabled,
         respawn: 0,
         group: { current: null },
@@ -1167,7 +1169,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // ---- rescue 2: pinned or going nowhere ----
     // Grinding a barrier, or sitting in a donut with no forward progress, is as
     // bad as falling off a cliff: both strand the player behind the pack.
-    if (r.respawnLock <= 0 && r.mode !== "plane" && !r.warp && r.speed < st.maxSpeed * 0.18 && r.speed < 7) {
+    // the pit counts once, not twice: whichever branch owns the timer below is
+    // the only one allowed to grow pinnedFor
+    const stuckInPit = inGapPit(r.t);
+    if (r.respawnLock <= 0 && r.mode !== "plane" && !r.warp && !stuckInPit && r.speed < st.maxSpeed * 0.18 && r.speed < 7) {
       r.pinnedFor += dt;
     } else if (r.speed > st.maxSpeed * 0.3) {
       r.pinnedFor = 0;
@@ -1182,13 +1187,14 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       r.noProgressFor += dt;
     }
 
-    // a car sitting in the bottom of a gap gets fished over to the far lip
-    if (r.respawnLock <= 0 && inGapPit(r.t) && r.speed < 5 && !r.airborne) {
-      r.pinnedFor += dt;
+    // a car sitting in the bottom of a gap gets fished over to the far lip, and
+    // sooner than a barrier scrape: the pit floor has no grip at all
+    if (r.respawnLock <= 0 && stuckInPit && r.speed < 5 && !r.airborne) {
+      r.pinnedFor += dt * 1.6;
     }
 
     if (r.respawnLock <= 0 && (r.pinnedFor > 2.6 || r.noProgressFor > 6)) {
-      const wasInPit = inGapPit(r.t);
+      const wasInPit = stuckInPit;
       if (wasInPit) {
         const out = gapExitT(r.t);
         r.t = out;
@@ -1276,7 +1282,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     for (const box of itemBoxes) {
       if (!box.active) continue;
       if (r.mode !== "land" && r.mode !== "boat") continue;
-      if (box.pos.distanceTo(r.pos) < 2.3) {
+      if (box.pos.distanceTo(r.pos) < 2.9) {
         if (!r.weapon) {
           const rolled: WeaponId = rollWeapon();
           r.weapon = rolled;
@@ -1465,7 +1471,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.portalCd <= 0 && trkP.portals) {
       for (const pr of trkP.portals) {
         const dIn = Math.abs((pr.tIn - r.t + 0.5) % 1 - 0.5);
-        if (dIn < 0.012) {
+        // you have to pass through the ring, not merely roll past its t: the
+        // ring is 5.4 across, so a car wider than that keeps driving on the road
+        const gateOff = Math.abs(lateralOffsetFrom(r.pos, pr.tIn) - pr.side * (halfWidthAt(pr.tIn) - 3.6));
+        if (dIn < 0.012 && gateOff < 3) {
           const wTan = trackTangentAt(pr.tOut);
           const wNrm = new THREE.Vector3(-wTan.z, 0, wTan.x).normalize();
           const wOff = pr.side * (halfWidthAt(pr.tOut) - 3.6);

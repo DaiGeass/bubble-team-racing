@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: type check + web build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: juego/package-lock.json
+      - working-directory: juego
+        run: npm ci
+      - working-directory: juego
+        run: npx tsc --noEmit
+      - working-directory: juego
+        run: npm run build
+      - name: the web build must be a single self contained file
+        working-directory: juego
+        run: |
+          test -f dist/index.html || { echo "dist/index.html missing"; exit 1; }
+          size=$(stat -c%s dist/index.html)
+          echo "single file bundle: ${size} bytes"
+          [ "$size" -gt 500000 ] || { echo "bundle looks truncated"; exit 1; }
+
+  desktop:
+    name: tauri shell compiles
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: juego/package-lock.json
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev patchelf libssl-dev build-essential file
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: juego/src-tauri -> target
+      - working-directory: juego
+        run: npm ci
+      - name: cargo check the desktop shell
+        working-directory: juego/src-tauri
+        run: cargo check --locked --quiet || cargo check --quiet
