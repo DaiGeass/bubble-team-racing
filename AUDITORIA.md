@@ -120,7 +120,24 @@ causas de que la imagen se fuera casi a negro:
 Brillo medio de pantalla (0–255) antes y después: Torre Neón en el tramo Cyberpunk 38 → 52;
 Escritorio 98 en la vuelta 2, franja de cielo 16 → 118.
 
-## 3. Cómo se mide
+## 2e. Pistas que parecían flotar
+
+Vistas en captura, las carreteras iban sobre palos finos encima de un suelo plano y la
+barrera eran postes sueltos. Cambios:
+
+- **Terraplenes.** Una carretera que va hasta 17 unidades sobre el suelo, sin otra debajo,
+  se apoya en un talud de tierra a los dos lados. Solo lo que va más alto o cruza sobre otra
+  carretera es un puente.
+- **Puentes de verdad.** Columnas gruesas con una viga bajo el tablero, en lugar de palos.
+- **Barrera continua.** Un quitamiedos a rayas con los dos colores de la estética del tramo
+  recorre cada borde donde la física tiene pared, y solo ahí. En el mar la barrera sigue
+  siendo una línea de boyas.
+- **Bajo el agua se ve bajo el agua.** En el submarino la niebla y el fondo toman el color
+  del mar; antes parecía una carretera flotando sobre arena.
+- **Chispas al raspar** la barrera, para ver qué te está frenando.
+- Los adornos se apartan del talud.
+
+
 
 Tres herramientas en `juego/tools/`:
 

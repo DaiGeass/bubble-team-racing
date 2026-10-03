@@ -119,6 +119,123 @@ function buildRibbonGeometry(path: PathRT) {
   return { deck, slab };
 }
 
+/** Boat lane on the open sea: the barrier there is a line of buoys. */
+function buoyed(path: PathRT, i: number) {
+  if (!path.main || getActiveTrack().sea === undefined) return false;
+  const t = path.prog[i];
+  return ZONES.some((z) => z.type === "water" && t >= z.t0 - 0.01 && t <= z.t1 + 0.01);
+}
+
+/** No barrier is drawn along a flight line, inside the submarine tube or beside a lake. */
+function railless(path: PathRT, i: number) {
+  if (!path.main) return false;
+  const t = path.prog[i];
+  return ZONES.some((z) => t >= z.t0 - 0.01 && t <= z.t1 + 0.01);
+}
+
+/**
+ * The barrier itself: a continuous striped rail along every edge the physics
+ * walls off, in the two colours of the aesthetic of that stretch. What you can
+ * see is exactly what stops you.
+ */
+function buildRails(themes: ThemeDef[]) {
+  const pos: number[] = [];
+  const col: number[] = [];
+  const HEIGHT = 1.05;
+  const colA = themes.map((t) => new THREE.Color(t.barrierA));
+  const colB = themes.map((t) => new THREE.Color(t.barrierB));
+  const quad = (a: number[], b: number[], c: number[], d: number[], colour: THREE.Color) => {
+    pos.push(...a, ...b, ...c, ...b, ...d, ...c);
+    for (let n = 0; n < 6; n++) col.push(colour.r, colour.g, colour.b);
+  };
+  for (const path of getPaths()) {
+    const count = path.closed ? path.n : path.n - 1;
+    for (let i = 0; i < count; i++) {
+      const j = (i + 1) % path.n;
+      if (!(path.flags[i] & F_SOLID) || !(path.flags[j] & F_SOLID)) continue;
+      if (railless(path, i) || railless(path, j)) continue;
+      const sector = sectorIndexAt(path.prog[i]);
+      // stripes five units long
+      const colour = (Math.floor((i * path.ds) / 5) % 2 ? colB : colA)[sector] ?? colA[0];
+      for (const side of [1, -1]) {
+        const bit = side === 1 ? F_WALL_POS : F_WALL_NEG;
+        if (!(path.flags[i] & bit) || !(path.flags[j] & bit)) continue;
+        const at = (s: number, off: number, up: number) => {
+          const o = (path.half[s] + off) * side;
+          return [path.px[s] - path.tz[s] * o, path.py[s] + up, path.pz[s] + path.tx[s] * o];
+        };
+        // inner face, top, outer face
+        quad(at(i, 0.15, 0), at(j, 0.15, 0), at(i, 0.15, HEIGHT), at(j, 0.15, HEIGHT), colour);
+        quad(at(i, 0.15, HEIGHT), at(j, 0.15, HEIGHT), at(i, 0.75, HEIGHT), at(j, 0.75, HEIGHT), colour);
+        quad(at(i, 0.75, HEIGHT), at(j, 0.75, HEIGHT), at(i, 0.75, -0.9), at(j, 0.75, -0.9), colour);
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/** How high above the floor a road may stand on an earth bank; any higher and it is a bridge. */
+const BANK_MAX = 17;
+/** Run of a bank per unit of height. */
+const BANK_SLOPE = 1.6;
+
+/** How far a bank reaches out from the edge of a road at height y, for keeping scenery off it. */
+function bankWidth(y: number) {
+  const def = getActiveTrack();
+  if (def.floor === undefined || def.sea !== undefined) return 0;
+  const h = y - def.floor;
+  return h > 0.4 && h <= BANK_MAX ? h * BANK_SLOPE + 1.5 : 0;
+}
+
+/** True where a stretch of road is carried by an earth bank rather than by columns. */
+function banked(path: PathRT, i: number, floor: number, probe: ReturnType<typeof makeGround>) {
+  if (!(path.flags[i] & F_SOLID) || deckless(path, i)) return false;
+  if (getActiveTrack().sea !== undefined) return false; // over the sea a road is a pier
+  const h = path.py[i] - floor;
+  if (h < 0.4 || h > BANK_MAX) return false;
+  // nothing may be underneath: a road over another road is a bridge
+  return !groundAt(path.px[i], path.pz[i], path.py[i] - 2.5, probe, 0);
+}
+
+/**
+ * Earth banks. A road that runs a few metres above the floor sits on a bank
+ * that slopes down to it on both sides, so it reads as built on the ground
+ * instead of hanging over it.
+ */
+function buildBanks(floor: number) {
+  const pos: number[] = [];
+  const probe = makeGround();
+  const SLOPE = BANK_SLOPE;
+  for (const path of getPaths()) {
+    const count = path.closed ? path.n : path.n - 1;
+    const on: boolean[] = [];
+    for (let i = 0; i < path.n; i++) on.push(banked(path, i, floor, probe));
+    for (let i = 0; i < count; i++) {
+      const j = (i + 1) % path.n;
+      if (!on[i] || !on[j]) continue;
+      for (const side of [1, -1]) {
+        const top = (s: number) => {
+          const o = (path.half[s] + 0.75) * side;
+          return [path.px[s] - path.tz[s] * o, path.py[s] - 0.3, path.pz[s] + path.tx[s] * o];
+        };
+        const foot = (s: number) => {
+          const o = (path.half[s] + 0.75 + (path.py[s] - floor) * SLOPE) * side;
+          return [path.px[s] - path.tz[s] * o, floor + 0.02, path.pz[s] + path.tx[s] * o];
+        };
+        pos.push(...top(i), ...top(j), ...foot(i), ...top(j), ...foot(j), ...foot(i));
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
 /** One post wherever the physics has a barrier, and nowhere else. */
 function buildBarriers() {
   const mats: THREE.Matrix4[] = [];
@@ -129,10 +246,8 @@ function buildBarriers() {
     for (let i = 0; i < path.n; i += every) {
       if (!(path.flags[i] & F_SOLID)) continue;
       const t = path.prog[i];
-      // no posts along a flight line or inside the submarine tube; a lake keeps
-      // open shores, but on the open sea the lane is marked with buoys
-      const sea = getActiveTrack().sea !== undefined;
-      if (path.main && ZONES.some((z) => (z.type !== "water" || !sea) && t >= z.t0 - 0.01 && t <= z.t1 + 0.01)) continue;
+      // buoys mark the boat lane on the open sea; on land the barrier is a rail
+      if (!buoyed(path, i)) continue;
       const angle = Math.atan2(path.tx[i], path.tz[i]);
       const reach = path.half[i] + 0.7;
       for (const side of [1, -1]) {
@@ -151,14 +266,21 @@ function buildBarriers() {
 /** Columns under every stretch that stands clear of the floor, unless another road is in the way. */
 function buildPillars(floor: number) {
   const mats: THREE.Matrix4[] = [];
+  const beams: THREE.Matrix4[] = [];
   const dummy = new THREE.Object3D();
   const probe = makeGround();
   for (const path of getPaths()) {
-    const every = Math.max(1, Math.round(26 / path.ds));
+    const every = Math.max(1, Math.round(30 / path.ds));
     for (let i = Math.floor(every / 2); i < path.n; i += every) {
       if (!(path.flags[i] & F_SOLID)) continue;
       const top = path.py[i] - 0.9;
-      if (top - floor < 2.5 || deckless(path, i)) continue;
+      if (top - floor < 2.5 || deckless(path, i) || banked(path, i, floor, probe)) continue;
+      // the beam the deck rests on
+      dummy.position.set(path.px[i], top - 0.55, path.pz[i]);
+      dummy.rotation.set(0, Math.atan2(path.tx[i], path.tz[i]), 0);
+      dummy.scale.set(path.half[i] * 2 + 1.6, 1.1, 1.8);
+      dummy.updateMatrix();
+      beams.push(dummy.matrix.clone());
       for (const side of [1, -1]) {
         const off = path.half[i] * 0.62 * side;
         const x = path.px[i] - path.tz[i] * off;
@@ -173,26 +295,29 @@ function buildPillars(floor: number) {
       }
     }
   }
-  return mats;
+  return { mats, beams };
 }
 
 function Pillars({ floor, theme }: { floor: number; theme: ThemeDef }) {
-  const mats = useMemo(() => buildPillars(floor), [floor]);
+  const { mats, beams } = useMemo(() => buildPillars(floor), [floor]);
+  const fill = (list: THREE.Matrix4[]) => (m: THREE.InstancedMesh | null) => {
+    if (!m) return;
+    list.forEach((mat, i) => m.setMatrixAt(i, mat));
+    m.instanceMatrix.needsUpdate = true;
+    m.computeBoundingSphere();
+  };
   if (!mats.length) return null;
   return (
-    <instancedMesh
-      args={[undefined, undefined, mats.length]}
-      ref={(m) => {
-        if (!m) return;
-        mats.forEach((mat, i) => m.setMatrixAt(i, mat));
-        m.instanceMatrix.needsUpdate = true;
-        m.computeBoundingSphere();
-      }}
-      castShadow
-    >
-      <cylinderGeometry args={[0.7, 0.9, 1, 8]} />
-      <meshStandardMaterial color={theme.roadEdge} roughness={0.35} metalness={0.5} />
-    </instancedMesh>
+    <group>
+      <instancedMesh args={[undefined, undefined, mats.length]} ref={fill(mats)} castShadow>
+        <cylinderGeometry args={[1.15, 1.5, 1, 10]} />
+        <meshStandardMaterial color={theme.roadEdge} roughness={0.45} metalness={0.4} />
+      </instancedMesh>
+      <instancedMesh args={[undefined, undefined, beams.length]} ref={fill(beams)} castShadow>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color={theme.roadEdge} roughness={0.45} metalness={0.4} />
+      </instancedMesh>
+    </group>
   );
 }
 
@@ -498,7 +623,8 @@ function Props({ themes }: { themes: ThemeDef[] }) {
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
       const z = ZONES.find((zz) => t >= zz.t0 - 0.02 && t <= zz.t1 + 0.02);
       const side = (i % 2 === 0 ? 1 : -1) * (z ? 2.4 : 1);
-      const dist = TRACK_WIDTH / 2 + 4 + Math.random() * 12;
+      // stand clear of the earth bank the road sits on
+      const dist = TRACK_WIDTH / 2 + 4 + Math.random() * 12 + bankWidth(center.y);
       const p = center.clone().addScaledVector(normal, side * dist);
       if (def.floor !== undefined) {
         // a hand-built circuit: stand on the floor, or on an islet in the sea, and never under tarmac
@@ -742,6 +868,8 @@ function BiomeSky({ theme, lap }: { theme: ThemeDef; lap: number }) {
     target.set(ta.skyTop).lerp(low.set(ta.skyBottom), 0.5);
     other.set(tb.skyTop).lerp(low.set(tb.skyBottom), 0.5);
     target.lerp(other, u);
+    // in the submarine the world is the colour of the water
+    if (raceSnapshot.racers[0]?.mode === "sub") target.set(ta.water).multiplyScalar(0.55);
     cur.lerp(target, Math.min(1, dt * 1.6));
     if (mat.current) mat.current.color.copy(cur);
     // the dome rides with the camera so it never clips
@@ -1524,7 +1652,7 @@ function Scatter() {
       const side = i % 2 === 0 ? 1 : -1;
       const out = 5 + ((i * 37) % 84);
       const g = groundReach(t);
-      const lateral = g.edge + Math.min(out, Math.max(0, g.reach - 5));
+      const lateral = g.edge + Math.min(out, Math.max(0, g.reach - 5)) + bankWidth(c.y);
       // never on tarmac: the main road or any route, at any height
       const off = side * lateral;
       const p = c.clone().addScaledVector(nrm, off);
@@ -1961,11 +2089,13 @@ function Leapers({ theme }: { theme: ThemeDef }) {
 
 export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) {
   const ribbons = useMemo(() => getPaths().map((p) => buildRibbonGeometry(p)), []);
-  const barriers = useMemo(() => buildBarriers(), []);
   const def = getActiveTrack();
   // the aesthetics of the lap, as they look on this lap
   const themes = useMemo(() => (def.sectors ?? [{ t0: 0, theme: def.theme }]).map((s) => themeOnLap(s.theme, lap)), [def, lap]);
   const roadTextures = useMemo(() => themes.map((t) => makeRoadTexture(t)), [themes]);
+  const barriers = useMemo(() => buildBarriers(), []);
+  const rails = useMemo(() => buildRails(themes), [themes]);
+  const banks = useMemo(() => (def.floor !== undefined && def.sea === undefined ? buildBanks(def.floor) : null), [def]);
   const voidCircuit = !!def.noGround;
   const ground = useMemo(() => (voidCircuit ? null : buildGround()), [voidCircuit]);
   const techno = theme.id === "techno";
@@ -2033,7 +2163,15 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
       <Leapers theme={theme} />
       <SkyBlocks theme={theme} />
       <TunnelArches theme={theme} />
-      <BarrierRing matrices={barriers.mats} sector={barriers.sector} themes={themes} theme={theme} />
+      {barriers.mats.length > 0 && <BarrierRing matrices={barriers.mats} sector={barriers.sector} themes={themes} theme={theme} />}
+      <mesh geometry={rails} castShadow>
+        <meshStandardMaterial vertexColors roughness={0.3} metalness={0.25} emissive={theme.glow} emissiveIntensity={0.12} side={THREE.DoubleSide} />
+      </mesh>
+      {banks && (
+        <mesh geometry={banks} receiveShadow>
+          <meshStandardMaterial color={new THREE.Color(theme.ground).multiplyScalar(0.78)} roughness={1} side={THREE.DoubleSide} flatShading />
+        </mesh>
+      )}
       <StartArch theme={theme} />
       <SkyRings theme={theme} />
       <ForkIslands theme={theme} />

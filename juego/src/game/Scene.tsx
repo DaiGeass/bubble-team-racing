@@ -1271,6 +1271,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         emitParticles({ position: r.pos.clone().setY(r.y + 0.4), color: theme.particles[0], count: 8, speed: 2.4, spread: 0.7, size: 0.16, life: 0.35 });
       }
     }
+    // scraping along a barrier throws sparks: you can see what is costing you speed
+    if (r.touching && Math.abs(r.speed) > 8 && frame.current % 3 === 0) {
+      emitParticles({ position: r.pos.clone().setY(r.y + 0.35), color: "#ffd166", count: 2, speed: 3, spread: 0.6, size: 0.12, life: 0.3 });
+    }
     if (stepRes.landed > 8) {
       emitParticles({ position: r.pos.clone().setY(r.y + 0.2), color: theme.particles[1], count: 10, speed: 2.6, spread: 1.1, size: 0.18, life: 0.4 });
       if (r.isPlayer) {

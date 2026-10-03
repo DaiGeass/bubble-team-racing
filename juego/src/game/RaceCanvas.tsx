@@ -55,13 +55,22 @@ function BiomeFog({ theme }: { theme: { skyTop: string; skyBottom: string; fog: 
     const k = Math.min(1, dt * 1.4);
     const c = cur.current;
     const t = tmp.current;
-    c.fog.lerp(t.a.set(ta.fog).lerp(t.b.set(tb.fog), u), k);
-    c.top.lerp(t.a.set(ta.skyTop).lerp(t.b.set(tb.skyTop), u), k);
-    c.bot.lerp(t.a.set(ta.skyBottom).lerp(t.b.set(tb.skyBottom), u), k);
+    // under water everything fades into the colour of the sea a short way off
+    const under = raceSnapshot.racers[0]?.mode === "sub";
+    if (under) {
+      t.a.set(ta.water).multiplyScalar(0.55);
+      c.fog.lerp(t.a, k * 2);
+      c.top.lerp(t.b.set(ta.water).multiplyScalar(0.8), k * 2);
+      c.bot.lerp(t.a, k * 2);
+    } else {
+      c.fog.lerp(t.a.set(ta.fog).lerp(t.b.set(tb.fog), u), k);
+      c.top.lerp(t.a.set(ta.skyTop).lerp(t.b.set(tb.skyTop), u), k);
+      c.bot.lerp(t.a.set(ta.skyBottom).lerp(t.b.set(tb.skyBottom), u), k);
+    }
     if (fogRef.current) {
       fogRef.current.color.copy(c.fog);
-      fogRef.current.near += (THREE.MathUtils.lerp(ta.fogNear, tb.fogNear, u) - fogRef.current.near) * k;
-      fogRef.current.far += (THREE.MathUtils.lerp(ta.fogFar, tb.fogFar, u) - fogRef.current.far) * k;
+      fogRef.current.near += ((under ? 8 : THREE.MathUtils.lerp(ta.fogNear, tb.fogNear, u)) - fogRef.current.near) * k * 2;
+      fogRef.current.far += ((under ? 130 : THREE.MathUtils.lerp(ta.fogFar, tb.fogFar, u)) - fogRef.current.far) * k * 2;
     }
     if (ambRef.current) {
       ambRef.current.color.lerp(t.a.set(ta.ambientColor).lerp(t.b.set(tb.ambientColor), u), k);
