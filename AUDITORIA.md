@@ -28,7 +28,7 @@
 Se quitaron: las 17 pistas generadas, los fosos, y los generadores de carreteras laterales,
 bifurcaciones y portales.
 
-## 2. Las 8 pistas
+## 2. Las primeras 8 pistas
 
 Dibujadas con el diseñador de `trackDesign.ts` (recta, curva, espiral, caída, desvío).
 Longitud en unidades; un kart recorre unas 27 por segundo sin turbo.
@@ -138,6 +138,38 @@ barrera eran postes sueltos. Cambios:
 - Los adornos se apartan del talud.
 
 
+
+## 2f. Barco, avión y submarino, y tres pistas grandes para ellos
+
+Mecánicas:
+
+- **Submarino con movimiento libre.** Igual que el avión, sube y baja con acelerar/frenar
+  dentro del tubo. Hay aros de burbujas que dan turbo y minas que esquivar.
+- **Barco que derrapa.** Sobre el agua el casco sigue yendo hacia donde iba y la proa lo va
+  girando; una curva es un derrape. Las olas (pads de salto) lo lanzan al aire.
+- **Rutas dentro del agua, del aire y del tubo.** Una ruta puede ser un segundo canal, una
+  segunda línea de vuelo a otra altura o un túnel que se bifurca, con sus propios aros y
+  obstáculos y su propio tubo.
+- **Anillos y obstáculos en cada línea.** La IA sigue los de la línea por la que va.
+- **Cámara suavizada por tiempo, no por fotograma.** A pocos fps se quedaba muy atrás del
+  vehículo; ahora se comporta igual a 20 que a 60 fps.
+- **Bloom más contenido** y cielo de Dreamcore menos blanco: el tramo de vuelo de Corriente
+  salía casi en blanco.
+
+Pistas nuevas (11 en total), de unas 2900–3000 unidades:
+
+| Pista | Qué la define | Rutas |
+|---|---|---|
+| Archipiélago | barco: mar abierto con dos canales y una rampa, una isla, tubo que se abre en tres túneles, despegue desde el agua | 6 |
+| Corriente en Chorro | avión: dos tercios de la vuelta en el aire, subida de 50 unidades, picado, línea de vuelo alta y baja | 4 |
+| Fosa Abisal | submarino: 40 unidades bajo el mar en dos lados de la vuelta, túnel profundo y túnel alto | 4 |
+
+Medido: las 11 pistas pasan la comprobación de geometría; 22 recorridos en el simulador sin
+caídas; carreras de 3 vueltas en el juego real en las 11, todas terminan, 0 errores de
+consola y 5 caídas de rivales en total. A velocidad base una vuelta a las tres nuevas dura
+107–113 s.
+
+## 3. Cómo se mide
 
 Tres herramientas en `juego/tools/`:
 

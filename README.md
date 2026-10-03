@@ -1,6 +1,6 @@
 # Bubble Team Racing
 
-Aero kart racing for the browser and the desktop: eight hand-built circuits with spiral
+Aero kart racing for the browser and the desktop: eleven hand-built circuits with spiral
 towers, bridges, jumps, cannons, flights and dives, twenty-eight characters, nineteen
 chassis, six finishes and a partner who mans the fusion turret.
 
@@ -75,7 +75,8 @@ Options, with three control presets that install a full layout at once.
 
 ## What's in the game
 
-- **8 circuits, one per aesthetic**, drawn by hand in real 3D (`juego/src/tracks.ts`):
+- **11 circuits**: one per aesthetic, plus three big ones built around the boat, the plane
+  and the submarine. All drawn by hand in real 3D (`juego/src/tracks.ts`):
   roads pass over and under each other, wind up spiral towers and drop off falls. Laps
   run 2150 to 2800 units.
 - **A lap that changes aesthetic**: each circuit passes through three to seven of them,
