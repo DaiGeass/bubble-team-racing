@@ -253,8 +253,8 @@ function Props({ theme }: { theme: ThemeDef }) {
       const side = (i % 2 === 0 ? 1 : -1) * (z ? 2.4 : 1);
       const dist = TRACK_WIDTH / 2 + 4 + Math.random() * 12;
       const p = center.clone().addScaledVector(normal, side * dist);
-      const ground = surfaceYAt(nearestT(p, t));
-      p.y = ground - 0.25;
+      const g = groundReach(t);
+      p.y = Math.min(groundYAt(t, dist - g.edge), surfaceYAt(nearestT(p, t))) - 0.25;
       arr.push({ pos: p, rot: Math.random() * Math.PI, s: 0.8 + Math.random() * 0.9, kind: i % 3 });
     }
     return arr;
@@ -433,41 +433,99 @@ function SkyRings({ theme }: { theme: ThemeDef }) {
  * Terrain that follows the circuit: every vertex drops away from the height of the road
  * it is closest to, so an elevated circuit sits on a valley floor instead of a flat disc.
  */
-function buildTerrain(outer: number, shoulder: number, dropRate: number, maxDrop: number) {
-  const RINGS = 22;
-  const SECTORS = 96;
-  const positions: number[] = [];
-  const uvs: number[] = [];
-  const indices: number[] = [];
-  const p = new THREE.Vector3();
-  for (let ri = 0; ri <= RINGS; ri++) {
-    // denser rings near the road, then stretch out to the horizon
-    const u = ri / RINGS;
-    const r = shoulder + (outer - shoulder) * Math.pow(u, 2.1);
-    for (let si = 0; si <= SECTORS; si++) {
-      const a = (si / SECTORS) * Math.PI * 2;
-      p.set(Math.sin(a) * r, 0, -Math.cos(a) * r);
-      const t = nearestT(p);
-      const center = trackPointAt(t);
-      const d = Math.hypot(p.x - center.x, p.z - center.z);
-      const drop = Math.min(maxDrop, 1.1 + Math.max(0, d - halfWidthAt(t) - 1) * dropRate);
-      positions.push(p.x, center.y - drop, p.z);
-      uvs.push(p.x / 26, p.z / 26);
+/**
+ * Ground for the whole lap. The old terrain was a polar mesh around the origin,
+ * which stopped at 560 units while the circuits run to ~2000, so most of every
+ * track floated over nothing. This one follows the road: a shoulder of terrain
+ * either side plus a cliff face dropping from the road edge, so a raised section
+ * reads as a solid plateau and a dip reads as a valley.
+ */
+/** how far the terrain reaches beside the road at t, capped by the corner radius */
+function groundReach(t: number) {
+  const c = trackCurve.getPointAt(t);
+  const ahead = trackCurve.getPointAt((t + 0.004) % 1).clone().sub(c);
+  const behind = c.clone().sub(trackCurve.getPointAt((t - 0.004 + 1) % 1));
+  const turn = Math.abs(Math.atan2(ahead.x * behind.z - ahead.z * behind.x, ahead.x * behind.x + ahead.z * behind.z));
+  const radius = turn > 1e-4 ? ahead.length() / turn : 9999;
+  return { reach: Math.min(145, Math.max(26, radius * 0.42)), edge: halfWidthAt(t) + 1.6 };
+}
+
+/** height of the terrain d metres out from the road edge */
+export function groundYAt(t: number, lateral: number) {
+  const g = groundReach(t);
+  const d = Math.max(0, Math.min(lateral, g.reach) - g.edge);
+  return trackCurve.getPointAt(t).y + groundDrop(d, t);
+}
+
+function groundDrop(d: number, t: number) {
+  const wobble = Math.sin(t * 260 + d * 0.31) * 0.5 + Math.sin(t * 90 - d * 0.17) * 1.15 + Math.sin(t * 517 + d * 0.07) * 0.8;
+  return -1.2 - Math.min(17, d * 0.085) + wobble * Math.min(1, d / 26);
+}
+
+function buildGround() {
+  const STEPS = 420; // samples around the lap
+  // distance out from the road edge, both sides
+  const BAND = [0, 3, 7, 12, 18, 26, 36, 48, 62, 78, 96, 118, 145];
+  const cols: number[] = [];
+  const ground: number[] = [];
+  const skirt: number[] = [];
+  const gIdx: number[] = [];
+  const sIdx: number[] = [];
+  const tan = new THREE.Vector3();
+  const nrm = new THREE.Vector3();
+  const pos = new THREE.Vector3();
+  const prev = new THREE.Vector3();
+
+  for (let i = 0; i <= STEPS; i++) {
+    const t = i / STEPS;
+    const c = trackCurve.getPointAt(t);
+    trackCurve.getTangentAt(t, tan);
+    nrm.set(-tan.z, 0, tan.x).normalize();
+    const { reach, edge } = groundReach(t);
+
+    for (const side of [1, -1]) {
+      const rowStart = ground.length / 3;
+      for (const d of BAND) {
+        const lat = edge + Math.min(d, reach);
+        pos.copy(c).addScaledVector(nrm, side * lat);
+        const y = c.y + groundDrop(lat - edge, t);
+        ground.push(pos.x, y, pos.z);
+        const shade = Math.min(1, (lat - edge) / (reach - edge || 1));
+        // verge near the road, darker as it runs away
+        const near = 1 - Math.min(1, (lat - edge) / 16);
+        const v = 1 + near * 0.22 - shade * 0.34;
+        cols.push(v, v * (0.99 - near * 0.02), v * (0.96 + near * 0.06));
+      }
+      // cliff from the road edge down to the ground band
+      const sRow = skirt.length / 3;
+      pos.copy(c).addScaledVector(nrm, side * edge);
+      skirt.push(pos.x, c.y - 0.25, pos.z);
+      pos.copy(c).addScaledVector(nrm, side * (edge + 3));
+      skirt.push(pos.x, c.y + groundDrop(3, t) + 0.1, pos.z);
+
+      const nb = BAND.length;
+      for (let b = 0; b < nb - 1; b++) {
+        const a = rowStart + b;
+        if (side === 1) gIdx.push(a, a + nb, a + 1, a + 1, a + nb, a + nb + 1);
+        else gIdx.push(a, a + 1, a + nb, a + 1, a + nb + 1, a + nb);
+      }
+      const s0 = sRow;
+      if (side === 1) sIdx.push(s0, s0 + 1, s0 + 2, s0 + 1, s0 + 3, s0 + 2);
+      else sIdx.push(s0, s0 + 2, s0 + 1, s0 + 1, s0 + 2, s0 + 3);
     }
+    prev.copy(c);
   }
-  const row = SECTORS + 1;
-  for (let ri = 0; ri < RINGS; ri++) {
-    for (let si = 0; si < SECTORS; si++) {
-      const a = ri * row + si;
-      indices.push(a, a + row, a + 1, a + 1, a + row, a + row + 1);
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-  g.setIndex(indices);
-  g.computeVertexNormals();
-  return g;
+  void prev;
+
+  const mk = (p: number[], idx: number[], colored: boolean) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(p, 3));
+    if (colored) g.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  };
+  return { terrain: mk(ground, gIdx, true), skirt: mk(skirt, sIdx, false) };
 }
 
 function buildRibbon(halfWidth: number, y: number, pad: number, kind: ZoneKind = "water") {
@@ -1033,13 +1091,102 @@ function Portals({ theme }: { theme: ThemeDef }) {
 }
 
 /** Alternative paths: pulsing gates joined by a translucent glowing skyway arc. */
+/**
+ * A drivable mini route: the alternate line used to be a 0.3 wide glowing tube,
+ * which read as decoration rather than as a road you could take. This builds an
+ * actual carriageway along the same path, with verges, kerbs, side rails and
+ * pillars down to the ground, so a branch is visible from the main road.
+ */
+function buildRouteRoad(path: THREE.Vector3[], halfW: number) {
+  const curve = new THREE.CatmullRomCurve3(path);
+  const N = 64;
+  const deck: number[] = [];
+  const kerbL: number[] = [];
+  const kerbR: number[] = [];
+  const idx: number[] = [];
+  const rail: number[] = [];
+  const railIdx: number[] = [];
+  const tan = new THREE.Vector3();
+  const nrm = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0);
+
+  for (let i = 0; i <= N; i++) {
+    const u = i / N;
+    const p = curve.getPointAt(u);
+    curve.getTangentAt(u, tan);
+    nrm.crossVectors(tan, up).normalize();
+    const wobble = Math.sin(u * 9) * 0.12;
+    deck.push(
+      p.x + nrm.x * halfW, p.y + wobble, p.z + nrm.z * halfW,
+      p.x - nrm.x * halfW, p.y + wobble, p.z - nrm.z * halfW
+    );
+    // kerb stripes just outside the carriageway
+    for (const side of [1, -1]) {
+      const a = p.clone().addScaledVector(nrm, side * (halfW + 0.55));
+      (side === 1 ? kerbL : kerbR).push(a.x, a.y + 0.16, a.z);
+      const b = p.clone().addScaledVector(nrm, side * (halfW + 1.5));
+      (side === 1 ? kerbL : kerbR).push(b.x, b.y - 0.1, b.z);
+    }
+    // rail posts: two triangles a metre tall at the edge
+    for (const side of [1, -1]) {
+      const a = p.clone().addScaledVector(nrm, side * (halfW + 0.9));
+      rail.push(a.x, a.y + 1.05, a.z);
+      rail.push(a.x, a.y - 0.1, a.z);
+    }
+    if (i < N) {
+      const a = i * 2;
+      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      const k = i * 2;
+      kerbL.length; // kerbs are drawn as their own geometry below
+      const r = i * 4;
+      railIdx.push(r, r + 1, r + 2, r + 1, r + 3, r + 2);
+      void k;
+    }
+  }
+
+  const mk = (pts: number[], ind: number[]) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    g.setIndex(ind);
+    g.computeVertexNormals();
+    return g;
+  };
+  const deckGeo = mk(deck, idx);
+  const railGeo = mk(rail, railIdx);
+  const kerbGeo = (() => {
+    const pts: number[] = [...kerbL, ...kerbR];
+    const ind: number[] = [];
+    const half = N + 1;
+    for (let side = 0; side < 2; side++) {
+      const off = side * half * 2;
+      for (let i = 0; i < N; i++) {
+        const a = off + i * 2;
+        ind.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
+    }
+    return mk(pts, ind);
+  })();
+
+  // pillars holding the route up where it floats
+  const pillars: { x: number; z: number; top: number; bottom: number }[] = [];
+  for (let i = 2; i < N - 1; i += 6) {
+    const u = i / N;
+    const p = curve.getPointAt(u);
+    curve.getTangentAt(u, tan);
+    nrm.crossVectors(tan, up).normalize();
+    for (const side of [1, -1]) {
+      const a = p.clone().addScaledVector(nrm, side * halfW * 0.7);
+      const tt = nearestT(a);
+      const ground = trackPointAt(tt).y - 1.4;
+      if (p.y - ground > 2.2) pillars.push({ x: a.x, z: a.z, top: p.y - 0.3, bottom: ground });
+    }
+  }
+  return { deckGeo, kerbGeo, railGeo, pillars };
+}
+
 function Shortcuts({ theme }: { theme: ThemeDef }) {
   const shortcuts = useMemo(() => getShortcuts(), []);
-  const arcs = useMemo(
-    () =>
-      shortcuts.map((s) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(s.path), 48, 0.3, 8, false)),
-    [shortcuts]
-  );
+  const roads = useMemo(() => shortcuts.map((s) => buildRouteRoad(s.path, 3.6)), [shortcuts]);
   const gateRefs = useRef<(THREE.Group | null)[]>([]);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
@@ -1054,8 +1201,37 @@ function Shortcuts({ theme }: { theme: ThemeDef }) {
     <group>
       {shortcuts.map((s, i) => (
         <group key={i}>
-          <mesh geometry={arcs[i]}>
-            <meshStandardMaterial color={theme.glow} emissive={theme.glow} emissiveIntensity={1.6} transparent opacity={0.4} toneMapped={false} depthWrite={false} />
+          <mesh geometry={roads[i].deckGeo} receiveShadow>
+            <meshStandardMaterial color={theme.road} roughness={0.85} metalness={0.05} />
+          </mesh>
+          <mesh geometry={roads[i].kerbGeo}>
+            <meshStandardMaterial color={theme.roadEdge} roughness={0.6} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh geometry={roads[i].railGeo}>
+            <meshStandardMaterial
+              color={theme.glow}
+              emissive={theme.glow}
+              emissiveIntensity={1.1}
+              roughness={0.4}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          {roads[i].pillars.map((pl, k) => (
+            <mesh key={k} position={[pl.x, (pl.top + pl.bottom) / 2, pl.z]}>
+              <boxGeometry args={[0.5, pl.top - pl.bottom, 0.5]} />
+              <meshStandardMaterial color={theme.ground} roughness={1} />
+            </mesh>
+          ))}
+          <mesh geometry={roads[i].deckGeo} position={[0, 0.05, 0]}>
+            <meshStandardMaterial
+              color={theme.glow}
+              emissive={theme.glow}
+              emissiveIntensity={0.9}
+              transparent
+              opacity={0.18}
+              toneMapped={false}
+              depthWrite={false}
+            />
           </mesh>
           {[
             { p: s.path[0], h: s.entryHeading, k: 0 },
@@ -1162,20 +1338,243 @@ function BranchRibbons({ theme }: { theme: ThemeDef }) {
     </group>
   );
 }
+
+/** Painted on the tarmac: where a mini route peels off and where a gap starts. */
+function RoadMarks({ theme }: { theme: ThemeDef }) {
+  const chevron = useMemo(() => {
+    const sh = new THREE.Shape();
+    sh.moveTo(-2.6, 0);
+    sh.lineTo(0, 1.5);
+    sh.lineTo(2.6, 0);
+    sh.lineTo(2.6, 1.0);
+    sh.lineTo(0, 2.6);
+    sh.lineTo(-2.6, 1.0);
+    sh.closePath();
+    return new THREE.ShapeGeometry(sh);
+  }, []);
+
+  const marks = useMemo(() => {
+    const out: { pos: THREE.Vector3; angle: number; kind: number; turn: number }[] = [];
+    const tan = new THREE.Vector3();
+    const nrm = new THREE.Vector3();
+    const put = (t: number, lateral: number, kind: number, turn: number) => {
+      const c = trackCurve.getPointAt(t);
+      trackCurve.getTangentAt(t, tan);
+      nrm.set(-tan.z, 0, tan.x).normalize();
+      out.push({
+        pos: c.clone().addScaledVector(nrm, lateral),
+        angle: Math.atan2(tan.x, tan.z),
+        kind,
+        turn,
+      });
+    };
+    // branch entries: three arrows stepping towards the side the route leaves on
+    for (const sc of getShortcuts()) {
+      for (let k = 0; k < 3; k++) {
+        const t = (sc.t0 - 0.03 + k * 0.008 + 1) % 1;
+        put(t, sc.side * (2 + k * 2.4), 0, sc.side);
+      }
+    }
+    // gap approaches: hazard bars across the full width
+    for (const g of getActiveTrack().gaps ?? []) {
+      for (let k = 0; k < 4; k++) {
+        const t = (g.t0 - 0.026 + k * 0.006 + 1) % 1;
+        put(t, k % 2 === 0 ? -4.5 : 4.5, 1, 0);
+      }
+    }
+    return out;
+  }, []);
+
+  return (
+    <group>
+      {marks.map((m, i) => (
+        <mesh
+          key={i}
+          geometry={chevron}
+          position={[m.pos.x, surfaceYAt(nearestT(m.pos)) + 0.09, m.pos.z]}
+          rotation={[-Math.PI / 2, 0, -m.angle + (m.turn > 0 ? -0.5 : m.turn < 0 ? 0.5 : 0)]}
+        >
+          <meshBasicMaterial
+            color={m.kind === 0 ? theme.barrierA : theme.barrierB}
+            transparent
+            opacity={m.kind === 0 ? 0.85 : 0.6}
+            toneMapped={false}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function sectorTexture(label: string, colour: string) {
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 128;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "rgba(8,10,18,0.92)";
+  g.fillRect(0, 0, 256, 128);
+  g.strokeStyle = colour;
+  g.lineWidth = 8;
+  g.strokeRect(6, 6, 244, 116);
+  g.fillStyle = colour;
+  g.font = "bold 74px system-ui, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(label, 128, 68);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+
+/** Eight numbered boards around the lap plus a painted band: orientation cues. */
+function SectorBoards({ theme }: { theme: ThemeDef }) {
+  const boards = useMemo(
+    () =>
+      Array.from({ length: 8 }, (_, k) => {
+        const t = k / 8;
+        const c = trackCurve.getPointAt(t);
+        const tan = trackCurve.getTangentAt(t);
+        const nrm = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+        return {
+          pos: c.clone().addScaledVector(nrm, -(halfWidthAt(t) + 5)),
+          angle: Math.atan2(tan.x, tan.z),
+          t,
+        };
+      }),
+    []
+  );
+  const textures = useMemo(
+    () => boards.map((_, k) => sectorTexture(String(k + 1), theme.barrierA)),
+    [boards, theme]
+  );
+  const bands = useMemo(
+    () =>
+      boards.map((b) => {
+        const tan = new THREE.Vector3(Math.sin(b.angle), 0, Math.cos(b.angle));
+        return {
+          p1: b.pos.clone().addScaledVector(tan, -1.6),
+          p2: b.pos.clone().addScaledVector(tan, 1.6),
+        };
+      }),
+    [boards]
+  );
+
+  return (
+    <group>
+      {boards.map((b, i) => (
+        <group key={i} position={[b.pos.x, 0, b.pos.z]}>
+          <mesh position={[0, 2.4, 0]} rotation={[0, b.angle + Math.PI / 2, 0]}>
+            <planeGeometry args={[4.4, 2.2]} />
+            <meshBasicMaterial map={textures[i]} toneMapped={false} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh position={[0, 1.1, 0]}>
+            <boxGeometry args={[0.22, 2.2, 0.22]} />
+            <meshStandardMaterial color="#20263c" roughness={0.8} />
+          </mesh>
+        </group>
+      ))}
+      {bands.map((b, i) => {
+        const mid = b.p1.clone().lerp(b.p2, 0.5);
+        const len = b.p1.distanceTo(b.p2);
+        const ang = Math.atan2(b.p2.x - b.p1.x, b.p2.z - b.p1.z);
+        return (
+          <mesh key={i} position={[mid.x, surfaceYAt(boards[i].t) + 0.08, mid.z]} rotation={[-Math.PI / 2, 0, -ang]}>
+            <planeGeometry args={[len, 1.6]} />
+            <meshBasicMaterial color={theme.barrierA} transparent opacity={0.45} toneMapped={false} depthWrite={false} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+/**
+ * Ground clutter across the whole terrain band. The old scenery only placed 86
+ * props within 16 units of the road, so everything past the verge was bare; this
+ * fills the ground out to ~100 units with instanced rocks, tufts and shards.
+ */
+function Scatter({ theme }: { theme: ThemeDef }) {
+  const COUNT = 430;
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const rocks = useMemo(() => new THREE.IcosahedronGeometry(1, 0), []);
+  const tufts = useMemo(() => new THREE.ConeGeometry(0.7, 2.4, 5), []);
+  const shards = useMemo(() => new THREE.OctahedronGeometry(1, 0), []);
+
+  const sets = useMemo(() => {
+    const buckets: { m: THREE.Matrix4; kind: number }[] = [];
+    const tan = new THREE.Vector3();
+    const nrm = new THREE.Vector3();
+    for (let i = 0; i < COUNT; i++) {
+      const t = (i * 0.61803398875) % 1;
+      const c = trackCurve.getPointAt(t);
+      trackCurve.getTangentAt(t, tan);
+      nrm.set(-tan.z, 0, tan.x).normalize();
+      const side = i % 2 === 0 ? 1 : -1;
+      const out = 4 + ((i * 37) % 84);
+      const g = groundReach(t);
+      const lateral = g.edge + Math.min(out, g.reach - 4);
+      const p = c.clone().addScaledVector(nrm, side * lateral);
+      p.y = groundYAt(t, lateral - g.edge) + 0.2;
+      // keep clear of the carriageway and of water/sky zones
+      const z = zoneAt(t);
+      if (z) continue;
+      const s = 0.5 + ((i * 17) % 100) / 100 * (out > 40 ? 3.4 : 1.7);
+      dummy.position.copy(p);
+      dummy.rotation.set(((i * 13) % 10) / 10, (i * 0.7) % Math.PI, ((i * 7) % 10) / 10);
+      dummy.scale.setScalar(s);
+      dummy.updateMatrix();
+      buckets.push({ m: dummy.matrix.clone(), kind: i % 3 });
+    }
+    return buckets;
+  }, [dummy]);
+
+  const byKind = (k: number) => sets.filter((x) => x.kind === k);
+  const apply = (mesh: THREE.InstancedMesh | null, list: { m: THREE.Matrix4 }[]) => {
+    if (!mesh) return;
+    list.forEach((x, i) => mesh.setMatrixAt(i, x.m));
+    mesh.instanceMatrix.needsUpdate = true;
+  };
+
+  return (
+    <group>
+      <instancedMesh ref={(el) => apply(el, byKind(0))} args={[rocks, undefined, byKind(0).length]}>
+        <meshStandardMaterial color={theme.ground} roughness={1} flatShading />
+      </instancedMesh>
+      <instancedMesh ref={(el) => apply(el, byKind(1))} args={[tufts, undefined, byKind(1).length]}>
+        <meshStandardMaterial color={theme.isle} roughness={0.85} flatShading />
+      </instancedMesh>
+      <instancedMesh ref={(el) => apply(el, byKind(2))} args={[shards, undefined, byKind(2).length]}>
+        <meshStandardMaterial
+          color={theme.glow}
+          emissive={theme.glow}
+          emissiveIntensity={0.5}
+          roughness={0.3}
+          flatShading
+        />
+      </instancedMesh>
+    </group>
+  );
+}
+
 export default function Track({ theme }: { theme: ThemeDef }) {
   const roadGeometry = useMemo(() => buildRoadGeometry(), []);
   const roadTexture = useMemo(() => makeRoadTexture(theme), [theme]);
   const barriers = useMemo(() => buildBarriers(), []);
-  const terrain = useMemo(() => buildTerrain(560, TRACK_WIDTH / 2 + 6, 0.16, 26), []);
+  const ground = useMemo(() => buildGround(), []);
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.9, 0]} receiveShadow>
-        <circleGeometry args={[1100, 64]} />
-        <meshStandardMaterial color={theme.water} roughness={0.15} metalness={0.3} transparent opacity={0.9} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -26, 0]}>
+        <circleGeometry args={[2600, 72]} />
+        <meshStandardMaterial color={theme.water} roughness={0.15} metalness={0.3} />
       </mesh>
-      <mesh geometry={terrain} receiveShadow>
-        <meshStandardMaterial color={theme.ground} roughness={1} />
+      <mesh geometry={ground.skirt}>
+        <meshStandardMaterial color={theme.ground} roughness={1} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh geometry={ground.terrain} receiveShadow>
+        <meshStandardMaterial vertexColors color={theme.ground} roughness={1} />
       </mesh>
       <Lake theme={theme} />
       <mesh geometry={roadGeometry} receiveShadow>
@@ -1192,6 +1591,9 @@ export default function Track({ theme }: { theme: ThemeDef }) {
       <GapMarkers theme={theme} />
       <Portals theme={theme} />
       <MovingHazards theme={theme} />
+      <RoadMarks theme={theme} />
+      <SectorBoards theme={theme} />
+      <Scatter theme={theme} />
       <Props theme={theme} />
       <Clouds theme={theme} />
       <AmbientLife theme={theme} />
