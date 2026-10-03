@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { TrackDef, RouteDef, PadDef, Zone, ZoneKind, ThemeId, BiomeDef } from "./data";
+import type { TrackDef, RouteDef, RouteKind, PadDef, Zone, ZoneKind, ThemeId, BiomeDef, BiomeId } from "./data";
 
 // ---------------------------------------------------------------------------
 // Track designer. A circuit is drawn the way you would describe it: go
@@ -39,6 +39,7 @@ export class Turtle {
 
   /** Straight on for `len`, climbing `dy` over it. */
   go(len: number, dy = 0) {
+    if (len <= 0.01) return this;
     const n = Math.max(1, Math.ceil(len / 55));
     for (let k = 0; k < n; k++) {
       this.x += (Math.sin(this.h) * len) / n;
@@ -141,6 +142,7 @@ interface RouteSpec {
   width?: number;
   walls?: boolean;
   tunnel?: boolean;
+  kind?: RouteKind;
   /** [mark on the route, length in units]: a jump on the route */
   holes?: [string, number][];
   /** [mark on the route, kind, power] */
@@ -170,6 +172,9 @@ interface DesignSpec {
   pads?: [string, PadDef["kind"], number?, number?][];
   /** [mark of the cannon, mark where it lands, arc height] */
   cannons?: [string, string, number?][];
+  /** [mark, aesthetic]: from that mark on the lap is in that aesthetic. The line starts in `theme`. */
+  sectors?: [string, ThemeId][];
+  traffic?: number;
   /** [mark of the mouth, mark of the exit]: a warp gate by the barrier */
   portals?: [string, string][];
   routes?: RouteSpec[];
@@ -262,11 +267,20 @@ export function design(spec: DesignSpec): TrackDef {
       width: r.width,
       walls: r.walls,
       tunnel: r.tunnel,
+      kind: r.kind ?? (r.walls === false ? "cut" : undefined),
       holes: (r.holes ?? []).map(([m, len]) => [frac(m), frac(m, len)] as [number, number]),
     };
   });
 
   DESIGN_REPORT[spec.id] = { closeError: Math.hypot(ex, ez), routeErrors, length };
+
+  const sectors = [{ t0: 0, theme: spec.theme }, ...(spec.sectors ?? []).map(([m, theme]) => ({ t0: tOf(m), theme }))].sort((a, b) => a.t0 - b.t0);
+  // the ground clutter of each stretch follows its aesthetic
+  const biomeOf: Record<ThemeId, BiomeId> = {
+    frutiger: "meadow", eco: "forest", aero: "cloud", techno: "city", aqua: "reef", sunset: "desert",
+    y2k: "city", liquid: "coast", win98: "city", vapor: "ruins", dreamcore: "cloud", cyberpunk: "volcano", noir: "ruins",
+  };
+  const biomes: BiomeDef[] = sectors.map((s, i) => ({ id: biomeOf[s.theme], t0: s.t0, t1: sectors[i + 1]?.t0 ?? 1 }));
 
   let lowest = Infinity;
   for (const p of pts) lowest = Math.min(lowest, p[1]);
@@ -292,6 +306,8 @@ export function design(spec: DesignSpec): TrackDef {
     pads,
     portals: (spec.portals ?? []).map(([a, b], i) => ({ tIn: tOf(a), tOut: tOf(b), side: i % 2 ? -1 : 1, cd: 4 })),
     routes,
-    biomes: spec.biomes,
+    biomes: spec.biomes ?? biomes,
+    sectors,
+    traffic: spec.traffic,
   };
 }

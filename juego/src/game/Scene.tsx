@@ -12,6 +12,7 @@ import {
   BODY_COLORS,
   THEMES,
   mutateTheme,
+  themeOnLap,
   SHAPES,
   BOATS,
   PLANES,
@@ -29,7 +30,7 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, FLY_BASE, FLY_UP, FLY_DOWN, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
+import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, sectorMix, plainStretches, FLY_BASE, FLY_UP, FLY_DOWN, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
 import { moveBody, makeResult, placeBody, respawnBody, aimAhead, collideBodies, progDelta, GRAVITY, type Body, type StepOpts } from "../physics";
 import { emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { sfx } from "../sound";
@@ -40,6 +41,8 @@ const stepOpts: StepOpts = { rideOffset: 0, bobbing: false, fly: false, flyAlt: 
 const stepRes = makeResult();
 const aimV = new THREE.Vector3();
 const camG = makeGround();
+const sunTint = new THREE.Color();
+const sunTint2 = new THREE.Color();
 
 function wrapAngle(a: number) {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -346,6 +349,28 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   }, []);
 
   const pads = useMemo(() => getPads(), []);
+
+  // Slow traffic: a few blobs trundling along the plain stretches, on the
+  // outer lanes. Each keeps to one stretch and starts it again at the end.
+  const traffic = useMemo(() => {
+    const want = getActiveTrack().traffic ?? 0;
+    const runs = plainStretches();
+    const main = getPaths()[0];
+    const list: { from: number; to: number; i: number; side: number; speed: number; pos: THREE.Vector3; heading: number; group: { current: THREE.Group | null } }[] = [];
+    for (let k = 0; k < want && runs.length; k++) {
+      const [from, to] = runs[k % runs.length];
+      list.push({
+        from, to,
+        i: from + ((to - from) * ((k * 0.37 + 0.2) % 1)),
+        side: k % 2 ? 1 : -1,
+        speed: (8 + (k % 3) * 2) / main.ds,
+        pos: new THREE.Vector3(),
+        heading: 0,
+        group: { current: null },
+      });
+    }
+    return list;
+  }, []);
 
   /** First sample at or after `idx` of the main loop with whole road for a good way ahead. */
   function safeAhead(idx: number) {
@@ -969,7 +994,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           const rel = progDelta(all[k].t0, r.prog);
           if (rel > -0.03 && rel < 0 && r.aiSeen !== k) {
             r.aiSeen = k;
-            if (Math.random() < Math.min(0.9, ai.gateUse * 1.5)) r.aiRoute = k;
+            // a cut with no barriers is a gamble: only the sharper drivers try it, and not often
+            const risky = all[k].def?.kind === "cut" ? 0.45 : 1;
+            if (Math.random() < Math.min(0.9, ai.gateUse * 1.5) * risky) r.aiRoute = k;
           }
         }
       }
@@ -1498,6 +1525,44 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
 
 
+    // traffic trundles along, and whoever runs into the back of it pays for it
+    if (traffic.length) {
+      const main = getPaths()[0];
+      for (const tr of traffic) {
+        tr.i += tr.speed * dt;
+        if (tr.i > tr.to) tr.i = tr.from;
+        const i = Math.floor(tr.i) % main.n;
+        const lat = (main.half[i] - 3.4) * tr.side;
+        tr.pos.set(main.px[i] - main.tz[i] * lat, main.py[i], main.pz[i] + main.tx[i] * lat);
+        tr.heading = Math.atan2(main.tx[i], main.tz[i]);
+        // it grows out of the road at the start of its beat and sinks back at the end
+        const edge = Math.min(1, (tr.i - tr.from) / 8, (tr.to - tr.i) / 8);
+        if (tr.group.current) {
+          tr.group.current.position.copy(tr.pos);
+          tr.group.current.rotation.y = tr.heading;
+          tr.group.current.scale.setScalar(Math.max(0.01, edge));
+        }
+        if (edge < 0.6) continue;
+        for (const r of racers) {
+          if (r.finished || r.launch || r.ghostTimer > 0 || r.bumpCd > 0) continue;
+          const dx = r.pos.x - tr.pos.x;
+          const dz = r.pos.z - tr.pos.z;
+          if (dx * dx + dz * dz > 6.2 || Math.abs(r.y - tr.pos.y) > 2) continue;
+          r.bumpCd = 0.7;
+          r.speed *= 0.5;
+          r.stunTimer = Math.max(r.stunTimer, 0.3);
+          // shoved towards the middle of the road, out of its way
+          r.pos.x += main.tz[i] * tr.side * 1.6;
+          r.pos.z -= main.tx[i] * tr.side * 1.6;
+          emitParticles({ position: r.pos.clone().setY(r.y + 0.6), color: theme.particles[0], count: 12, speed: 3.4, spread: 1, size: 0.2, life: 0.45 });
+          if (r.isPlayer) {
+            addShake(0.25);
+            sfx.bump();
+          }
+        }
+      }
+    }
+
     // karts shove each other: the heavier character gives way less
     for (let i = 0; i < racers.length; i++) {
       const a = racers[i];
@@ -1751,6 +1816,13 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // settled: otherwise it dips through the road surface for a few frames
     const camGround = groundAt(camPos.current.x, camPos.current.z, player.y + 3, camG, 0) ? camG.y : -Infinity;
     if (camPos.current.y < camGround + 1.6) camPos.current.y = camGround + 1.6;
+    // the light is the light of the aesthetic the player is driving through
+    const mix = sectorMix(player.t);
+    const la = themeOnLap(mix.a, aestheticLap - 1);
+    const lb = themeOnLap(mix.b, aestheticLap - 1);
+    sunTint.set(la.sun).lerp(sunTint2.set(lb.sun), mix.u);
+    sun.color.lerp(sunTint, 0.06);
+    sun.intensity += (THREE.MathUtils.lerp(la.sunIntensity, lb.sunIntensity, mix.u) - sun.intensity) * 0.06;
     // the sun travels with the player, so shadows exist all the way round the lap
     sun.position.set(player.pos.x + 45, player.y + 65, player.pos.z - 25);
     sun.target.position.set(player.pos.x, player.y, player.pos.z);
@@ -1777,7 +1849,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     <group>
       <primitive object={sun} />
       <primitive object={sun.target} />
-      <Track theme={theme} />
+      <Track theme={theme} lap={aestheticLap - 1} />
       {itemBoxes.map((box, i) => (
         <group key={`b${i}`} ref={box.group} position={box.pos.toArray()}>
           {/* gift-crystal item box */}
@@ -1843,6 +1915,31 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
             isPlayer={r.isPlayer}
             glow={r.isPlayer ? theme.glow : undefined}
           />
+        </group>
+      ))}
+      {traffic.map((tr, i) => (
+        <group key={`tr${i}`} ref={tr.group}>
+          {/* a slow glass bus: a body, a dome and a beacon you can see from a long way off */}
+          <mesh position={[0, 1.05, 0]} castShadow>
+            <boxGeometry args={[2.3, 1.5, 3.6]} />
+            <meshStandardMaterial color={theme.barrierB} roughness={0.25} metalness={0.3} />
+          </mesh>
+          <mesh position={[0, 1.95, -0.2]} scale={[1, 0.6, 1.3]}>
+            <sphereGeometry args={[1.05, 14, 12]} />
+            <meshPhysicalMaterial color="#ffffff" transparent opacity={0.45} roughness={0.05} clearcoat={1} />
+          </mesh>
+          <mesh position={[0, 2.9, -0.2]}>
+            <sphereGeometry args={[0.32, 10, 10]} />
+            <meshBasicMaterial color={theme.barrierA} toneMapped={false} />
+          </mesh>
+          {[-1, 1].map((x) =>
+            [-1.1, 1.1].map((z) => (
+              <mesh key={`${x}${z}`} position={[x * 1.2, 0.42, z]} rotation={[0, 0, Math.PI / 2]}>
+                <cylinderGeometry args={[0.42, 0.42, 0.3, 12]} />
+                <meshStandardMaterial color="#15161d" roughness={0.7} />
+              </mesh>
+            ))
+          )}
         </group>
       ))}
       <mesh ref={beamRef} visible={false}>

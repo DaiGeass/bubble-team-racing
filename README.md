@@ -78,8 +78,13 @@ Options, with three control presets that install a full layout at once.
 - **8 circuits, one per aesthetic**, drawn by hand in real 3D (`juego/src/tracks.ts`):
   roads pass over and under each other, wind up spiral towers and drop off falls. Laps
   run 2150 to 2800 units.
-- **Alternate routes at other heights**: a road above and a road below the main one,
-  each with its own tarmac and barriers, plus an open chute with a gap in it.
+- **A lap that changes aesthetic**: each circuit passes through three to seven of them,
+  and the tarmac, barriers, scenery, sky, fog and light change at the arch that names the
+  next one.
+- **Twenty alternate routes**, colour-coded on the road, on the signpost at the junction
+  and on the minimap: over, under, a lane beside, or a risky cut with no barriers.
+- **A road you can read**: chevrons on the outside of every bend, a striped band before
+  every jump, lights along the flight line, slow traffic on the plain stretches.
 - **Jumps, falls and cannons**: a gap is road that is not there, with a lip that
   launches; miss it and you are put back with a run-up. Cannons fire you over a corner
   or back up to the top of a waterfall.

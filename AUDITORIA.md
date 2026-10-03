@@ -44,6 +44,24 @@ Longitud en unidades; un kart recorre unas 27 por segundo sin turbo.
 | Escritorio 98 | Windows 98 | 2242 | 2–20 | esquinas a 90°, salto, portal, recta de tres carriles (uno en túnel) |
 | Gran Fusión | mezcla | 2504 | −18–36 | espiral, vuelo, barco, inmersión, cañón y tres carriles a meta |
 
+## 2b. Vida, lectura y rutas (última pasada)
+
+- **La estética cambia dentro de la misma pista.** Cada vuelta atraviesa de 3 a 7 estéticas:
+  al cruzar un arco con el nombre de la nueva, cambian el asfalto, las barreras, los adornos,
+  el cielo, la niebla y la luz. Gran Fusión pasa por siete.
+- **Rutas: de 13 a 20.** Nuevas: carril bajo en túnel en la subida de Bahía, interior de la
+  primera horquilla de Bosque y de Cascada (sin barreras), segundo carril sobre el mar en
+  Arrecife, túnel bajo el puente en la recta de Órbita. Cada ruta lleva su color en el
+  asfalto, en el cartel de la entrada y en el minimapa: naranja = por arriba, azul = por
+  abajo, amarillo = atajo arriesgado sin barreras, verde = carril lateral.
+- **Señalización.** Cartel en cada desvío, chevrones en el exterior de cada curva, franja
+  amarilla y negra antes de cada salto con el labio iluminado, luces a lo largo de la línea
+  de vuelo y cañones marcados en el minimapa con su punto de caída.
+- **Tráfico.** De 2 a 4 autobuses lentos por pista en los tramos de carretera normal, por los
+  carriles exteriores; chocar con ellos te frena y te aparta.
+- **Ambiente.** Nubes, globos, burbujas y gotas ya rodean la pista (antes estaban agrupados
+  en el origen, fuera de la vista), y en el mar saltan peces junto a los carriles de barco.
+
 ## 3. Cómo se mide
 
 Tres herramientas en `juego/tools/`:
@@ -101,8 +119,10 @@ Del plan original, sin hacer todavía:
 - **Mutación de la pista entre vueltas**: cambian paleta y luz, y cada vuelta del líder
   enciende dos pilares móviles más en tramos de carretera normal. No hay caminos que se abran
   o cierren ni agua que suba.
-- **Elementos vivos**: quedan los pilares móviles y un portal; no hay tráfico, criaturas ni
-  plataformas móviles.
+- **Elementos vivos**: hay tráfico, pilares móviles, peces que saltan y un portal; no hay
+  plataformas móviles ni criaturas que crucen la carretera. La IA no esquiva el tráfico.
+- **Rutas ramificadas**: todas las rutas salen de la carretera principal y vuelven a ella.
+  No hay rutas que se bifurquen a su vez; el motor no lo admite todavía.
 - **IA**: no derrapa, no usa turbo ni fusión.
 - **Objetos**: 12 (el plan pide 14).
 - **Fusión**: solo el jugador, sin alternar conductor/artillero, sin torreta de 360°.

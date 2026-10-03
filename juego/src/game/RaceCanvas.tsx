@@ -5,7 +5,8 @@ import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import Scene from "./Scene";
 import type { UseControlsReturn } from "../controls";
 import { useGame } from "../store";
-import { THEMES, raceSnapshot, biomeMix } from "../data";
+import { THEMES, raceSnapshot, themeOnLap } from "../data";
+import { sectorMix } from "../trackCurve";
 
 function PostFX({ intensity }: { intensity: number }) {
   return (
@@ -31,8 +32,6 @@ export default function RaceCanvas({ controls }: { controls: UseControlsReturn }
     >
       <Suspense fallback={null}>
         <BiomeFog theme={theme} />
-        <ambientLight intensity={theme.ambient} color={theme.ambientColor} />
-        <hemisphereLight args={[theme.hemiSky, theme.hemiGround, 0.85]} />
         <Scene controls={controls} />
         {bloomOn && <PostFX intensity={theme.bloom} />}
       </Suspense>
@@ -40,35 +39,45 @@ export default function RaceCanvas({ controls }: { controls: UseControlsReturn }
   );
 }
 
+/** Fog, backdrop and fill light of the aesthetic the player is driving through. */
 function BiomeFog({ theme }: { theme: { skyTop: string; skyBottom: string; fog: string; fogNear: number; fogFar: number } }) {
   const fogRef = useRef<THREE.Fog>(null);
+  const ambRef = useRef<THREE.AmbientLight>(null);
+  const hemiRef = useRef<THREE.HemisphereLight>(null);
   const { gl } = useThree();
-  const cur = new THREE.Color(theme.fog);
-  const target = new THREE.Color();
-  const curTop = new THREE.Color(theme.skyTop);
-  const tgtTop = new THREE.Color();
-  const curBot = new THREE.Color(theme.skyBottom);
-  const tgtBot = new THREE.Color();
-  useFrame((_: any, dt: number) => {
-    const r = raceSnapshot.racers[0];
-    const t = r?.t ?? 0;
-    const { a, b, u } = biomeMix(t);
-    tgtTop.copy(new THREE.Color(a.skyTop)).lerp(new THREE.Color(b.skyTop), u);
-    tgtBot.copy(new THREE.Color(a.skyBottom)).lerp(new THREE.Color(b.skyBottom), u);
-    target.copy(new THREE.Color(a.fog)).lerp(new THREE.Color(b.fog), u);
+  const lap = useGame((s) => s.telemetry.lap) - 1;
+  const cur = useRef({ fog: new THREE.Color(theme.fog), top: new THREE.Color(theme.skyTop), bot: new THREE.Color(theme.skyBottom) });
+  const tmp = useRef({ a: new THREE.Color(), b: new THREE.Color() });
+  useFrame((_, dt) => {
+    const { a, b, u } = sectorMix(raceSnapshot.racers[0]?.t ?? 0);
+    const ta = themeOnLap(a, lap);
+    const tb = themeOnLap(b, lap);
     const k = Math.min(1, dt * 1.4);
-    cur.lerp(target, k);
-    curTop.lerp(tgtTop, k);
-    curBot.lerp(tgtBot, k);
+    const c = cur.current;
+    const t = tmp.current;
+    c.fog.lerp(t.a.set(ta.fog).lerp(t.b.set(tb.fog), u), k);
+    c.top.lerp(t.a.set(ta.skyTop).lerp(t.b.set(tb.skyTop), u), k);
+    c.bot.lerp(t.a.set(ta.skyBottom).lerp(t.b.set(tb.skyBottom), u), k);
     if (fogRef.current) {
-      fogRef.current.color.copy(cur);
-      const near = THREE.MathUtils.lerp((a as any).fogNear ?? theme.fogNear, (b as any).fogNear ?? theme.fogNear, u);
-      const far = THREE.MathUtils.lerp((a as any).fogFar ?? theme.fogFar, (b as any).fogFar ?? theme.fogFar, u);
-      fogRef.current.near = near;
-      fogRef.current.far = far;
+      fogRef.current.color.copy(c.fog);
+      fogRef.current.near += (THREE.MathUtils.lerp(ta.fogNear, tb.fogNear, u) - fogRef.current.near) * k;
+      fogRef.current.far += (THREE.MathUtils.lerp(ta.fogFar, tb.fogFar, u) - fogRef.current.far) * k;
     }
-    const el = gl.domElement;
-    el.style.background = `linear-gradient(180deg, ${curTop.getStyle()} 0%, ${curBot.getStyle()} 62%, ${cur.getStyle()} 100%)`;
+    if (ambRef.current) {
+      ambRef.current.color.lerp(t.a.set(ta.ambientColor).lerp(t.b.set(tb.ambientColor), u), k);
+      ambRef.current.intensity += (THREE.MathUtils.lerp(ta.ambient, tb.ambient, u) - ambRef.current.intensity) * k;
+    }
+    if (hemiRef.current) {
+      hemiRef.current.color.lerp(t.a.set(ta.hemiSky).lerp(t.b.set(tb.hemiSky), u), k);
+      hemiRef.current.groundColor.lerp(t.a.set(ta.hemiGround).lerp(t.b.set(tb.hemiGround), u), k);
+    }
+    gl.domElement.style.background = `linear-gradient(180deg, ${c.top.getStyle()} 0%, ${c.bot.getStyle()} 62%, ${c.fog.getStyle()} 100%)`;
   });
-  return <fog ref={fogRef} attach="fog" args={[theme.fog, theme.fogNear, theme.fogFar]} />;
+  return (
+    <>
+      <fog ref={fogRef} attach="fog" args={[theme.fog, theme.fogNear, theme.fogFar]} />
+      <ambientLight ref={ambRef} intensity={1} />
+      <hemisphereLight ref={hemiRef} args={["#ffffff", "#888888", 0.85]} />
+    </>
+  );
 }

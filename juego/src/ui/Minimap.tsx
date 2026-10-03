@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { getActiveTrack, trackFrameAt, halfWidthAt, getPaths, F_SOLID } from "../trackCurve";
+import { getActiveTrack, trackFrameAt, halfWidthAt, getPaths, getPads, ROUTE_COLOURS, F_SOLID } from "../trackCurve";
+import { THEMES } from "../data";
 import { raceSnapshot, ZONES } from "../data";
 
 const SIZE = 168;
@@ -24,6 +25,8 @@ interface Seg {
   h: number;
   zone: "water" | "sky" | "sub" | null;
   route: boolean;
+  /** colour of the route, by what kind of road it is */
+  tint: string | null;
 }
 
 export default function Minimap() {
@@ -56,7 +59,7 @@ export default function Minimap() {
         const t = path.prog[i];
         const zone = path.main ? ZONES.find((z) => t >= z.t0 && t <= z.t1) : undefined;
         const h = (path.py[i] + path.py[j]) / 2;
-        segs.push({ ax: path.px[i], az: path.pz[i], bx: path.px[j], bz: path.pz[j], h, zone: zone?.type ?? null, route: !path.main });
+        segs.push({ ax: path.px[i], az: path.pz[i], bx: path.px[j], bz: path.pz[j], h, zone: zone?.type ?? null, route: !path.main, tint: path.main ? null : ROUTE_COLOURS[path.def?.kind ?? "side"] });
         minX = Math.min(minX, path.px[i]);
         maxX = Math.max(maxX, path.px[i]);
         minZ = Math.min(minZ, path.pz[i]);
@@ -131,7 +134,7 @@ export default function Minimap() {
           g.stroke();
           // higher is lighter; zones keep their own colour
           g.strokeStyle =
-            s.zone === "water" ? theme.water : s.zone === "sky" ? theme.glow : s.zone === "sub" ? "#3b82f6" : shade(s.route ? theme.barrierA : theme.road, u);
+            s.zone === "water" ? theme.water : s.zone === "sky" ? theme.glow : s.zone === "sub" ? "#3b82f6" : s.tint ?? shade(theme.road, u);
           g.lineWidth = wide;
           g.stroke();
         }
@@ -157,23 +160,45 @@ export default function Minimap() {
           g.fillStyle = "rgba(124,92,255,0.35)";
           g.fill();
         }
+        // where the lap crosses into another aesthetic: a dot in that aesthetic's colour
+        const main = getPaths()[0];
+        for (const s of (getActiveTrack().sectors ?? []).slice(1)) {
+          const i = Math.round(main.n * s.t0) % main.n;
+          g.beginPath();
+          g.arc(toX(main.px[i]), toY(main.pz[i]), 3.4, 0, Math.PI * 2);
+          g.fillStyle = THEMES[s.theme].glow;
+          g.fill();
+          g.strokeStyle = "rgba(10,30,50,0.8)";
+          g.lineWidth = 1.2;
+          g.stroke();
+        }
+        // cannons: a filled triangle at the mouth, a line to where it sets you down
+        for (const pad of getPads()) {
+          if (pad.kind !== "cannon") continue;
+          const x = toX(pad.pos.x);
+          const y = toY(pad.pos.z);
+          g.strokeStyle = "#ff4d6d";
+          g.lineWidth = 1.6;
+          g.setLineDash([3, 3]);
+          g.beginPath();
+          g.moveTo(x, y);
+          g.lineTo(toX(main.px[pad.toIdx]), toY(main.pz[pad.toIdx]));
+          g.stroke();
+          g.setLineDash([]);
+          g.fillStyle = "#ff4d6d";
+          g.beginPath();
+          g.moveTo(x, y - 5);
+          g.lineTo(x + 4.5, y + 4);
+          g.lineTo(x - 4.5, y + 4);
+          g.closePath();
+          g.fill();
+        }
         layerRef.current = { key, canvas: layer };
       }
 
       ctx.clearRect(0, 0, SIZE, SIZE);
       ctx.drawImage(layerRef.current.canvas, 0, 0);
       const pts = [{ x: startRef.current.x, y: startRef.current.z }];
-
-      // sector ticks, matching the numbered boards standing on the circuit
-      ctx.fillStyle = "rgba(10,30,50,0.55)";
-      ctx.font = "700 7px system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      for (let i = 0; i < 8; i++) {
-        const f = trackFrameAt(i / 8);
-        const mark = f.point.clone().addScaledVector(f.normal, 9);
-        ctx.fillText(String(i + 1), toX(mark.x), toY(mark.z));
-      }
 
       // start line
       const s = pts[0];

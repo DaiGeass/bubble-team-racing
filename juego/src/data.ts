@@ -641,6 +641,16 @@ export interface RouteDef {
   tunnel?: boolean;
   /** internal: an old lateral side road converted on load */
   legacy?: Branch;
+  /** what the road is, for its colour, its signpost and the map: over, under, a risky cut, a lane beside */
+  kind?: RouteKind;
+}
+
+export type RouteKind = "high" | "low" | "cut" | "side";
+
+/** A stretch of the lap with its own aesthetic, starting at lap progress t0. */
+export interface SectorDef {
+  t0: number;
+  theme: ThemeId;
 }
 
 /** Something on the tarmac that acts on whoever drives over it. */
@@ -746,6 +756,10 @@ export interface TrackDef {
   floor?: number;
   /** height of the sea. Boat stretches ride on it, submarine stretches go under it */
   sea?: number;
+  /** the aesthetics the lap passes through, in order; the first starts at the line */
+  sectors?: SectorDef[];
+  /** slow traffic on the plain stretches of road */
+  traffic?: number;
 }
 
 /** Vertical profile of a circuit, written as harmonics of the loop angle. */
@@ -864,6 +878,22 @@ export function mutateTheme(base: ThemeDef, lap: number): ThemeDef {
     bloom: base.bloom * dim,
   };
 }
+
+const themeCache = new Map<string, ThemeDef>();
+/** An aesthetic as it looks on a given lap. Cached: this is asked for every frame. */
+export function themeOnLap(id: ThemeId, lap: number): ThemeDef {
+  const step = ((lap % MUTATION_STEPS) + MUTATION_STEPS) % MUTATION_STEPS;
+  const key = id + ":" + step;
+  let t = themeCache.get(key);
+  if (!t) themeCache.set(key, (t = mutateTheme(THEMES[id], step)));
+  return t;
+}
+
+/** The landscape that goes with each aesthetic, for the ground clutter of its stretch. */
+export const THEME_BIOME: Record<ThemeId, BiomeId> = {
+  frutiger: "meadow", eco: "forest", aero: "cloud", techno: "city", aqua: "reef", sunset: "desert",
+  y2k: "city", liquid: "coast", win98: "city", vapor: "ruins", dreamcore: "cloud", cyberpunk: "volcano", noir: "ruins",
+};
 
 const MUTATION_STEPS = 6;
 const MUTATION_PROPS: ThemeDef["prop"][] = ["palm", "crystal", "tree", "cactus", "coral", "y2k", "circuit", "liquid", "vapor"];

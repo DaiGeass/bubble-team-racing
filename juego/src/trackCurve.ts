@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TRACKS, ZONES, TRACK_WIDTH, type TrackDef, type RouteDef, setBiomeTrack, defaultBiomes } from "./data";
+import { TRACKS, ZONES, TRACK_WIDTH, type TrackDef, type RouteDef, type ThemeId, setBiomeTrack, defaultBiomes } from "./data";
 
 // ---------------------------------------------------------------------------
 // Track runtime. A circuit is a set of road ribbons in real 3D: the main loop
@@ -484,6 +484,84 @@ export function getPads(): PadRT[] {
       lift: pad.lift ?? 22,
     };
   });
+}
+
+/** Colour of each kind of route: on its tarmac, on its signpost and on the map. */
+export const ROUTE_COLOURS: Record<string, string> = { high: "#ffc9a8", low: "#a8d4ff", cut: "#ffe873", side: "#b8f5cf" };
+
+/** Centre and half-size of the circuit on the ground plane, for placing scenery around it. */
+export function trackBounds() {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, y1 = -Infinity;
+  for (const p of paths) {
+    for (let i = 0; i < p.n; i++) {
+      x0 = Math.min(x0, p.px[i]);
+      x1 = Math.max(x1, p.px[i]);
+      z0 = Math.min(z0, p.pz[i]);
+      z1 = Math.max(z1, p.pz[i]);
+      y1 = Math.max(y1, p.py[i]);
+    }
+  }
+  return { cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, r: Math.max(x1 - x0, z1 - z0) / 2, top: y1 };
+}
+
+/**
+ * Stretches of the main loop that are plain dry road for at least `min` units:
+ * [first sample, last sample]. Slow traffic lives on these.
+ */
+export function plainStretches(min = 170): [number, number][] {
+  const main = paths[0];
+  const out: [number, number][] = [];
+  const zones = getActiveTrack().zones;
+  const ok = (i: number) => {
+    const t = main.prog[i];
+    if (zones.some((z) => t >= z.t0 - 0.01 && t <= z.t1 + 0.01)) return false;
+    // not on the grid, and nowhere near a jump or a cannon shot
+    return t > 0.04 && plainRoadAt(t, 55);
+  };
+  let start = -1;
+  for (let i = 0; i < main.n; i += 4) {
+    if (ok(i)) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      if ((i - start) * main.ds >= min) out.push([start, i - 4]);
+      start = -1;
+    }
+  }
+  if (start >= 0 && (main.n - start) * main.ds >= min) out.push([start, main.n - 8]);
+  return out.sort((a, b) => b[1] - b[0] - (a[1] - a[0]));
+}
+
+/** Index of the aesthetic sector that lap progress t falls in. */
+export function sectorIndexAt(t: number): number {
+  const sectors = getActiveTrack().sectors;
+  if (!sectors || sectors.length < 2) return 0;
+  const tt = norm(t);
+  let k = 0;
+  for (let i = 0; i < sectors.length; i++) if (tt >= sectors[i].t0) k = i;
+  return k;
+}
+
+/** Share of a sector, at its end, over which the light and the sky hand over to the next one. */
+const SECTOR_BLEND = 0.03;
+
+const _mix: { a: ThemeId; b: ThemeId; u: number } = { a: "frutiger", b: "frutiger", u: 0 };
+/** The aesthetic at lap progress t and the one it is fading into. The returned object is reused. */
+export function sectorMix(t: number) {
+  const def = getActiveTrack();
+  const sectors = def.sectors;
+  if (!sectors || sectors.length < 2) {
+    _mix.a = _mix.b = def.theme;
+    _mix.u = 0;
+    return _mix;
+  }
+  const tt = norm(t);
+  const i = sectorIndexAt(tt);
+  const next = (i + 1) % sectors.length;
+  const end = next === 0 ? 1 : sectors[next].t0;
+  _mix.a = sectors[i].theme;
+  _mix.b = sectors[next].theme;
+  _mix.u = Math.min(1, Math.max(0, 1 - (end - tt) / SECTOR_BLEND));
+  return _mix;
 }
 
 /** How far above the flight line a plane cruises when the pilot does nothing. */
