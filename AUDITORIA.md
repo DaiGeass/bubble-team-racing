@@ -103,6 +103,23 @@ Bugs que aparecieron al medir y se arreglaron: la IA tomaba las curvas por fuera
 invertido), se quedaba dando vueltas al final de una ruta más larga que el tramo que
 sustituye, y los chevrones de curva estaban en el interior en vez de en el exterior.
 
+## 2d. Pantalla que se oscurecía
+
+Medido el brillo de la pantalla en carreras completas en las 8 pistas, y a tamaño de
+escritorio con el bloom activado. No apareció ningún fundido a negro total, pero sí dos
+causas de que la imagen se fuera casi a negro:
+
+- **La mutación entre vueltas** giraba el tono de los colores y además los atenuaba hasta un
+  28 %. Un cielo verde azulado girado a azul quedaba casi negro (Escritorio 98, vuelta 2).
+  Ahora el color girado se aclara hasta verse tan brillante como el original, y la
+  atenuación máxima es del 10 %.
+- **Las estéticas nocturnas** (Techno, Cyberpunk, Noir, Vaporwave) tenían cielo, niebla y
+  suelo casi negros y poca luz. Siguen siendo de noche, pero con cielo y suelo visibles y
+  más luz ambiente.
+
+Brillo medio de pantalla (0–255) antes y después: Torre Neón en el tramo Cyberpunk 38 → 52;
+Escritorio 98 en la vuelta 2, franja de cielo 16 → 118.
+
 ## 3. Cómo se mide
 
 Tres herramientas en `juego/tools/`:

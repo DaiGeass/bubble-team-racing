@@ -280,10 +280,10 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     particles: ["#ffffff", "#7de1ff", "#a9d6ff", "#dff0ff"], prop: "crystal", bloom: 1.15,
   },
   techno: {
-    id: "techno", name: "TECHNO", skyTop: "#0b1030", skyBottom: "#2b1a6b", fog: "#1b1147", fogNear: 70, fogFar: 260,
-    water: "#123a7a", ground: "#171a3a", road: "#1d2350", roadLine: "#00ffc6", roadEdge: "#7c5cff",
-    barrierA: "#00e5ff", barrierB: "#ff3ea5", sun: "#8fb0ff", sunIntensity: 1.1, ambient: 0.7, ambientColor: "#8ea2ff",
-    hemiSky: "#3b2a9b", hemiGround: "#0b1030", cloud: "#2c2a6b", isle: "#1b2160", glow: "#00ffc6",
+    id: "techno", name: "TECHNO", skyTop: "#1a2260", skyBottom: "#4a2fa8", fog: "#2c2070", fogNear: 70, fogFar: 260,
+    water: "#123a7a", ground: "#262c66", road: "#2c3470", roadLine: "#00ffc6", roadEdge: "#7c5cff",
+    barrierA: "#00e5ff", barrierB: "#ff3ea5", sun: "#8fb0ff", sunIntensity: 1.6, ambient: 1.15, ambientColor: "#8ea2ff",
+    hemiSky: "#3b2a9b", hemiGround: "#2a2f6a", cloud: "#4a46a0", isle: "#2e3690", glow: "#00ffc6",
     particles: ["#00ffc6", "#ff3ea5", "#7c5cff", "#ffffff"], prop: "circuit", bloom: 1.6,
   },
   aqua: {
@@ -323,9 +323,9 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
   },
   vapor: {
     id: "vapor", name: "VAPORWAVE", skyTop: "#b967ff", skyBottom: "#ff9ee0", fog: "#ff9be0", fogNear: 80, fogFar: 280,
-    water: "#01cdfe", ground: "#3b1d6e", road: "#2a1458", roadLine: "#05ffa1", roadEdge: "#ff71ce",
-    barrierA: "#ff71ce", barrierB: "#01cdfe", sun: "#ffd1fa", sunIntensity: 1.3, ambient: 0.85, ambientColor: "#f0b0ff",
-    hemiSky: "#b967ff", hemiGround: "#2a1458", cloud: "#ffb3ec", isle: "#5a2d9e", glow: "#05ffa1",
+    water: "#01cdfe", ground: "#4b2a86", road: "#4a2a88", roadLine: "#05ffa1", roadEdge: "#ff71ce",
+    barrierA: "#ff71ce", barrierB: "#01cdfe", sun: "#ffd1fa", sunIntensity: 1.3, ambient: 1.05, ambientColor: "#f0b0ff",
+    hemiSky: "#b967ff", hemiGround: "#4a2a88", cloud: "#ffb3ec", isle: "#5a2d9e", glow: "#05ffa1",
     particles: ["#ff71ce", "#01cdfe", "#05ffa1", "#b967ff"], prop: "vapor", bloom: 1.5,
   },
   dreamcore: {
@@ -336,17 +336,17 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     particles: ["#ffffff", "#ffe1f5", "#c9e6ff", "#d9c9ff"], prop: "vapor", bloom: 1.1,
   },
   cyberpunk: {
-    id: "cyberpunk", name: "CYBERPUNK", skyTop: "#050510", skyBottom: "#0f102b", fog: "#0b0b24", fogNear: 60, fogFar: 240,
-    water: "#102040", ground: "#101010", road: "#1a1433", roadLine: "#39ff14", roadEdge: "#7c9cff",
-    barrierA: "#ff3366", barrierB: "#39ff14", sun: "#39ff14", sunIntensity: 1.2, ambient: 0.9, ambientColor: "#4d7cff",
-    hemiSky: "#0f102b", hemiGround: "#101010", cloud: "#1a1433", isle: "#1a1433", glow: "#39ff14",
+    id: "cyberpunk", name: "CYBERPUNK", skyTop: "#141a3c", skyBottom: "#2a2466", fog: "#1c1c4a", fogNear: 80, fogFar: 280,
+    water: "#102040", ground: "#22243a", road: "#2a2452", roadLine: "#39ff14", roadEdge: "#7c9cff",
+    barrierA: "#ff3366", barrierB: "#39ff14", sun: "#b8ffd0", sunIntensity: 1.6, ambient: 1.25, ambientColor: "#4d7cff",
+    hemiSky: "#3a3f8a", hemiGround: "#2a2a40", cloud: "#3a3470", isle: "#2c2a55", glow: "#39ff14",
     particles: ["#39ff14", "#7c9cff", "#ff3366", "#ffffff"], prop: "circuit", bloom: 1.2, dark: true,
   },
   noir: {
-    id: "noir", name: "NOIR", skyTop: "#0b0b0b", skyBottom: "#1a1a1a", fog: "#111111", fogNear: 40, fogFar: 220,
-    water: "#0f141f", ground: "#151515", road: "#1f1f1f", roadLine: "#d8d8d8", roadEdge: "#f5f5f5",
-    barrierA: "#d8d8d8", barrierB: "#a0a0a0", sun: "#ffffff", sunIntensity: 0.8, ambient: 0.7, ambientColor: "#ffffff",
-    hemiSky: "#1a1a1a", hemiGround: "#151515", cloud: "#2a2a2a", isle: "#202020", glow: "#ffffff",
+    id: "noir", name: "NOIR", skyTop: "#3a3a40", skyBottom: "#6a6a72", fog: "#4a4a50", fogNear: 70, fogFar: 260,
+    water: "#0f141f", ground: "#3a3a3e", road: "#48484c", roadLine: "#d8d8d8", roadEdge: "#f5f5f5",
+    barrierA: "#d8d8d8", barrierB: "#a0a0a0", sun: "#ffffff", sunIntensity: 1.5, ambient: 1.1, ambientColor: "#ffffff",
+    hemiSky: "#6a6a72", hemiGround: "#3a3a3e", cloud: "#7a7a80", isle: "#4a4a4e", glow: "#ffffff",
     particles: ["#ffffff", "#d8d8d8", "#a0a0a0", "#f5f5f5"], prop: "tree", bloom: 0.4, dark: true,
   },
 };
@@ -863,7 +863,8 @@ export function mutateTheme(base: ThemeDef, lap: number): ThemeDef {
   const step = ((lap % MUTATION_STEPS) + MUTATION_STEPS) % MUTATION_STEPS;
   if (step === 0) return base;
   const hue = (step / MUTATION_STEPS) * 360;
-  const dim = 0.86 + 0.14 * Math.cos((step / MUTATION_STEPS) * Math.PI * 2);
+  // a lap may be a little dimmer than the first, never dark
+  const dim = 0.95 + 0.05 * Math.cos((step / MUTATION_STEPS) * Math.PI * 2);
   const rot = (c: string, d: number) => shiftColor(c, hue, d, dim);
   return {
     ...base,
@@ -911,43 +912,39 @@ export const THEME_BIOME: Record<ThemeId, BiomeId> = {
 const MUTATION_STEPS = 6;
 const MUTATION_PROPS: ThemeDef["prop"][] = ["palm", "crystal", "tree", "cactus", "coral", "y2k", "circuit", "liquid", "vapor"];
 
-/** Rotates hue, nudges lightness and scales brightness, working on #rrggbb. */
+/**
+ * Rotates hue and nudges saturation, working on #rrggbb. The colour keeps the
+ * brightness the eye sees: a teal sky turned to blue is lightened until it is
+ * as bright as the teal was, instead of going to near black.
+ */
 function shiftColor(hex: string, hue: number, sat: number, dim: number): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
   if (!m) return hex;
   const n = parseInt(m[1], 16);
-  let r = ((n >> 16) & 255) / 255;
-  let g = ((n >> 8) & 255) / 255;
-  let b = (n & 255) / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  const d = max - min;
-  let h = 0;
-  let sl = 0;
-  if (d > 0) {
-    sl = d / (1 - Math.abs(2 * l - 1));
-    if (max === r) h = ((g - b) / d) % 6;
-    else if (max === g) h = (b - r) / d + 2;
-    else h = (r - g) / d + 4;
-    h /= 6;
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const luma = (x: number, y: number, z: number) => 0.2126 * x + 0.7152 * y + 0.0722 * z;
+  const [h, s0, l] = hexToHsl(hex.startsWith("#") ? hex : "#" + hex);
+  const h2 = (((h + hue / 360) % 1) + 1) % 1;
+  const s2 = Math.max(0, Math.min(1, s0 + sat));
+  const rgbOf = (light: number) => {
+    const out = hslToHex(h2, s2, light);
+    const k = parseInt(out.slice(1), 16);
+    return [((k >> 16) & 255) / 255, ((k >> 8) & 255) / 255, (k & 255) / 255];
+  };
+  const want = luma(r, g, b) * dim;
+  // walk the lightness until the result looks as bright as the original did
+  let lo = 0;
+  let hi = 1;
+  let light = l;
+  for (let i = 0; i < 14; i++) {
+    light = (lo + hi) / 2;
+    const c = rgbOf(light);
+    if (luma(c[0], c[1], c[2]) < want) lo = light;
+    else hi = light;
   }
-  h = (((h + hue / 360) % 1) + 1) % 1;
-  sl = Math.max(0, Math.min(1, sl + sat));
-  const c = (1 - Math.abs(2 * l - 1)) * sl;
-  const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
-  const mm = l - c / 2;
-  const seg = Math.floor(h * 6) % 6;
-  const rgb = [
-    [c, x, 0],
-    [x, c, 0],
-    [0, c, x],
-    [0, x, c],
-    [x, 0, c],
-    [c, 0, x],
-  ][seg] ?? [0, 0, 0];
-  const out = rgb.map((v) => Math.round((v + mm) * dim * 255));
-  return `#${out.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("")}`;
+  return hslToHex(h2, s2, light);
 }
 
 /** Live state for mutating hazards (written by Track, read by the simulation). */
