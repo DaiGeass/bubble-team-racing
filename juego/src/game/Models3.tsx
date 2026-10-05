@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import type { BoatId, FinishId, PlaneId, ShapeId, SubId } from "../data";
+import type { BoatId, FinishId, HoverId, PlaneId, ShapeId, SubId } from "../data";
 import { Glass, Neon, Paint } from "./Models";
 
 interface C {
@@ -726,4 +726,154 @@ export function Sub3({ kind, body, decal, glow, finish }: C & { kind: SubId }) {
       </group>
     );
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// LEVITATORS: what carries the kart over a magnetic stretch. The kart stays;
+// the wheels go and one of these comes out from under it.
+// ---------------------------------------------------------------------------
+export function Hover3({ kind, body, decal, glow, finish }: C & { kind: HoverId }) {
+  const spinA = useRef<THREE.Group>(null);
+  const spinB = useRef<THREE.Group>(null);
+  const pulse = useRef<THREE.Group>(null);
+  useFrame((s, dt) => {
+    if (spinA.current) spinA.current.rotation.y += dt * 5;
+    if (spinB.current) spinB.current.rotation.x += dt * 3.2;
+    if (pulse.current) pulse.current.scale.setScalar(1 + Math.sin(s.clock.elapsedTime * 7) * 0.08);
+  });
+  const g = glow ?? "#e879f9";
+  /** the field under a pad: a disc of light pressing on the road */
+  const field = (x: number, z: number, r: number) => (
+    <group key={`${x}${z}`} position={[x, 0.1, z]}>
+      <mesh>
+        <cylinderGeometry args={[r, r * 0.8, 0.16, 14]} />
+        <Metal />
+      </mesh>
+      <mesh position={[0, -0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[r * 0.85, 14]} />
+        <meshBasicMaterial color={g} toneMapped={false} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0, -0.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[r * 0.9, r * 1.35, 18]} />
+        <meshBasicMaterial color={g} transparent opacity={0.35} toneMapped={false} depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  );
+  if (kind === "disc")
+    return (
+      <group>
+        <mesh position={[0, 0.2, 0]} scale={[1, 0.16, 1]} castShadow>
+          <sphereGeometry args={[1.7, 24, 10]} />
+          <Paint color={body} metal={0.8} rough={0.12} finish={finish} />
+        </mesh>
+        <group ref={spinA} position={[0, 0.2, 0]}>
+          {Array.from({ length: 6 }, (_, k) => (
+            <mesh key={k} position={[Math.sin((k * Math.PI) / 3) * 1.45, 0, Math.cos((k * Math.PI) / 3) * 1.45]}>
+              <boxGeometry args={[0.3, 0.12, 0.3]} />
+              <Neon color={k % 2 ? g : decal} i={3} />
+            </mesh>
+          ))}
+        </group>
+        <group ref={pulse} position={[0, -0.25, 0]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.9, 1.8, 28]} />
+            <meshBasicMaterial color={g} transparent opacity={0.4} toneMapped={false} depthWrite={false} side={THREE.DoubleSide} />
+          </mesh>
+        </group>
+      </group>
+    );
+  if (kind === "nacelle")
+    return (
+      <group>
+        {[-1.25, 1.25].map((x) => (
+          <group key={x} position={[x, 0.35, -0.1]}>
+            <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <capsuleGeometry args={[0.34, 2.0, 6, 12]} />
+              <Paint color={body} finish={finish} />
+            </mesh>
+            {[-0.7, 0.2, 1.0].map((z) => (
+              <mesh key={z} position={[0, 0, z]}>
+                <torusGeometry args={[0.4, 0.05, 6, 16]} />
+                <Neon color={g} i={2.6} />
+              </mesh>
+            ))}
+            <mesh position={[0, 0, -1.4]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.26, 0.18, 0.2, 10]} />
+              <Neon color={decal} i={3} />
+            </mesh>
+            <mesh position={[-x * 0.5, 0.05, 0]}>
+              <boxGeometry args={[0.9, 0.08, 0.5]} />
+              <Metal />
+            </mesh>
+          </group>
+        ))}
+        {field(0, 0, 0.7)}
+      </group>
+    );
+  if (kind === "magboard")
+    return (
+      <group>
+        <mesh position={[0, 0.15, 0]} scale={[1, 0.12, 1.9]} castShadow>
+          <sphereGeometry args={[1.05, 18, 10]} />
+          <Paint color={body} finish={finish} />
+        </mesh>
+        <mesh position={[0, 0.27, 0]} scale={[0.2, 0.05, 1.8]}>
+          <sphereGeometry args={[1.05, 10, 8]} />
+          <Neon color={decal} i={2} />
+        </mesh>
+        {[-0.5, 0.5].map((x) => (
+          <mesh key={x} position={[x, -0.15, -1.5]} rotation={[0.5, 0, 0]}>
+            <boxGeometry args={[0.06, 0.6, 0.6]} />
+            <Paint color={decal} finish={finish} />
+          </mesh>
+        ))}
+        {field(0, 1.0, 0.5)}
+        {field(0, -1.0, 0.5)}
+      </group>
+    );
+  if (kind === "gyro")
+    return (
+      <group>
+        {/* two rings turning about the kart, on different axes */}
+        <group ref={spinA} position={[0, 0.7, 0]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[1.9, 0.08, 8, 40]} />
+            <Paint color={body} metal={0.9} rough={0.1} finish={finish} />
+          </mesh>
+          {[0, 1, 2, 3].map((k) => (
+            <mesh key={k} position={[Math.sin((k * Math.PI) / 2) * 1.9, 0, Math.cos((k * Math.PI) / 2) * 1.9]}>
+              <sphereGeometry args={[0.16, 8, 8]} />
+              <Neon color={g} i={3.2} />
+            </mesh>
+          ))}
+        </group>
+        <group ref={spinB} position={[0, 0.7, 0]}>
+          <mesh rotation={[0, Math.PI / 2, 0]}>
+            <torusGeometry args={[1.65, 0.05, 8, 36]} />
+            <Neon color={decal} i={2} />
+          </mesh>
+        </group>
+        {field(0, 0, 0.8)}
+      </group>
+    );
+  // maglev sled
+  return (
+    <group>
+      <mesh position={[0, 0.16, 0]} castShadow>
+        <boxGeometry args={[1.9, 0.14, 2.9]} />
+        <Paint color={body} finish={finish} />
+      </mesh>
+      <mesh position={[0, 0.25, 1.6]} rotation={[-0.45, 0, 0]}>
+        <boxGeometry args={[1.9, 0.14, 0.7]} />
+        <Paint color={body} finish={finish} />
+      </mesh>
+      {[-0.98, 0.98].map((x) => (
+        <mesh key={x} position={[x, 0.16, 0]}>
+          <boxGeometry args={[0.07, 0.2, 2.9]} />
+          <Neon color={decal} i={2.2} />
+        </mesh>
+      ))}
+      {[[-0.7, 1.0], [0.7, 1.0], [-0.7, -1.0], [0.7, -1.0]].map(([x, z]) => field(x, z, 0.42))}
+    </group>
+  );
 }

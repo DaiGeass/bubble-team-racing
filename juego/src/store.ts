@@ -49,6 +49,10 @@ export interface Telemetry {
   coins: number;
   rings: number;
   weapon: WeaponId | null;
+  /** 0..1: how settled the player is in a slipstream */
+  draft: number;
+  /** the item waiting behind the one in hand */
+  weapon2: WeaponId | null;
   speedKph: number;
   tagCooldown: number;
   shieldActive: boolean;
@@ -59,6 +63,10 @@ export interface Telemetry {
   countdown: number;
   mode: VehicleMode;
   fuseReady: number; // 0..1 cooldown progress
+  /** whole seconds until the fusion button works again */
+  fuseWait: number;
+  /** 0..1 of the time the partner's own turret has left; 0 when it is away */
+  soloTurret: number;
   fused: boolean;
   fusionHp: number; // 0..1 turret partner health
   turbo: number; // 0..1 drift-charged turbo meter
@@ -85,6 +93,8 @@ const defaultTelemetry: Telemetry = {
   coins: 0,
   rings: 0,
   weapon: null,
+  weapon2: null,
+  draft: 0,
   speedKph: 0,
   tagCooldown: 1,
   shieldActive: false,
@@ -95,6 +105,8 @@ const defaultTelemetry: Telemetry = {
   countdown: 3,
   mode: "land",
   fuseReady: 1,
+  fuseWait: 0,
+  soloTurret: 0,
   fused: false,
   fusionHp: 1,
   turbo: 0,
@@ -126,6 +138,7 @@ export interface VehiclePrefs {
   boat: BoatId;
   plane: PlaneId;
   sub: SubId;
+  hover: import("./data").HoverId;
   finish: import("./data").FinishId;
 }
 
@@ -306,6 +319,7 @@ const defaultVehicle: VehiclePrefs = {
   boat: "cat",
   plane: "wing",
   sub: "classic",
+  hover: "maglev",
 } as VehiclePrefs;
 
 // Sensible defaults per device: touch screens get auto-throttle, small screens skip bloom.

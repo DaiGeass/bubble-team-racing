@@ -62,6 +62,8 @@ export interface StepOpts {
   flyMargin: number;
   /** passes through barriers */
   ghost: boolean;
+  /** share of gravity that acts on it: a levitating craft comes down slowly */
+  gravityMul?: number;
 }
 
 export interface StepResult {
@@ -197,13 +199,13 @@ export function moveBody(b: Body, dx: number, dz: number, dt: number, opts: Step
     // nothing underneath: fall until something is, or until it is clearly gone
     if (!b.airborne) res.launched = true;
     b.airborne = true;
-    b.vy -= GRAVITY * dt;
+    b.vy -= GRAVITY * (opts.gravityMul ?? 1) * dt;
     b.y += b.vy * dt;
     if (b.y < b.groundY - KILL_DROP) res.fell = true;
   } else {
     const rideY = G.y + opts.rideOffset;
     const need = THREE.MathUtils.clamp(dt > 1e-4 ? (rideY - b.y) / dt : 0, -MAX_GLUE, MAX_GLUE);
-    const fall = b.vy - GRAVITY * dt;
+    const fall = b.vy - GRAVITY * (opts.gravityMul ?? 1) * dt;
     // the road dropped away faster than gravity can follow: we leave it
     if (!b.airborne && need < fall - 1.5 && (!opts.bobbing || b.y - rideY > 0.3)) {
       b.airborne = true;

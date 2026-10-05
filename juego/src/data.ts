@@ -17,7 +17,7 @@ export type ShapeId =
   | "tank" | "wedge" | "sled" | "orbit" | "dune" | "phantom" | "mech" | "board" | "shell" | "winglet" | "pod";
 export type ThemeId =
   | "frutiger" | "aero" | "techno" | "eco" | "aqua" | "sunset"
-  | "y2k" | "liquid" | "win98" | "vapor" | "dreamcore" | "cyberpunk" | "noir";
+  | "y2k" | "liquid" | "win98" | "vapor" | "dreamcore" | "cyberpunk" | "noir" | "backrooms" | "liminal";
 export type WheelStyle = "classic" | "sporty" | "glow" | "chrome" | "spike";
 export type SpoilerId = "none" | "wing" | "fin";
 export type FinishId = "solid" | "gloss" | "matte" | "chrome" | "glass" | "holo";
@@ -25,7 +25,8 @@ export type BoosterId = "single" | "twin" | "neon";
 export type BoatId = "cat" | "speed" | "ski" | "yacht" | "tug" | "raft" | "hovercraft" | "airboat" | "viking" | "duck";
 export type PlaneId = "wing" | "bi" | "delta" | "stealth" | "jetliner" | "twinprop" | "nimbus" | "heli" | "blimp" | "saucer";
 export type SubId = "classic" | "pod" | "shark" | "diver" | "dredger" | "sleuth" | "leviathan" | "manta" | "squid" | "bathy" | "torpedo";
-export type VehicleMode = "land" | "boat" | "plane" | "sub";
+export type HoverId = "maglev" | "disc" | "nacelle" | "magboard" | "gyro";
+export type VehicleMode = "land" | "boat" | "plane" | "sub" | "hover";
 
 export interface CharacterDef {
   id: string;
@@ -251,7 +252,7 @@ export interface ThemeDef {
   isle: string;
   glow: string;
   particles: string[];
-  prop: "palm" | "crystal" | "circuit" | "tree" | "coral" | "cactus" | "y2k" | "win98" | "liquid" | "vapor";
+  prop: "palm" | "crystal" | "circuit" | "tree" | "coral" | "cactus" | "y2k" | "win98" | "liquid" | "vapor" | "door" | "lamp";
   bloom: number;
   /** dark themes need light text in menus */
   dark?: boolean;
@@ -333,7 +334,23 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     water: "#b9c9ff", ground: "#e6d9ff", road: "#f5eeff", roadLine: "#ffe1f5", roadEdge: "#ffffff",
     barrierA: "#ffd1ec", barrierB: "#c9e6ff", sun: "#fff0f9", sunIntensity: 1.8, ambient: 1.0, ambientColor: "#ffffff",
     hemiSky: "#d9c9ff", hemiGround: "#f0e6ff", cloud: "#ffffff", isle: "#d9c9ff", glow: "#ffe1f5",
-    particles: ["#ffffff", "#ffe1f5", "#c9e6ff", "#d9c9ff"], prop: "vapor", bloom: 0.7,
+    particles: ["#ffffff", "#ffe1f5", "#c9e6ff", "#d9c9ff"], prop: "door", bloom: 0.7,
+  },
+  // the yellow rooms: wallpaper, damp carpet and the hum of the lights
+  backrooms: {
+    id: "backrooms", name: "BACKROOMS", skyTop: "#d9c36a", skyBottom: "#efe2a0", fog: "#d8c670", fogNear: 26, fogFar: 180,
+    water: "#c9d38a", ground: "#b9a653", road: "#cdbb6e", roadLine: "#efe4a6", roadEdge: "#a8954a",
+    barrierA: "#e3d27c", barrierB: "#c9b458", sun: "#fff6c9", sunIntensity: 1.5, ambient: 1.15, ambientColor: "#fff3b8",
+    hemiSky: "#fff2a8", hemiGround: "#a89444", cloud: "#f3ecc4", isle: "#b9a653", glow: "#fff7c2",
+    particles: ["#fff7c2", "#e3d27c", "#ffffff", "#c9b458"], prop: "door", bloom: 0.6,
+  },
+  // somewhere between places: white tile, still water, nobody
+  liminal: {
+    id: "liminal", name: "LIMINAL", skyTop: "#cfeaf2", skyBottom: "#f4fbfd", fog: "#dff3f7", fogNear: 30, fogFar: 210,
+    water: "#5fd0e6", ground: "#e6f1f4", road: "#f4f9fb", roadLine: "#9fdcec", roadEdge: "#ffffff",
+    barrierA: "#ffffff", barrierB: "#bfe9f3", sun: "#ffffff", sunIntensity: 1.7, ambient: 1.2, ambientColor: "#ffffff",
+    hemiSky: "#e8f8fc", hemiGround: "#cfeaf2", cloud: "#ffffff", isle: "#e6f2f5", glow: "#9fe8ff",
+    particles: ["#ffffff", "#9fe8ff", "#bfe9f3", "#5fd0e6"], prop: "lamp", bloom: 0.7,
   },
   cyberpunk: {
     id: "cyberpunk", name: "CYBERPUNK", skyTop: "#141a3c", skyBottom: "#2a2466", fog: "#1c1c4a", fogNear: 80, fogFar: 280,
@@ -400,6 +417,7 @@ export const FINISH_META: Record<FinishId, { swatch: string; labelKey: string }>
 export const BOOSTERS: BoosterId[] = ["single", "twin", "neon"];
 export const BOATS: BoatId[] = ["cat", "speed", "ski", "yacht", "tug", "raft", "hovercraft", "airboat", "viking", "duck"];
 export const PLANES: PlaneId[] = ["wing", "bi", "delta", "stealth", "jetliner", "twinprop", "nimbus", "heli", "blimp", "saucer"];
+export const HOVERS: HoverId[] = ["maglev", "disc", "nacelle", "magboard", "gyro"];
 export const SUBS: SubId[] = ["classic", "pod", "shark", "diver", "dredger", "sleuth", "leviathan", "manta", "squid", "bathy", "torpedo"];
 
 /**
@@ -407,7 +425,7 @@ export const SUBS: SubId[] = ["classic", "pod", "shark", "diver", "dredger", "sl
  * craft here. speed scales the top speed in that mode, handling scales turn rate.
  */
 export interface CraftStat {
-  id: BoatId | PlaneId | SubId;
+  id: BoatId | PlaneId | SubId | HoverId;
   speed: number;
   handling: number;
 }
@@ -452,9 +470,17 @@ export const SUB_STATS: CraftStat[] = [
   { id: "torpedo", speed: 1.36, handling: 0.76 },
 ];
 
+export const HOVER_STATS: CraftStat[] = [
+  { id: "maglev", speed: 1.0, handling: 1.0 },
+  { id: "disc", speed: 0.92, handling: 1.3 },
+  { id: "nacelle", speed: 1.2, handling: 0.82 },
+  { id: "magboard", speed: 1.08, handling: 1.15 },
+  { id: "gyro", speed: 0.96, handling: 1.22 },
+];
+
 const CRAFT_SPEEDS: Record<string, number> = {};
 const CRAFT_HANDLING: Record<string, number> = {};
-for (const t of [...BOAT_STATS, ...PLANE_STATS, ...SUB_STATS]) {
+for (const t of [...BOAT_STATS, ...PLANE_STATS, ...SUB_STATS, ...HOVER_STATS]) {
   CRAFT_SPEEDS[t.id] = t.speed;
   CRAFT_HANDLING[t.id] = t.handling;
 }
@@ -590,8 +616,29 @@ export const FUSION_SHOTS: Record<string, FusionShot> = {
   magma: { name: "ERUPTION", kind: "nova", effect: "burn", color: "#ff2d00", rate: 1.9, count: 1, power: 1.3 },
 };
 
-export function fusionShot(charId: string): FusionShot {
-  return FUSION_SHOTS[charId] ?? FUSION_SHOTS.nova;
+/**
+ * The shot a character fires, as the craft it is riding fires it. The effect
+ * and the colour are the character's; how it leaves the turret is the craft's.
+ */
+export function fusionShot(charId: string, mode: VehicleMode = "land"): FusionShot {
+  const base = FUSION_SHOTS[charId] ?? FUSION_SHOTS.nova;
+  const round = base.kind === "nova";
+  switch (mode) {
+    case "boat":
+      // a broadside: more of them, spread wide, each a little weaker
+      return { ...base, kind: round || base.kind === "lance" ? base.kind : "fan", count: base.count + 2, power: base.power * 0.8 };
+    case "plane":
+      // from the air everything is guided, and slower to load
+      return { ...base, kind: round || base.kind === "lance" ? base.kind : "homing", rate: base.rate * 1.2 };
+    case "sub":
+      // a torpedo: one, slow to load, finds its target and hits hard
+      return { ...base, kind: round ? "nova" : "homing", count: 1, power: base.power * 1.45, rate: base.rate * 1.5 };
+    case "hover":
+      // a magnetic pulse: instant, lighter, and ready again at once
+      return { ...base, kind: round ? "nova" : "lance", count: 1, power: base.power * 0.8, rate: base.rate * 0.7 };
+    default:
+      return base;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -739,7 +786,8 @@ export interface Zone {
   type: ZoneKind;
 }
 
-export type ZoneKind = "water" | "sky" | "sub";
+/** "mag" is a magnetic stretch: the road is still there, and everything on it levitates */
+export type ZoneKind = "water" | "sky" | "sub" | "mag";
 
 
 /** A branch is an alternate ribbon that peels off the main road and rejoins it. */
@@ -892,6 +940,8 @@ export interface TrackDef {
   biomes?: BiomeDef[];
   /** nothing under the circuit: a sky or open-water circuit with no terrain ribbon */
   noGround?: boolean;
+  /** every road runs down a corridor, with walls and a ceiling */
+  indoor?: boolean;
   portals?: PortalDef[];
   traps?: TrapDef[];
   gaps?: GapDef[];
@@ -952,6 +1002,8 @@ const THEME_BIOMES: Record<ThemeId, BiomeId[]> = {
   dreamcore: ["cloud", "meadow", "ruins", "cloud"],
   cyberpunk: ["city", "volcano", "ruins", "city"],
   noir: ["city", "ruins", "snow", "city"],
+  backrooms: ["ruins", "city", "ruins", "city"],
+  liminal: ["cloud", "coast", "cloud", "snow"],
 };
 
 /** Biome of the stretch at t, and how far we are into the next one. */
@@ -1052,6 +1104,7 @@ export function themeOnLap(id: ThemeId, lap: number): ThemeDef {
 export const THEME_BIOME: Record<ThemeId, BiomeId> = {
   frutiger: "meadow", eco: "forest", aero: "cloud", techno: "city", aqua: "reef", sunset: "desert",
   y2k: "city", liquid: "coast", win98: "city", vapor: "ruins", dreamcore: "cloud", cyberpunk: "volcano", noir: "ruins",
+  backrooms: "ruins", liminal: "cloud",
 };
 
 const MUTATION_STEPS = 6;

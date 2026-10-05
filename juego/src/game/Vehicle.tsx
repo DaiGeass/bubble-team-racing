@@ -4,7 +4,7 @@ import * as THREE from "three";
 import type { BoatId, BoosterId, CharacterDef, PlaneId, ShapeId, SpoilerId, SubId, VehicleMode, WheelStyle } from "../data";
 import { BoatAlt, ExtraShapes, PlaneAlt, SubModel } from "./Models";
 import { ModeModels } from "./Models2";
-import { Boat3, Land3, Plane3, Sub3, SUB3 } from "./Models3";
+import { Boat3, Hover3, Land3, Plane3, Sub3, SUB3 } from "./Models3";
 
 export interface KartVisualState {
   boosting: boolean;
@@ -20,6 +20,8 @@ export interface KartVisualState {
   magnet?: boolean;
   /** riding on another kart as its gunner: shows the barrel */
   gunning?: boolean;
+  /** where the kart's own turret points, relative to the nose */
+  turretAim?: number;
   exploding?: boolean;
 }
 
@@ -33,6 +35,7 @@ export interface VehicleConfig {
   boat?: BoatId;
   plane?: PlaneId;
   sub?: SubId;
+  hover?: import("../data").HoverId;
 }
 
 interface Props {
@@ -627,6 +630,7 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
   const boatAltRef = useRef<THREE.Group>(null);
   const planeAltRef = useRef<THREE.Group>(null);
   const subRef = useRef<THREE.Group>(null);
+  const hoverRef = useRef<THREE.Group>(null);
   const chassisRef = useRef<THREE.Group>(null);
   const mainPilot = useRef<THREE.Group>(null);
   const altPilot = useRef<THREE.Group>(null);
@@ -662,6 +666,7 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
       subRef.current.visible = mode === "sub" && vehicle.sub !== "diver";
     // the land chassis is hidden while submerged (the sub hull replaces it)
     if (chassisRef.current) chassisRef.current.visible = mode !== "sub";
+    if (hoverRef.current) hoverRef.current.visible = mode === "hover";
     if (wheelRef.current)
       wheelRef.current.visible =
         mode === "land" &&
@@ -680,7 +685,7 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
     if (gunBarrel.current) gunBarrel.current.visible = !!st?.gunning;
     if (turret.current) {
       turret.current.visible = fused;
-      turret.current.rotation.y = 0;
+      turret.current.rotation.y = st?.turretAim ?? 0;
     }
     if (gunnerMain.current) gunnerMain.current.visible = fused && usePartner;
     if (gunnerAlt.current) gunnerAlt.current.visible = fused && !usePartner;
@@ -779,6 +784,9 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
           ) : (
             <SubModel kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
           )}
+        </group>
+        <group ref={hoverRef} visible={false}>
+          <Hover3 kind={vehicle.hover ?? "maglev"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
         </group>
         <ModeModels vehicle={vehicle} stateRef={stateRef} glow={glow} />
         <group ref={mainPilot}>

@@ -23,7 +23,7 @@ interface Seg {
   bz: number;
   /** mean height, which decides the drawing order and the shade */
   h: number;
-  zone: "water" | "sky" | "sub" | null;
+  zone: "water" | "sky" | "sub" | "mag" | null;
   route: boolean;
   /** colour of the route, by what kind of road it is */
   tint: string | null;
@@ -134,7 +134,7 @@ export default function Minimap() {
           g.stroke();
           // higher is lighter; zones keep their own colour
           g.strokeStyle =
-            s.zone === "water" ? theme.water : s.zone === "sky" ? theme.glow : s.zone === "sub" ? "#3b82f6" : s.tint ?? shade(theme.road, u);
+            s.zone === "water" ? theme.water : s.zone === "sky" ? theme.glow : s.zone === "sub" ? "#3b82f6" : s.zone === "mag" ? "#e879f9" : s.tint ?? shade(theme.road, u);
           g.lineWidth = wide;
           g.stroke();
         }

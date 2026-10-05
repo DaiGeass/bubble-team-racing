@@ -1,0 +1,7 @@
+claude --resume a763eeeb-c59d-457d-a36b-9756b2f524e6
+  █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+  █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+  ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+
+  Session   Fusión y ampliación del juego de karts
+  Continue  opencode -s ses_f022d6834ffe3F7ZMqmZ72xXRH

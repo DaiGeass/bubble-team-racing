@@ -6,7 +6,7 @@ import { moveBody, makeResult, placeBody, respawnBody, aimAhead, type Body } fro
 
 const arg = process.argv[2] ?? "all";
 function body(): Body {
-  return { pos: new THREE.Vector3(), y: 0, vy: 0, airborne: false, heading: 0, speed: 0, path: 0, idx: 0, prog: 0, total: 0, safePath: 0, safeIdx: 0, touching: false, groundY: 0, slopeAlong: 0, lat: 0, half: 10 };
+  return { pos: new THREE.Vector3(), y: 0, vy: 0, airborne: false, heading: 0, course: 0, speed: 0, path: 0, idx: 0, prog: 0, total: 0, safePath: 0, safeIdx: 0, touching: false, groundY: 0, slopeAlong: 0, lat: 0, half: 10 };
 }
 const wrap = (a: number) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 

@@ -175,6 +175,8 @@ interface DesignSpec {
   width?: number;
   floor?: number;
   sea?: number;
+  /** an indoor circuit: walls and a ceiling along every road */
+  indoor?: boolean;
   hazards?: number;
   biomes?: BiomeDef[];
   /** [from mark, to mark, kind] */
@@ -296,6 +298,7 @@ export function design(spec: DesignSpec): TrackDef {
   const biomeOf: Record<ThemeId, BiomeId> = {
     frutiger: "meadow", eco: "forest", aero: "cloud", techno: "city", aqua: "reef", sunset: "desert",
     y2k: "city", liquid: "coast", win98: "city", vapor: "ruins", dreamcore: "cloud", cyberpunk: "volcano", noir: "ruins",
+    backrooms: "ruins", liminal: "cloud",
   };
   const biomes: BiomeDef[] = sectors.map((s, i) => ({ id: biomeOf[s.theme], t0: s.t0, t1: sectors[i + 1]?.t0 ?? 1 }));
 
@@ -314,6 +317,7 @@ export function design(spec: DesignSpec): TrackDef {
     branches: [],
     designed: true,
     noGround: true,
+    indoor: spec.indoor,
     floor: spec.floor ?? (spec.sea !== undefined ? Math.min(spec.sea - 20, lowest - 12) : lowest - 1.2),
     sea: spec.sea,
     width: spec.width,

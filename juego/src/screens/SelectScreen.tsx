@@ -11,6 +11,8 @@ import {
   BOATS,
   PLANES,
   SUBS,
+  HOVERS,
+  type HoverId,
   SHAPES,
   THEMES,
   THEME_LIST,
@@ -244,13 +246,14 @@ export default function SelectScreen() {
                 <div className="h-52 w-full lg:h-72">
                   <CharacterPreview character={mainChar} vehicle={vehicle} theme={THEMES[theme]} mode={previewMode} />
                 </div>
-                <div className="mt-2 grid grid-cols-4 gap-1.5">
+                <div className="mt-2 grid grid-cols-5 gap-1.5">
                   {(
                     [
                       ["land", "▬", "modeLand"],
                       ["boat", "≈", "modeBoat"],
                       ["plane", "✈", "modePlane"],
                       ["sub", "◒", "modeSub"],
+                      ["hover", "◈", "modeHover"],
                     ] as [VehicleMode, string, string][]
                   ).map(([m, g, k]) => (
                     <button
@@ -375,6 +378,7 @@ export default function SelectScreen() {
                     { label: "boatPart", list: BOATS as string[], prefix: "boat_", cur: vehicle.boat, set: (v: string) => { setVehicle({ boat: v as BoatId }); setPreviewMode("boat"); } },
                     { label: "planePart", list: PLANES as string[], prefix: "plane_", cur: vehicle.plane, set: (v: string) => { setVehicle({ plane: v as PlaneId }); setPreviewMode("plane"); } },
                     { label: "subPart", list: SUBS as string[], prefix: "sub_", cur: vehicle.sub, set: (v: string) => { setVehicle({ sub: v as SubId }); setPreviewMode("sub"); } },
+                    { label: "hoverPart", list: HOVERS as string[], prefix: "hover_", cur: vehicle.hover, set: (v: string) => { setVehicle({ hover: v as HoverId }); setPreviewMode("hover"); } },
                   ]
                 ).map((row) => (
                   <div key={row.label}>
@@ -418,6 +422,7 @@ export default function SelectScreen() {
                         {trk.zones.some((z) => z.type === "water") && <span className="rounded-full bg-white/60 px-2 py-0.5">≈ {t("modeBoat")}</span>}
                         {trk.zones.some((z) => z.type === "sky") && <span className="rounded-full bg-white/60 px-2 py-0.5">✈ {t("modePlane")}</span>}
                         {trk.zones.some((z) => z.type === "sub") && <span className="rounded-full bg-white/60 px-2 py-0.5">◒ {t("modeSub")}</span>}
+                        {trk.zones.some((z) => z.type === "mag") && <span className="rounded-full bg-fuchsia-100/80 px-2 py-0.5 text-fuchsia-700">◈ {t("modeHover")}</span>}
                         {!!trk.routes?.length && <span className="rounded-full bg-amber-100/80 px-2 py-0.5 text-amber-700">⑂ {trk.routes.length}</span>}
                       </div>
                       {sel && <span className="mt-2 flex h-6 w-6 items-center justify-center rounded-full bg-white text-sm font-black text-emerald-600 shadow">✓</span>}

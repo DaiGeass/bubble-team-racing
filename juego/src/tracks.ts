@@ -34,6 +34,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
       { from: "climbA", to: "climbB", draw: (t) => t.bypass("L", 123, -4, 10), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
       { from: "climbA", to: "climbB", draw: (t) => t.bypass("R", 123, 10, 10), kind: "high", pads: [["mid", "boost"]] },
       { from: "homeA", to: "homeB", draw: (t) => t.bypass("R", 133, 8), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
+      { from: "w0", to: "w1", draw: (t) => t.bypass("L", 63, 0), afloat: true, kind: "side" },
     ],
   }),
 
@@ -105,20 +106,21 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     id: "torre", theme: "techno", difficulty: 3, start: [0, 8, 0, 0], hazards: 2,
     draw: (t) =>
       t.mark("lineA").go(BYPASS + 124).mark("lineB")
-        .left(90, 80, 2).go(100, 2).mark("ramp").go(100, 2)
+        .left(90, 80, 2).mark("rA").go(100, 2).mark("ramp").go(100, 2).mark("rB")
         .left(810, 60, 40)
         .mark("top").go(80).mark("k0")
         .go(300, -30)
         .left(90, 120, -8)
         .go(150, -6).mark("k1")
         .left(90, 70, -2).go(110),
-    zones: [["k0", "k1", "sky"]],
+    zones: [["rB", "top", "mag"], ["k0", "k1", "sky"]],
     sectors: [["ramp", "cyberpunk"], ["k0", "vapor"], ["k1", "techno"]],
     traffic: 3,
     pads: [["ramp", "boost"], ["top", "boost", 1.5, -200], ["top", "boost", 1.5, -500], ["k1", "boost", 1.45, 20]],
     routes: [
       { from: "lineA", to: "lineB", draw: (t) => t.bypass("L", 124, 10), kind: "high", holes: [["mid", 15]], pads: [["mid", "boost", 1.5]] },
       { from: "lineA", to: "lineB", draw: (t) => t.bypass("R", 124, -6), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "rA", to: "rB", draw: (t) => t.bypass("R", 23, 0, 4), kind: "side", pads: [["mid", "boost"]] },
     ],
   }),
 
@@ -130,13 +132,14 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     draw: (t) =>
       t.mark("line").go(50).mark("go").go(210).mark("lineB")
         .left(90, 60, 2).go(120, 2)
-        .mark("coil").left(450, 60, 18)
+        .mark("coil").left(450, 60, 18).mark("coilB")
         .go(120)
         .left(90, 60)
         .mark("bridgeA").go(BYPASS + 183).mark("bridgeB")
         .right(90, 60, -4).go(100, -4).mark("run").go(40, -2).mark("jump").go(60, -2)
         .right(90, 60, -4).go(120, -4)
         .right(90, 60, -2).go(180),
+    zones: [["coil", "coilB", "mag"]],
     holes: [["jump", 9]],
     pads: [["go", "boost"], ["coil", "boost"], ["run", "boost", 1.5]],
     sectors: [["coil", "vapor"], ["bridgeB", "liquid"], ["jump", "y2k"]],
@@ -160,7 +163,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .go(97).mark("cutB").go(23).drop(-16).go(124, -4)
         .left(90, 80, -4).mark("w0").go(140).mark("w1")
         .left(90, 80)
-        .go(60, -2).mark("s0").go(290, -16)
+        .go(60, -2).mark("s0").mark("tA").go(290, -16).mark("tB")
         .left(90, 70)
         .go(140, 8).go(150, 10).mark("s1")
         .go(142, 3).mark("c0").go(8).mark("air")
@@ -180,6 +183,8 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         draw: (t) => t.go(18).right(80, 60, -1.5).go(16).mark("gap").go(40, -1).right(100, 60, -1.5).go(18),
         holes: [["gap", 14]],
       },
+      { from: "tA", to: "tB", draw: (t) => t.bypass("L", 113, -8, -16), afloat: true, kind: "low" },
+      { from: "tA", to: "tB", draw: (t) => t.bypass("R", 113, 8, -16), afloat: true, kind: "high" },
     ],
   }),
 
@@ -189,7 +194,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     id: "escritorio", theme: "win98", difficulty: 2, start: [0, 8, 0, 0], hazards: 4,
     draw: (t) =>
       t.go(50).mark("go").go(110).mark("warpIn").go(200).mark("warpOut")
-        .left(90, 30).go(300, 10)
+        .left(90, 30).mark("upA").go(300, 10).mark("upB")
         .left(90, 30).go(120)
         .right(90, 30).go(160)
         .left(90, 30)
@@ -197,7 +202,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .left(90, 30)
         .mark("barA").go(BYPASS + 260).mark("barB").go(83)
         .left(90, 30).go(160),
-    holes: [["jump", 11]],
+    holes: [["jump", 9]],
     pads: [["go", "boost"], ["run", "boost", 1.5], ["barB", "boost"]],
     portals: [["warpIn", "warpOut"]],
     sectors: [["warpOut", "y2k"], ["run", "noir"], ["barA", "win98"]],
@@ -205,6 +210,8 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     routes: [
       { from: "barA", to: "barB", draw: (t) => t.bypass("L", 260, 10), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
       { from: "barA", to: "barB", draw: (t) => t.bypass("R", 260, -6), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "upA", to: "upB", draw: (t) => t.bypass("L", 123, 8, 10), kind: "high", pads: [["mid", "boost", 1.5]] },
+      { from: "upA", to: "upB", draw: (t) => t.bypass("R", 123, -5, 10), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
     ],
   }),
 
@@ -362,6 +369,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .mark("floorA").go(BYPASS + 171).mark("floorB")
         .mark("c0").go(8).mark("air")
         .left(180, 90, 36).mark("land").go(6),
+    zones: [["spiral", "pit", "mag"]],
     holes: [["air", 270]],
     kick: 0,
     cannons: [["c0", "land", 40]],
@@ -379,7 +387,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   design({
     id: "montana", theme: "sunset", difficulty: 2, start: [0, 8, 0, 0], hazards: 3,
     draw: (t) =>
-      t.go(50).mark("go").go(210)
+      t.mark("sA").go(50).mark("go").go(210).mark("sB")
         .left(90, 90, 6)
         .mark("climbA").go(BYPASS + 323, 34).mark("climbB").go(15)
         .left(90, 90)
@@ -395,6 +403,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     routes: [
       { from: "climbA", to: "climbB", draw: (t) => t.bypass("L", 323, -5, 34), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
       { from: "climbA", to: "climbB", draw: (t) => t.bypass("R", 323, 8, 34), kind: "high", pads: [["mid", "boost", 1.5]] },
+      { from: "sA", to: "sB", draw: (t) => t.bypass("R", 83, -4), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
     ],
   }),
 
@@ -407,7 +416,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
       t.go(50).mark("go").go(100)
         .mark("aA").go(BYPASS + 223, 14).mark("aB").go(60)
         .right(90, 80, 2)
-        .go(60).left(360, 60, 14).mark("helix")
+        .go(60).mark("hA").left(360, 60, 14).mark("helix")
         .go(120).mark("run").go(40).mark("j1").go(40).drop(-14).go(100)
         .right(90, 80)
         .mark("cA").go(BYPASS + 253, -10).mark("cB")
@@ -415,6 +424,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .right(90, 80)
         .go(93).mark("dA").go(BYPASS + 123).mark("dB")
         .right(90, 80),
+    zones: [["hA", "helix", "mag"]],
     holes: [["j1", 9]],
     sectors: [["aB", "techno"], ["helix", "y2k"], ["cA", "vapor"], ["dA", "cyberpunk"]],
     traffic: 4,
@@ -484,6 +494,163 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     routes: [
       { from: "bA", to: "bB", draw: (t) => t.bypass("L", 173, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
       { from: "bA", to: "bB", draw: (t) => t.bypass("R", 173, -4), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+    ],
+  }),
+
+  // THE KNOT — a figure of eight. One loop climbs, the lap crosses over its
+  // own start straight on a bridge with a gap in it, and the other loop comes
+  // back down. Miss the gap and you land on the road below, a little behind.
+  design({
+    id: "nudo", theme: "vapor", difficulty: 2, start: [0, 8, -150, 0], hazards: 3,
+    draw: (t) =>
+      t.go(50).mark("go").go(250)
+        .left(270, 150, 13).mark("over")
+        .go(110).mark("run").go(34).mark("gap").go(156)
+        .right(270, 150, -13),
+    holes: [["gap", 12]],
+    sectors: [["over", "y2k"], ["gap", "sunset"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["run", "boost", 1.5], ["over", "boost", 1.4, -350], ["gap", "boost", 1.4, 500]],
+  }),
+
+  // STAR LIFT — two turns up a tower to fifty units and off the top in a
+  // plane: the flight line splits into a high one and a low one, sweeps round
+  // two sides of the lap on the way down and lands on a three-lane runway.
+  design({
+    id: "ascensor", theme: "techno", difficulty: 3, start: [0, 8, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(50).mark("go").go(130)
+        .right(720, 65, 44).mark("top").go(120, 4)
+        .left(90, 100).mark("k0")
+        .go(120, 14).mark("skyA").go(BYPASS + 123).mark("skyB").go(30).go(150, -20)
+        .left(90, 100, -8)
+        .weave("R", 30, 150, -16)
+        .left(90, 100, -8)
+        .go(140, -10).mark("k1").mark("dA").go(BYPASS + 223).mark("dB").go(60)
+        .left(90, 100),
+    zones: [["k0", "k1", "sky"]],
+    sectors: [["top", "y2k"], ["k0", "dreamcore"], ["skyB", "aero"], ["k1", "techno"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["top", "boost", 1.5, -420], ["top", "boost", 1.5, -40], ["k1", "boost", 1.45, 20], ["dB", "boost"]],
+    routes: [
+      { from: "skyA", to: "skyB", draw: (t) => t.bypass("L", 123, 12), afloat: true, kind: "high" },
+      { from: "skyA", to: "skyB", draw: (t) => t.bypass("R", 123, -12), afloat: true, kind: "low" },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 223, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 223, -4), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+    ],
+  }),
+
+  // ATLANTIS — the long way down. Out over the sea on two channels and a ramp,
+  // under in a spiral to forty units, a weave along the bottom, a tube that
+  // forks, and a long climb back to the surface and the pier.
+  design({
+    id: "atlantida", theme: "liquid", difficulty: 3, sea: 0, start: [0, 4, 0, 0], hazards: 2,
+    draw: (t) =>
+      t.go(50).mark("go").go(90).go(60, -4).mark("w0")
+        .mark("chA").go(BYPASS + 263).mark("chB")
+        .right(90, 90)
+        .go(20).mark("s0").go(100, -18).right(360, 70, -18).go(20).mark("deep").go(140, -4).weave("L", 30, 110)
+        .right(90, 90)
+        .mark("tA").go(BYPASS + 183).mark("tB").go(30).go(200, 40).mark("s1").go(50)
+        .right(90, 90)
+        .go(40).mark("w1").go(60, 4).mark("dA").go(BYPASS + 223).mark("dB")
+        .right(90, 90),
+    zones: [["w0", "s0", "water"], ["s0", "s1", "sub"], ["s1", "w1", "water"]],
+    sectors: [["w0", "aqua"], ["s0", "liquid"], ["deep", "cyberpunk"], ["tA", "vapor"], ["s1", "aqua"], ["w1", "frutiger"]],
+    traffic: 2,
+    pads: [["go", "boost"], ["chA", "jump", 12, 150], ["chA", "jump", 12, 320], ["dB", "boost"]],
+    routes: [
+      { from: "chA", to: "chB", draw: (t) => t.bypass("L", 263, 0), afloat: true, kind: "side" },
+      { from: "chA", to: "chB", draw: (t) => t.bypass("R", 263, 7), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
+      { from: "tA", to: "tB", draw: (t) => t.bypass("L", 183, -10), afloat: true, kind: "low" },
+      { from: "tA", to: "tB", draw: (t) => t.bypass("R", 183, 9), afloat: true, kind: "high" },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 223, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 223, -3), kind: "low", pads: [["mid", "boost"]] },
+    ],
+  }),
+
+  // THE BACKROOMS — indoors, on one level, and every corridor looks like the
+  // last one. Five ways to go wrong, two holes in the wall that put you
+  // somewhere else, and strip lights on their way out.
+  design({
+    id: "backrooms", theme: "backrooms", difficulty: 2, indoor: true, start: [0, 8, 0, 0], hazards: 4,
+    draw: (t) =>
+      t.go(50).mark("go").go(60).mark("aA").go(BYPASS + 143).mark("aB").go(30)
+        .right(90, 30)
+        .go(40).mark("p1").go(120).mark("bA").go(BYPASS + 63).mark("bB").go(40)
+        .right(90, 30)
+        .weave("L", 30, 60).go(20).mark("cA").go(BYPASS + 123).mark("cB").go(20)
+        .right(90, 30)
+        .go(60).mark("p2").go(100).weave("R", 25, 70).mark("p3").go(161.7)
+        .right(90, 30),
+    portals: [["p1", "bA"], ["p2", "p3"]],
+    sectors: [["cA", "liminal"], ["p2", "backrooms"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["aB", "boost"], ["bB", "boost"], ["cB", "boost"]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 143, 0), kind: "side", pads: [["mid", "boost"]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 143, -4), kind: "low", pads: [["mid", "boost", 1.5]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("R", 63, 0), kind: "side" },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("L", 123, 0), kind: "side", pads: [["mid", "boost"]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("R", 123, -4), kind: "low", pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
+
+  // POOLROOMS — white tile and still water, indoors. Two pools to cross by
+  // boat, a slide down to a drained one that you float across on magnets, and
+  // a diving board over the first.
+  design({
+    id: "piscinas", theme: "liminal", difficulty: 2, indoor: true, start: [0, 12, 0, 0], hazards: 2,
+    draw: (t) =>
+      t.go(50).mark("go").go(40).mark("chA").go(BYPASS + 83).mark("chB").go(50, -3).mark("w0").go(100)
+        .left(90, 50)
+        .go(60).mark("w1").go(40, 3).go(40).drop(-12).go(60).mark("mA").go(190).mark("mB")
+        .left(90, 50)
+        .mark("cA").go(BYPASS + 223, 6).mark("cB").go(100, 3)
+        .left(90, 50)
+        .go(60).mark("w2").go(200).mark("w3").go(60, 3).go(100)
+        .left(90, 50),
+    zones: [["w0", "w1", "water"], ["mA", "mB", "mag"], ["w2", "w3", "water"]],
+    sectors: [["mA", "aqua"], ["cA", "liminal"], ["w2", "dreamcore"], ["w3", "liminal"]],
+    traffic: 2,
+    pads: [["go", "boost"], ["mA", "jump", 11, 60], ["cB", "boost"], ["w3", "boost"]],
+    routes: [
+      { from: "chA", to: "chB", draw: (t) => t.bypass("L", 83, 0), kind: "side", pads: [["mid", "boost"]] },
+      { from: "chA", to: "chB", draw: (t) => t.bypass("R", 83, 6), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("L", 223, 8, 6), kind: "high", pads: [["mid", "boost", 1.5]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("R", 223, -4, 6), kind: "low", pads: [["mid", "boost"]] },
+    ],
+  }),
+
+  // LUCID DREAM — nothing holds: the road winds up on itself and you float up
+  // it, doors stand open in the air, a hole in the wall puts you further on,
+  // and near the end the road simply stops and a cannon takes you over.
+  design({
+    id: "sueno", theme: "dreamcore", difficulty: 3, start: [0, 20, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(50).mark("go").go(110).mark("mA").right(360, 70, 16).go(140).mark("mB")
+        .mark("aA").go(BYPASS + 83).mark("aB")
+        .left(90, 80)
+        .go(60).drop(-12).go(60).mark("run").go(40).mark("j1").go(110).mark("p1").go(140).mark("pOut").go(40)
+        .left(90, 80, -4)
+        .mark("m2A").weave("R", 30, 120, 6).go(40).mark("m2B")
+        .mark("cA").go(BYPASS + 103, -6).mark("cB")
+        .left(90, 80)
+        .go(100).mark("c0").go(8).mark("air").go(150).mark("land").go(222)
+        .left(90, 80),
+    zones: [["mA", "mB", "mag"], ["m2A", "m2B", "mag"]],
+    holes: [["air", 140]],
+    kick: 0,
+    cannons: [["c0", "land", 34]],
+    portals: [["p1", "pOut"]],
+    sectors: [["mA", "vapor"], ["aA", "dreamcore"], ["run", "liminal"], ["m2A", "aero"], ["c0", "dreamcore"]],
+    traffic: 2,
+    pads: [["go", "boost"], ["run", "boost", 1.5], ["j1", "jump", 13], ["m2A", "jump", 12, 130], ["cB", "boost"]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 83, 0), kind: "side", pads: [["mid", "boost"]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 83, -4), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("L", 103, 0, -6), kind: "side", pads: [["mid", "boost"]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("R", 103, 8, -6), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
     ],
   }),
 ];

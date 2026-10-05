@@ -14,8 +14,8 @@ function formatTime(ms: number) {
   return `${m}:${s.toString().padStart(2, "0")}.${cs.toString().padStart(2, "0")}`;
 }
 
-const MODE_GLYPH: Record<VehicleMode, string> = { land: "▬", boat: "≈", plane: "✈", sub: "◒" };
-const MODE_KEY: Record<VehicleMode, string> = { land: "modeLand", boat: "modeBoat", plane: "modePlane", sub: "modeSub" };
+const MODE_GLYPH: Record<VehicleMode, string> = { land: "▬", boat: "≈", plane: "✈", sub: "◒", hover: "◈" };
+const MODE_KEY: Record<VehicleMode, string> = { land: "modeLand", boat: "modeBoat", plane: "modePlane", sub: "modeSub", hover: "modeHover" };
 
 /**
  * Whether to lay the screen out for fingers. The width of the window says
@@ -99,6 +99,12 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
   // player can see in the world is the one the HUD reports
   const lapTheme = mutateTheme(THEMES[getActiveTrack().theme], telemetry.lap - 1);
   const [cdKey, setCdKey] = useState(0);
+  // the last lap is announced once, as the line is crossed into it
+  const [finalLapAt, setFinalLapAt] = useState(0);
+  useEffect(() => {
+    if (telemetry.totalLaps > 1 && telemetry.lap === telemetry.totalLaps) setFinalLapAt(Date.now());
+  }, [telemetry.lap, telemetry.totalLaps]);
+  const w2 = telemetry.weapon2 ? WEAPON_META[telemetry.weapon2 as WeaponId] : null;
   // select the primitives separately: a fresh object from the selector would
   // re-render forever under zustand's Object.is comparison
   const touchLayout = useGame((s) => s.settings.touchLayout);
@@ -311,6 +317,41 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         </div>
       )}
 
+      {/* ---------- the partner's own turret: how long it has left ---------- */}
+      {telemetry.soloTurret > 0 && !telemetry.fused && (
+        <div className={`absolute left-1/2 w-56 -translate-x-1/2 ${touch ? "top-[8.2rem]" : "top-24"}`}>
+          <div className="glass-panel rounded-full p-1">
+            <div className="flex items-center gap-1.5 px-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wide text-amber-700">{t("soloTurret")}</span>
+              <div className="h-3 flex-1 overflow-hidden rounded-full bg-white/40">
+                <div className="h-full rounded-full" style={{ width: `${telemetry.soloTurret * 100}%`, background: "linear-gradient(90deg,#ffe066,#ff9f1c)", boxShadow: "0 0 12px #ffd166" }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- last lap ---------- */}
+      {finalLapAt > 0 && Date.now() - finalLapAt < 2600 && !telemetry.finished && (
+        <div key={finalLapAt} className="pointer-events-none absolute left-1/2 top-[24%] -translate-x-1/2">
+          <div className="pop-in font-display whitespace-nowrap text-4xl font-extrabold text-white sm:text-6xl" style={{ WebkitTextStroke: "2px rgba(160,20,40,0.6)", textShadow: "0 0 30px #ff4d6d" }}>
+            {t("finalLap")}
+          </div>
+        </div>
+      )}
+
+      {/* ---------- slipstream: the bar fills while you sit in the tow ---------- */}
+      {telemetry.draft > 0.05 && (
+        <div className={`pointer-events-none absolute left-1/2 w-40 -translate-x-1/2 ${touch ? "top-[10.6rem]" : "bottom-[7.6rem]"}`}>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-extrabold uppercase tracking-wide text-white" style={{ textShadow: "0 1px 4px rgba(0,40,80,0.8)" }}>{t("draft")}</span>
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/30">
+              <div className="h-full rounded-full bg-white" style={{ width: `${telemetry.draft * 100}%`, boxShadow: telemetry.draft > 0.95 ? "0 0 12px #ffffff" : undefined }} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ---------- alternative-path jump banner ---------- */}
       {Date.now() - telemetry.shortcutFlash < 1600 && telemetry.shortcutFlash > 0 && (
         <div key={telemetry.shortcutFlash} className="pointer-events-none absolute left-1/2 top-[34%] -translate-x-1/2">
@@ -371,7 +412,13 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
           />
         </div>
         {/* FUSION — partner mans the turret */}
-        <div className={`relative ${telemetry.fused ? "animate-pulse" : ""}`} style={{ width: px(side), height: px(side) }}>
+        <div className={`relative ${telemetry.fused || telemetry.soloTurret > 0 ? "animate-pulse" : ""}`} style={{ width: px(side), height: px(side) }}>
+          {/* seconds until it can be used again */}
+          {telemetry.fuseWait > 0 && (
+            <div className="pointer-events-none absolute -top-6 left-1/2 z-10 -translate-x-1/2">
+              <div className="glass-panel rounded-full px-2 py-0.5 font-mono text-[11px] font-extrabold text-purple-800">{telemetry.fuseWait}s</div>
+            </div>
+          )}
           <svg className="absolute inset-0 -rotate-90" style={{ width: px(side), height: px(side) }} viewBox="0 0 56 56">
             <circle cx="28" cy="28" r="24" stroke="rgba(255,255,255,0.55)" strokeWidth="4" fill="none" />
             <circle
@@ -388,7 +435,7 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
           </svg>
           <TouchButton
             label={TOUCH_GLYPH[layout.touchLayout.fuse] ?? "✚"}
-            className={`absolute inset-0 text-xl ${telemetry.fused ? "text-amber-500" : "text-purple-700"}`}
+            className={`absolute inset-0 text-xl ${telemetry.fused || telemetry.soloTurret > 0 ? "text-amber-500" : telemetry.fuseWait > 0 ? "text-purple-700 opacity-40" : "text-purple-700"}`}
             style={{ width: px(side), height: px(side) }}
             onDown={() => controls.setAction(layout.touchLayout.fuse, true)}
             onUp={() => controls.setAction(layout.touchLayout.fuse, false)}
@@ -397,8 +444,16 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         <div className={`relative ${touch ? "col-span-2" : ""}`}>
           {/* the name of what you are holding, so nobody has to learn the symbols */}
           {itemSlot && w && !telemetry.rolling && (
-            <div className="glass-panel pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-extrabold" style={{ color: w.color }}>
-              {t(`weapon_${telemetry.weapon}`)}
+            <div className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2">
+              <div className="glass-panel whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-extrabold" style={{ color: w.color }}>
+                {t(`weapon_${telemetry.weapon}`)}
+              </div>
+            </div>
+          )}
+          {/* the item in waiting */}
+          {itemSlot && w2 && (
+            <div className="pointer-events-none absolute -left-2 -top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/85 text-sm font-bold shadow" style={{ color: w2.color }}>
+              {w2.glyph}
             </div>
           )}
           <TouchButton

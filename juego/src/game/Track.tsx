@@ -3,6 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { trackCurve, halfWidthAt, getActiveTrack, nearestT, surfaceYAt, trapTransform, portalTransform, getPaths, getPads, getSkyRings, getSkyBlocks, plainRoadAt, sectorIndexAt, sectorMix, trackBounds, terrainAt, terrainY, FLY_BASE, ROUTE_COLOURS, groundAt, makeGround, F_SOLID, F_WALL_POS, F_WALL_NEG, F_TUNNEL, type PathRT } from "../trackCurve";
+import { Corridor, Flocks, Grandstand, Landmarks } from "./Ambience";
 import { TRACK_WIDTH, ZONES, hazardState, zoneAt, zoneOfKind, raceSnapshot, biomeMix, themeOnLap, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
 function makeRoadTexture(theme: ThemeDef) {
@@ -53,7 +54,7 @@ function deckless(path: PathRT, i: number) {
   const t = path.prog[i];
   const sea = getActiveTrack().sea !== undefined;
   for (const z of ZONES) {
-    if (z.type === "sub" || (z.type === "water" && !sea)) continue;
+    if (z.type === "sub" || z.type === "mag" || (z.type === "water" && !sea)) continue;
     const pad = (z.t1 - z.t0) * (z.type === "sky" ? 0.06 : 0.01);
     if (t >= z.t0 + pad && t <= z.t1 - pad) return true;
   }
@@ -841,6 +842,49 @@ function Props({ themes }: { themes: ThemeDef[] }) {
               </mesh>
             </>
           )}
+          {theme.prop === "door" && (
+            <group position={[0, it.kind === 0 ? 3.2 : 2.3, 0]}>
+              {/* a door on its own, with somewhere else showing through it */}
+              <mesh castShadow>
+                <boxGeometry args={[2.6, 4.6, 0.3]} />
+                <meshStandardMaterial color="#f5efe6" roughness={0.7} />
+              </mesh>
+              <mesh position={[0, -0.1, 0.02]}>
+                <boxGeometry args={[2.0, 4.1, 0.34]} />
+                <meshStandardMaterial color="#fffbe0" emissive={it.kind === 1 ? theme.barrierA : theme.glow} emissiveIntensity={1.8} toneMapped={false} />
+              </mesh>
+              {it.kind === 2 && (
+                <mesh position={[0, 4.2, 0]}>
+                  <sphereGeometry args={[0.9, 14, 12]} />
+                  <meshStandardMaterial color="#ffffff" roughness={0.2} />
+                </mesh>
+              )}
+              {it.kind === 2 && (
+                <mesh position={[0, 4.2, 0.72]}>
+                  <sphereGeometry args={[0.42, 10, 10]} />
+                  <meshStandardMaterial color="#2b2f3a" emissive={theme.barrierB} emissiveIntensity={0.6} />
+                </mesh>
+              )}
+            </group>
+          )}
+          {theme.prop === "lamp" && (
+            <>
+              <mesh position={[0, 3, 0]}>
+                <cylinderGeometry args={[0.1, 0.16, 6, 6]} />
+                <meshStandardMaterial color="#8a93a3" metalness={0.6} roughness={0.4} />
+              </mesh>
+              <mesh position={[0, 6.1, 0]}>
+                <sphereGeometry args={[0.5, 12, 10]} />
+                <meshStandardMaterial color="#ffffff" emissive={theme.glow} emissiveIntensity={2.4} toneMapped={false} />
+              </mesh>
+              {it.kind === 0 && (
+                <mesh position={[1.6, 0.5, 0]}>
+                  <boxGeometry args={[1.4, 1, 1.4]} />
+                  <meshStandardMaterial color={theme.barrierB} roughness={0.6} />
+                </mesh>
+              )}
+            </>
+          )}
           {theme.prop === "cactus" && (
             <>
               <mesh position={[0, 1.4, 0]} castShadow>
@@ -1033,8 +1077,8 @@ function buildGround() {
   return { terrain: mk(ground, gIdx, true), skirt: mk(skirt, sIdx, false) };
 }
 
-function buildRibbon(halfWidth: number, y: number, pad: number, kind: ZoneKind = "water") {
-  const z = zoneOfKind(kind);
+function buildRibbon(halfWidth: number, y: number, pad: number, kind: ZoneKind = "water", zone?: Zone) {
+  const z = zone ?? zoneOfKind(kind);
   const N = 70;
   if (!z) return new THREE.BufferGeometry();
   const t0 = z.t0 - pad;
@@ -1062,13 +1106,22 @@ function buildRibbon(halfWidth: number, y: number, pad: number, kind: ZoneKind =
 }
 
 function Lake({ theme }: { theme: ThemeDef }) {
-  const shore = useMemo(() => buildRibbon(TRACK_WIDTH / 2 + 12, -0.42, 0.02, "water"), []);
-  const water = useMemo(() => buildRibbon(TRACK_WIDTH / 2 + 9, -0.3, 0.012, "water"), []);
+  // indoors the water is a pool: it lies over the tiles from wall to wall
+  const indoor = !!getActiveTrack().indoor;
+  const shore = useMemo(() => (indoor ? null : buildRibbon(TRACK_WIDTH / 2 + 12, -0.42, 0.02, "water")), [indoor]);
+  const water = useMemo(() => {
+    if (!indoor) return buildRibbon(TRACK_WIDTH / 2 + 9, -0.3, 0.012, "water");
+    // every pool of the circuit, not only the first
+    const pools = ZONES.filter((z) => z.type === "water").map((z) => buildRibbon(TRACK_WIDTH / 2 - 0.2, 0.09, 0.004, "water", z));
+    return pools.length ? mergeGeometries(pools) ?? pools[0] : new THREE.BufferGeometry();
+  }, [indoor]);
   return (
     <group>
-      <mesh geometry={shore} receiveShadow>
-        <meshStandardMaterial color={theme.isle} roughness={0.95} side={THREE.DoubleSide} />
-      </mesh>
+      {shore && (
+        <mesh geometry={shore} receiveShadow>
+          <meshStandardMaterial color={theme.isle} roughness={0.95} side={THREE.DoubleSide} />
+        </mesh>
+      )}
       <mesh geometry={water} receiveShadow>
         <meshStandardMaterial color={theme.water} transparent opacity={0.9} roughness={0.05} metalness={0.45} side={THREE.DoubleSide} />
       </mesh>
@@ -2126,6 +2179,108 @@ function Leapers({ theme }: { theme: ThemeDef }) {
 }
 
 
+/** A list of placements drawn as one instanced mesh. */
+function Placed({ geometry, mats, children }: { geometry: THREE.BufferGeometry; mats: THREE.Matrix4[]; children: React.ReactNode }) {
+  if (!mats.length) return null;
+  return (
+    <instancedMesh
+      ref={(el) => {
+        if (!el) return;
+        mats.forEach((m, i) => el.setMatrixAt(i, m));
+        el.instanceMatrix.needsUpdate = true;
+        el.computeBoundingSphere();
+      }}
+      args={[geometry, undefined, mats.length]}
+      frustumCulled={false}
+    >
+      {children}
+    </instancedMesh>
+  );
+}
+
+const MAG_COLOUR = "#e879f9";
+
+/**
+ * A magnetic stretch: the road is the same road, but it is lined with rails of
+ * light, crossed by bars that run ahead of you, and ringed with coils. It is
+ * what tells you the kart is about to lift off its wheels.
+ */
+function MagZone({ theme }: { theme: ThemeDef }) {
+  const built = useMemo(() => {
+    const rails: THREE.Matrix4[] = [];
+    const bars: THREE.Matrix4[] = [];
+    const coils: THREE.Matrix4[] = [];
+    const d = new THREE.Object3D();
+    d.rotation.order = "YXZ";
+    for (const path of getPaths()) {
+      const railEvery = Math.max(1, Math.round(4 / path.ds));
+      const barEvery = Math.max(1, Math.round(9 / path.ds));
+      const coilEvery = Math.max(1, Math.round(42 / path.ds));
+      for (let i = 0; i < path.n; i++) {
+        if (!(path.flags[i] & F_SOLID)) continue;
+        const t = path.prog[i];
+        if (!ZONES.some((z) => z.type === "mag" && t >= z.t0 && t <= z.t1)) continue;
+        const angle = Math.atan2(path.tx[i], path.tz[i]);
+        const pitch = -Math.atan(path.slope[i]);
+        if (i % railEvery === 0) {
+          for (const side of [-1, 1]) {
+            const lat = (path.half[i] - 0.7) * side;
+            d.position.set(path.px[i] - path.tz[i] * lat, path.py[i] + 0.18, path.pz[i] + path.tx[i] * lat);
+            d.rotation.set(pitch, angle, 0);
+            d.scale.set(1, 1, railEvery * path.ds * 1.04);
+            d.updateMatrix();
+            rails.push(d.matrix.clone());
+          }
+        }
+        if (i % barEvery === 0) {
+          d.position.set(path.px[i], path.py[i] + 0.09, path.pz[i]);
+          d.rotation.set(pitch, angle, 0);
+          d.scale.set(path.half[i] * 2 - 2.2, 1, 1);
+          d.updateMatrix();
+          bars.push(d.matrix.clone());
+        }
+        if (path.main && i % coilEvery === 0) {
+          d.position.set(path.px[i], path.py[i] + 0.2, path.pz[i]);
+          d.rotation.set(0, angle, 0);
+          d.scale.setScalar((path.half[i] + 1.6) / 10);
+          d.updateMatrix();
+          coils.push(d.matrix.clone());
+        }
+      }
+    }
+    return { rails, bars, coils };
+  }, []);
+  const geo = useMemo(
+    () => ({
+      rail: new THREE.BoxGeometry(0.35, 0.22, 1),
+      bar: new THREE.PlaneGeometry(1, 1.1).rotateX(-Math.PI / 2),
+      coil: new THREE.TorusGeometry(10, 0.5, 8, 30, Math.PI),
+    }),
+    []
+  );
+  const barMat = useRef<THREE.MeshBasicMaterial>(null);
+  const coilMat = useRef<THREE.MeshStandardMaterial>(null);
+  useFrame((s) => {
+    const k = s.clock.elapsedTime;
+    if (barMat.current) barMat.current.opacity = 0.3 + 0.22 * Math.sin(k * 6);
+    if (coilMat.current) coilMat.current.emissiveIntensity = 1.6 + Math.sin(k * 3.2) * 0.8;
+  });
+  if (!built.rails.length) return null;
+  return (
+    <group>
+      <Placed geometry={geo.rail} mats={built.rails}>
+        <meshStandardMaterial color={MAG_COLOUR} emissive={MAG_COLOUR} emissiveIntensity={2.4} toneMapped={false} />
+      </Placed>
+      <Placed geometry={geo.bar} mats={built.bars}>
+        <meshBasicMaterial ref={barMat} color={theme.glow} transparent opacity={0.4} toneMapped={false} depthWrite={false} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
+      </Placed>
+      <Placed geometry={geo.coil} mats={built.coils}>
+        <meshStandardMaterial ref={coilMat} color="#2a1840" emissive={MAG_COLOUR} emissiveIntensity={1.8} metalness={0.7} roughness={0.25} toneMapped={false} />
+      </Placed>
+    </group>
+  );
+}
+
 export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) {
   const ribbons = useMemo(() => getPaths().map((p) => buildRibbonGeometry(p)), []);
   const def = getActiveTrack();
@@ -2222,16 +2377,26 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
       <SkyRings theme={theme} />
       <ForkIslands theme={theme} />
       <SubZone theme={theme} />
+      <MagZone theme={theme} />
 
       <MovingTraps theme={theme} />
       <Portals theme={theme} />
       <MovingHazards theme={theme} />
       <RoadMarks theme={theme} />
       <BiomeSky theme={theme} lap={lap} />
-      <Scatter />
-      <Props themes={themes} />
-      <Clouds theme={theme} />
-      <AmbientLife theme={theme} />
+      {def.indoor ? (
+        <Corridor themes={themes} />
+      ) : (
+        <>
+          <Scatter />
+          <Props themes={themes} />
+          <Clouds theme={theme} />
+          <AmbientLife theme={theme} />
+          <Landmarks themes={themes} />
+          <Grandstand theme={theme} />
+          <Flocks theme={theme} />
+        </>
+      )}
     </group>
   );
 }
