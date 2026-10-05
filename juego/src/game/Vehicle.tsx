@@ -4,6 +4,7 @@ import * as THREE from "three";
 import type { BoatId, BoosterId, CharacterDef, PlaneId, ShapeId, SpoilerId, SubId, VehicleMode, WheelStyle } from "../data";
 import { BoatAlt, ExtraShapes, PlaneAlt, SubModel } from "./Models";
 import { ModeModels } from "./Models2";
+import { Boat3, Land3, Plane3, Sub3, SUB3 } from "./Models3";
 
 export interface KartVisualState {
   boosting: boolean;
@@ -17,8 +18,8 @@ export interface KartVisualState {
   fused?: boolean;
   ghost?: boolean;
   magnet?: boolean;
-  /** where the fusion turret points, relative to the nose */
-  turretAim?: number;
+  /** riding on another kart as its gunner: shows the barrel */
+  gunning?: boolean;
   exploding?: boolean;
 }
 
@@ -556,6 +557,7 @@ function Chassis({
       )}
 
       <ExtraShapes shape={shape} body={body} decal={decal} glow={glow} finish={finish} />
+      <Land3 shape={shape} body={body} decal={decal} glow={glow} finish={finish} />
       <Spoiler kind={vehicle.spoiler ?? "none"} decal={decal} glow={glow} />
       <Boosters kind={vehicle.booster ?? "single"} glow={glow} />
 
@@ -631,6 +633,7 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
   const gunnerMain = useRef<THREE.Group>(null);
   const gunnerAlt = useRef<THREE.Group>(null);
   const turret = useRef<THREE.Group>(null);
+  const gunBarrel = useRef<THREE.Group>(null);
   const t = useRef(Math.random() * 10);
   const spin = useRef(0);
   const ghostApplied = useRef(false);
@@ -666,15 +669,18 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
         vehicle.shape !== "ufo" &&
         vehicle.shape !== "tank" &&
         vehicle.shape !== "orbit" &&
-        vehicle.shape !== "phantom";
+        vehicle.shape !== "phantom" &&
+        vehicle.shape !== "board" &&
+        vehicle.shape !== "pod";
 
     const usePartner = !!(st?.activeIsPartner && altChar);
     const fused = !!(st?.fused && altChar);
     if (mainPilot.current) mainPilot.current.visible = !usePartner;
     if (altPilot.current) altPilot.current.visible = usePartner;
+    if (gunBarrel.current) gunBarrel.current.visible = !!st?.gunning;
     if (turret.current) {
       turret.current.visible = fused;
-      turret.current.rotation.y = st?.turretAim ?? 0;
+      turret.current.rotation.y = 0;
     }
     if (gunnerMain.current) gunnerMain.current.visible = fused && usePartner;
     if (gunnerAlt.current) gunnerAlt.current.visible = fused && !usePartner;
@@ -761,12 +767,18 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
         </group>
         <group ref={boatAltRef} visible={false}>
           <BoatAlt kind={vehicle.boat ?? "cat"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
+          <Boat3 kind={vehicle.boat ?? "cat"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
         </group>
         <group ref={planeAltRef} visible={false}>
           <PlaneAlt kind={vehicle.plane ?? "wing"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
+          <Plane3 kind={vehicle.plane ?? "wing"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
         </group>
         <group ref={subRef} visible={false}>
-          <SubModel kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
+          {SUB3.includes(vehicle.sub ?? "classic") ? (
+            <Sub3 kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
+          ) : (
+            <SubModel kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
+          )}
         </group>
         <ModeModels vehicle={vehicle} stateRef={stateRef} glow={glow} />
         <group ref={mainPilot}>
@@ -777,6 +789,21 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
             <Pilot char={altChar} glow={glow} />
           </group>
         )}
+        {/* riding on another kart as its gunner: this kart is the turret, and this is its barrel */}
+        <group ref={gunBarrel} visible={false} position={[0, 1.2, 0.1]}>
+          <mesh>
+            <cylinderGeometry args={[0.55, 0.7, 0.4, 12]} />
+            <meshStandardMaterial color="#2b2f3a" metalness={0.6} roughness={0.35} />
+          </mesh>
+          <mesh position={[0, 0.15, 1.1]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.17, 0.24, 2.2, 10]} />
+            <meshStandardMaterial color="#3a4052" metalness={0.7} roughness={0.3} />
+          </mesh>
+          <mesh position={[0, 0.15, 2.25]}>
+            <sphereGeometry args={[0.26, 10, 10]} />
+            <meshStandardMaterial color={character.primary} emissive={character.primary} emissiveIntensity={2.2} toneMapped={false} />
+          </mesh>
+        </group>
         {/* FUSION turret (Crash Tag Team style): one drives, the other shoots */}
         {altChar && (
           <group ref={turret} visible={false} position={[0, 0.9, -1.0]}>

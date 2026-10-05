@@ -2,7 +2,7 @@ import type { TrackDef } from "./data";
 import { design, BYPASS } from "./trackDesign";
 
 // ---------------------------------------------------------------------------
-// The circuits: one per aesthetic, and one built around each kind of vehicle. Each is drawn by hand with the turtle
+// The circuits: one per aesthetic, one built around each kind of vehicle, and three big ones. Each is drawn by hand with the turtle
 // in trackDesign.ts: lengths are in world units (a kart covers about 27 a
 // second), heights are absolute, and a positive turn is a turn to the left.
 // tools/sim.sh check verifies every one of them: closure, bend radius, slopes
@@ -257,7 +257,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .right(90, 80)
         .go(70).mark("s0").go(100, -22).go(15).mark("tA").go(BYPASS + 23).mark("tB").go(15).go(100, 22).mark("s1")
         .right(90, 80).mark("k0")
-        .go(250, 30).weave("L", 25, 118).go(250, -26).mark("k1")
+        .go(250, 30).left(360, 80, 18).weave("L", 25, 118).go(250, -44).mark("k1")
         .right(90, 80)
         .mark("homeA").go(BYPASS + 153).mark("homeB").go(10),
     zones: [["w0", "w1", "water"], ["w2", "s0", "water"], ["s0", "s1", "sub"], ["s1", "k0", "water"], ["k0", "k1", "sky"]],
@@ -282,8 +282,8 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     id: "corriente", theme: "aero", difficulty: 2, start: [0, 8, 0, 0], hazards: 2,
     draw: (t) =>
       t.go(50).mark("go").go(110).mark("k0")
-        .weave("R", 30, 150, 40).left(90, 140, 10)
-        .go(300, -20).mark("skyA").go(BYPASS + 123).mark("skyB")
+        .weave("R", 30, 150, 40).left(360, 100, 28).left(90, 140, 10)
+        .go(280, -48).go(20).mark("skyA").go(BYPASS + 123).mark("skyB")
         .left(90, 140, -10)
         .weave("L", 30, 115, 22).mark("dive").weave("R", 30, 115, -30)
         .left(90, 140, -6)
@@ -309,7 +309,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     draw: (t) =>
       t.go(50).mark("go").go(110)
         .right(90, 80, -4).mark("w0")
-        .go(120).mark("s0").go(160, -30).go(20).mark("tA").go(BYPASS + 123, -6).mark("tB").go(100, -4)
+        .go(120).mark("s0").go(100, -8).right(360, 70, -22).go(20).mark("tA").go(BYPASS + 123, -6).mark("tB").go(160, -4)
         .right(90, 80)
         .weave("L", 30, 100, 10).weave("R", 30, 100, 12).go(100, 18).mark("s1")
         .right(90, 80)
@@ -395,6 +395,95 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     routes: [
       { from: "climbA", to: "climbB", draw: (t) => t.bypass("L", 323, -5, 34), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
       { from: "climbA", to: "climbB", draw: (t) => t.bypass("R", 323, 8, 34), kind: "high", pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
+
+  // METROPOLIS — the big land circuit. A long climb with a road over it and a
+  // tunnel under it, a helix, a jump and a fall, three lanes down the far
+  // side and a ramp lane home: there is a choice to make on every side.
+  design({
+    id: "metropolis", theme: "cyberpunk", difficulty: 3, start: [0, 10, 0, 0], hazards: 4,
+    draw: (t) =>
+      t.go(50).mark("go").go(100)
+        .mark("aA").go(BYPASS + 223, 14).mark("aB").go(60)
+        .right(90, 80, 2)
+        .go(60).left(360, 60, 14).mark("helix")
+        .go(120).mark("run").go(40).mark("j1").go(40).drop(-14).go(100)
+        .right(90, 80)
+        .mark("cA").go(BYPASS + 253, -10).mark("cB")
+        .weave("L", 30, 90, -6)
+        .right(90, 80)
+        .go(93).mark("dA").go(BYPASS + 123).mark("dB")
+        .right(90, 80),
+    holes: [["j1", 9]],
+    sectors: [["aB", "techno"], ["helix", "y2k"], ["cA", "vapor"], ["dA", "cyberpunk"]],
+    traffic: 4,
+    pads: [["go", "boost"], ["aB", "boost"], ["run", "boost", 1.5], ["cB", "boost"], ["dB", "boost"]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 223, 9, 14), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 223, -5, 14), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("L", 253, 8, -10), kind: "high", pads: [["mid", "boost", 1.5]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("R", 253, -4, -10), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 123, 8), kind: "high", holes: [["mid", 14]], pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
+
+  // GRAND ODYSSEY — every craft in one lap, a side each: out to sea by boat,
+  // down a forking tube by submarine, up in a corkscrew by plane with the
+  // flight line splitting in two, and home by road on three lanes.
+  design({
+    id: "odisea", theme: "dreamcore", difficulty: 3, sea: 0, start: [0, 6, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(50).mark("go").go(110).go(60, -6).mark("w0")
+        .mark("chA").go(BYPASS + 183).mark("chB").go(20)
+        .right(90, 90)
+        .go(20).mark("s0").go(100, -20).go(20).mark("tA").go(BYPASS + 103, -4).mark("tB").go(30).go(110, 24).mark("s1")
+        .right(90, 90).mark("k0")
+        .go(190, 34).left(360, 90, 16).go(40).mark("skyA").go(BYPASS + 83).mark("skyB").go(30).go(80, -20)
+        .right(90, 90, -10)
+        .go(160, -14).mark("k1").mark("dA").go(BYPASS + 223).mark("dB")
+        .right(90, 90),
+    zones: [["w0", "s0", "water"], ["s0", "s1", "sub"], ["s1", "k0", "water"], ["k0", "k1", "sky"]],
+    sectors: [["w0", "aqua"], ["s0", "liquid"], ["tA", "cyberpunk"], ["s1", "aero"], ["skyA", "vapor"], ["k1", "dreamcore"]],
+    traffic: 2,
+    pads: [["go", "boost"], ["chA", "jump", 12, 150], ["chA", "jump", 12, 280], ["k1", "boost", 1.45, 20], ["dB", "boost"]],
+    routes: [
+      { from: "chA", to: "chB", draw: (t) => t.bypass("L", 183, 0), afloat: true, kind: "side" },
+      { from: "chA", to: "chB", draw: (t) => t.bypass("R", 183, 7), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
+      { from: "tA", to: "tB", draw: (t) => t.bypass("L", 103, -10, -4), afloat: true, kind: "low" },
+      { from: "tA", to: "tB", draw: (t) => t.bypass("R", 103, 9, -4), afloat: true, kind: "high" },
+      { from: "skyA", to: "skyB", draw: (t) => t.bypass("L", 83, 12), afloat: true, kind: "high" },
+      { from: "skyA", to: "skyB", draw: (t) => t.bypass("R", 83, -12), afloat: true, kind: "low" },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 223, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 223, -4), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+    ],
+  }),
+
+  // CLOUD SUMMIT — the tall one. Two full turns up the mountain to fifty
+  // units, along the ridge on three levels, down the far face in two falls
+  // with a springboard between them, and a cannon over the last corner.
+  design({
+    id: "cumbre", theme: "eco", difficulty: 3, start: [0, 8, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(44).mark("go").go(130)
+        .right(720, 65, 40).mark("up").go(120, 6)
+        .left(90, 80, 4)
+        .mark("bA").go(BYPASS + 173).mark("bB").go(50)
+        .left(90, 80)
+        .go(50).drop(-15).go(60).mark("run").go(40).mark("j1").go(48).drop(-15).go(33)
+        .left(90, 80, -4)
+        .weave("R", 30, 100, -8)
+        .go(132, -8).mark("c0").go(8).mark("air").go(60)
+        .left(90, 80).mark("land").go(6),
+    holes: [["air", 180]],
+    kick: 0,
+    cannons: [["c0", "land", 30]],
+    sectors: [["up", "sunset"], ["bA", "dreamcore"], ["run", "vapor"], ["land", "eco"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["up", "boost", 1.5, -400], ["bB", "boost"], ["run", "boost", 1.5], ["j1", "jump", 13]],
+    routes: [
+      { from: "bA", to: "bB", draw: (t) => t.bypass("L", 173, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("R", 173, -4), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
     ],
   }),
 ];

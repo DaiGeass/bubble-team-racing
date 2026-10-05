@@ -6,6 +6,7 @@ import { EXTRA2 } from "./i18n4";
 import { EXTRA3 } from "./i18n5";
 import { EXTRA4 } from "./i18n6";
 import { EXTRA5 } from "./i18n7";
+import { EXTRA6 } from "./i18n8";
 import { useGame } from "./store";
 import { bindShakeScale } from "./particles";
 import { useControls } from "./controls";
@@ -50,6 +51,7 @@ export default function App() {
       ...EXTRA3.en,
       ...EXTRA4.en,
       ...EXTRA5.en,
+      ...EXTRA6.en,
       ...DICTS[lang],
       ...EXTRA[lang],
       ...EXTRA_WORDS2[lang],
@@ -57,6 +59,7 @@ export default function App() {
       ...EXTRA3[lang],
       ...EXTRA4[lang],
       ...EXTRA5[lang],
+      ...EXTRA6[lang],
     };
     return {
       lang,

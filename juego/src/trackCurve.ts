@@ -50,6 +50,8 @@ export interface PathRT {
   /** rise per metre travelled along the tangent */
   slope: Float32Array;
   half: Float32Array;
+  /** how far below this sample the land has to stay: more under a submarine tube */
+  clear: Float32Array;
   /** how far either side of the sample, along the tangent, its strip of tarmac extends */
   reach: Float32Array;
   prog: Float32Array;
@@ -129,7 +131,7 @@ function allocPath(id: number, n: number, main: boolean): PathRT {
     id, main, closed: main, n, ds: 1, length: 1, t0: 0, span: 1,
     px: new Float32Array(n), py: new Float32Array(n), pz: new Float32Array(n),
     tx: new Float32Array(n), tz: new Float32Array(n), slope: new Float32Array(n),
-    half: new Float32Array(n), reach: new Float32Array(n), prog: new Float32Array(n), flags: new Uint8Array(n), def: null,
+    half: new Float32Array(n), clear: new Float32Array(n), reach: new Float32Array(n), prog: new Float32Array(n), flags: new Uint8Array(n), def: null,
   };
 }
 
@@ -273,9 +275,13 @@ function rebuild(def: TrackDef) {
     paths.push(p);
   }
 
+  terSeed = TRACKS.indexOf(def) * 1.37 + 0.6;
   grid = new Map();
   for (const p of paths) {
     for (let i = 0; i < p.n; i++) {
+      // the land keeps clear of the tarmac, and well clear of the glass tube round a submarine stretch
+      const t = p.prog[i];
+      p.clear[i] = def.zones.some((z) => z.type === "sub" && t >= z.t0 - 0.004 && t <= z.t1 + 0.004) ? 7.5 : 1.7;
       if (!(p.flags[i] & F_SOLID)) continue;
       const key = cellKey(Math.floor(p.px[i] / CELL), Math.floor(p.pz[i] / CELL));
       let cell = grid.get(key);
@@ -484,6 +490,73 @@ export function getPads(): PadRT[] {
       lift: pad.lift ?? 22,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// The land. Rolling hills on a dry circuit, islands and a sea bed on a wet one,
+// worked out from the roads: wherever a road runs the land sinks away under
+// it, so nothing is ever buried and nothing hangs over empty air for no reason.
+// ---------------------------------------------------------------------------
+
+let terSeed = 0;
+
+/** Smooth 0..1 relief, different for every circuit. */
+function relief(x: number, z: number) {
+  const s = terSeed;
+  const n =
+    0.5 +
+    0.27 * Math.sin(x * 0.0061 + s * 1.7) * Math.cos(z * 0.0073 + s * 0.9) +
+    0.14 * Math.sin((x + z) * 0.0127 + s * 2.3) +
+    0.09 * Math.sin(x * 0.031 - z * 0.027 + s);
+  return Math.min(1, Math.max(0, n));
+}
+
+export interface TerrainPoint {
+  y: number;
+  /** lap progress of the nearest road, or -1 when none is near: which aesthetic this ground belongs to */
+  prog: number;
+}
+
+/** Height of the land at (x, z), and the stretch of the lap it lies beside. */
+export function terrainAt(x: number, z: number, out: TerrainPoint): TerrainPoint {
+  const def = getActiveTrack();
+  const floor = def.floor ?? 0;
+  const n = relief(x, z);
+  // a wet circuit is sea bed with islands breaking the surface; a dry one is a plain with hills
+  let h = def.sea !== undefined ? def.sea - 15 + 31 * n : floor + 1.5 + 34 * n * n;
+  let nearest = Infinity;
+  let prog = -1;
+  const cx = Math.floor(x / CELL);
+  const cz = Math.floor(z / CELL);
+  for (let gx = cx - 3; gx <= cx + 3; gx++) {
+    for (let gz = cz - 3; gz <= cz + 3; gz++) {
+      const cell = grid.get(cellKey(gx, gz));
+      if (!cell) continue;
+      for (let k = 0; k < cell.length; k++) {
+        const code = cell[k];
+        const pid = (code / PACK) | 0;
+        const i = code - pid * PACK;
+        const p = paths[pid];
+        const d = Math.hypot(x - p.px[i], z - p.pz[i]);
+        if (d > 66) continue;
+        // right under the road it stays below it; further out it may climb, gently
+        const lim = p.py[i] - p.clear[i] + Math.max(0, d - p.half[i] - 4) * 0.36;
+        if (lim < h) h = lim;
+        if (d < nearest) {
+          nearest = d;
+          prog = p.prog[i];
+        }
+      }
+    }
+  }
+  out.y = Math.max(h, floor - 4);
+  out.prog = prog;
+  return out;
+}
+
+const _land: TerrainPoint = { y: 0, prog: 0 };
+export function terrainY(x: number, z: number): number {
+  return terrainAt(x, z, _land).y;
 }
 
 /** Colour of each kind of route: on its tarmac, on its signpost and on the map. */

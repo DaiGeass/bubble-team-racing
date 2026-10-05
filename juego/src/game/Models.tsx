@@ -10,7 +10,7 @@ interface C {
 }
 
 /** Clear liquid-glass material used for canopies, windows and bubbles. */
-function Glass({ color = "#dff6ff", opacity = 0.38 }: { color?: string; opacity?: number }) {
+export function Glass({ color = "#dff6ff", opacity = 0.38 }: { color?: string; opacity?: number }) {
   return (
     <meshPhysicalMaterial
       color={color}
@@ -30,7 +30,7 @@ function Glass({ color = "#dff6ff", opacity = 0.38 }: { color?: string; opacity?
  * Paint layer. A finish overrides the shape's own roughness and metalness, so the
  * same chassis can be matte, chromed or turned to glass without touching geometry.
  */
-function Paint({ color, metal = 0.55, rough = 0.14, finish = "solid" }: { color: string; metal?: number; rough?: number; finish?: FinishId }) {
+export function Paint({ color, metal = 0.55, rough = 0.14, finish = "solid" }: { color: string; metal?: number; rough?: number; finish?: FinishId }) {
   const f = finish === "gloss" ? { rough: 0.04, metal: 0.6 }
     : finish === "matte" ? { rough: 0.92, metal: 0.05 }
     : finish === "chrome" ? { rough: 0.03, metal: 1 }
@@ -71,7 +71,7 @@ function Paint({ color, metal = 0.55, rough = 0.14, finish = "solid" }: { color:
   return <meshStandardMaterial color={color} roughness={f.rough} metalness={f.metal} />;
 }
 
-function Neon({ color, i = 2.4 }: { color: string; i?: number }) {
+export function Neon({ color, i = 2.4 }: { color: string; i?: number }) {
   return <meshStandardMaterial color={color} emissive={color} emissiveIntensity={i} toneMapped={false} />;
 }
 

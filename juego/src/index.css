@@ -284,3 +284,9 @@ button, a, [role="button"] {
 .theme-noir .bubble {
   background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.5), rgba(160, 160, 160, 0.16));
 }
+/* keyboard hints in a race: shown for a while, then out of the way */
+@keyframes hint-fade {
+  0%, 85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.hint-fade { animation: hint-fade 16s ease-out both; }

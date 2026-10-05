@@ -56,6 +56,7 @@ const SHAPE_GLYPH: Record<string, string> = {
   kart: "⛟", hover: "◎", buggy: "⛝", jet: "➤", cruiser: "⛴", moto: "⚑", ufo: "⏣",
   coupe: "◢", van: "▣", formula: "⏵", bubble: "◉", rocket: "▲", mono: "◆",
   tank: "◼", wedge: "▼", sled: "⩕", orbit: "◍", dune: "⬢", phantom: "◇",
+  shell: "⬣", board: "▬", winglet: "⋎", pod: "⫴",
 };
 
 /** Tiny SVG preview of a circuit built from its control points. */
@@ -412,9 +413,12 @@ export default function SelectScreen() {
                         {t("difficulty")}
                         <span className="text-amber-500">{"★".repeat(trk.difficulty)}{"☆".repeat(3 - trk.difficulty)}</span>
                       </div>
-                      <div className="mt-2 flex gap-1.5 text-[10px] font-bold text-sky-700">
-                        <span className="rounded-full bg-white/60 px-2 py-0.5">≈ {t("modeBoat")}</span>
-                        <span className="rounded-full bg-white/60 px-2 py-0.5">✈ {t("modePlane")}</span>
+                      {/* what this circuit really has: the craft it puts you in, and how many other ways round */}
+                      <div className="mt-2 flex flex-wrap justify-center gap-1.5 text-[10px] font-bold text-sky-700">
+                        {trk.zones.some((z) => z.type === "water") && <span className="rounded-full bg-white/60 px-2 py-0.5">≈ {t("modeBoat")}</span>}
+                        {trk.zones.some((z) => z.type === "sky") && <span className="rounded-full bg-white/60 px-2 py-0.5">✈ {t("modePlane")}</span>}
+                        {trk.zones.some((z) => z.type === "sub") && <span className="rounded-full bg-white/60 px-2 py-0.5">◒ {t("modeSub")}</span>}
+                        {!!trk.routes?.length && <span className="rounded-full bg-amber-100/80 px-2 py-0.5 text-amber-700">⑂ {trk.routes.length}</span>}
                       </div>
                       {sel && <span className="mt-2 flex h-6 w-6 items-center justify-center rounded-full bg-white text-sm font-black text-emerald-600 shadow">✓</span>}
                     </Panel>

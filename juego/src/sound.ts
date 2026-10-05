@@ -93,3 +93,31 @@ export const sfx = {
   click: () => tone({ freq: 700, duration: 0.07, type: "sine", volume: 0.12 }),
   bump: () => tone({ freq: 120, freqEnd: 60, duration: 0.15, type: "sawtooth", volume: 0.18 }),
 };
+
+let skidGain: GainNode | null = null;
+/** Tyre screech: filtered noise that runs for as long as a drift does. 0 is silence. */
+export function setSkid(level: number) {
+  const c = getCtx();
+  if (!c) return;
+  if (!skidGain) {
+    if (level <= 0) return;
+    const buffer = c.createBuffer(1, c.sampleRate, c.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    const band = c.createBiquadFilter();
+    band.type = "bandpass";
+    band.frequency.value = 2300;
+    band.Q.value = 5;
+    skidGain = c.createGain();
+    skidGain.gain.value = 0;
+    src.connect(band);
+    band.connect(skidGain);
+    skidGain.connect(c.destination);
+    src.start();
+  }
+  const target = useMutedCheck() ? 0 : Math.max(0, level) * 0.11 * masterVolume();
+  skidGain.gain.setTargetAtTime(target, c.currentTime, 0.06);
+}

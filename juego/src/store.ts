@@ -62,6 +62,12 @@ export interface Telemetry {
   fused: boolean;
   fusionHp: number; // 0..1 turret partner health
   turbo: number; // 0..1 drift-charged turbo meter
+  /** the item roulette is still spinning */
+  rolling: boolean;
+  /** how close something aimed at the player is, 0 none .. 1 on top of it */
+  incoming: number;
+  /** fused and on the turret: the steering aims it and the item button fires */
+  gunning: boolean;
   /** mini-turbo level the current drift has reached, 0..3 */
   driftLevel: number;
   /** until when (Date.now()) error windows cover the screen */
@@ -92,6 +98,9 @@ const defaultTelemetry: Telemetry = {
   fused: false,
   fusionHp: 1,
   turbo: 0,
+  rolling: false,
+  incoming: 0,
+  gunning: false,
   driftLevel: 0,
   popupUntil: 0,
   shortcutFlash: 0,

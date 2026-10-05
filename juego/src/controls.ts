@@ -55,6 +55,11 @@ export function useControls() {
   });
 
   const keys = useRef<Record<string, boolean>>({});
+  // A key or button pressed and let go between two frames would never be seen
+  // as held. Every press is remembered here until the next poll has read it,
+  // so a quick tap always counts, however slow the frame.
+  const taps = useRef<Record<string, boolean>>({});
+  const touchTaps = useRef<Record<string, boolean>>({});
   const prevItem = useRef(false);
   const prevSwap = useRef(false);
   const prevFuse = useRef(false);
@@ -64,6 +69,7 @@ export function useControls() {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       keys.current[e.code] = true;
+      taps.current[e.code] = true;
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab"].includes(e.code)) e.preventDefault();
       if (e.code === "Escape" || e.code === "KeyP") state.current.pausePressed = true;
     };
@@ -85,6 +91,7 @@ export function useControls() {
 
   function setTouch(key: keyof typeof touch.current, val: boolean) {
     touch.current[key] = val;
+    if (val) touchTaps.current[key] = true;
   }
 
   function poll(): ControlState {
@@ -95,7 +102,9 @@ export function useControls() {
     // An action is on while one of its bound keys is down or its on-screen button
     // is pressed. Nothing is hard-wired: rebinding a key frees the old one, and a
     // touch slot does exactly the action it was given.
-    const on = (a: Action) => binds[a].some((code) => k[code]) || t[TOUCH_KEY[a]];
+    const tk = taps.current;
+    const tt = touchTaps.current;
+    const on = (a: Action) => binds[a].some((code) => k[code] || tk[code]) || t[TOUCH_KEY[a]] || !!tt[TOUCH_KEY[a]];
     let left = on("left");
     let right = on("right");
     const fwd = on("gas");
@@ -122,6 +131,8 @@ export function useControls() {
     state.current.turbo = turbo;
     state.current.turboPressed = turbo && !prevTurbo.current;
     state.current.drift = drift;
+    taps.current = {};
+    touchTaps.current = {};
     const pausePressed = state.current.pausePressed;
     state.current.pausePressed = false;
     prevItem.current = item;

@@ -22,9 +22,9 @@ export type WheelStyle = "classic" | "sporty" | "glow" | "chrome" | "spike";
 export type SpoilerId = "none" | "wing" | "fin";
 export type FinishId = "solid" | "gloss" | "matte" | "chrome" | "glass" | "holo";
 export type BoosterId = "single" | "twin" | "neon";
-export type BoatId = "cat" | "speed" | "ski" | "yacht" | "tug" | "raft" | "hovercraft";
-export type PlaneId = "wing" | "bi" | "delta" | "stealth" | "jetliner" | "twinprop" | "nimbus";
-export type SubId = "classic" | "pod" | "shark" | "diver" | "dredger" | "sleuth" | "leviathan";
+export type BoatId = "cat" | "speed" | "ski" | "yacht" | "tug" | "raft" | "hovercraft" | "airboat" | "viking" | "duck";
+export type PlaneId = "wing" | "bi" | "delta" | "stealth" | "jetliner" | "twinprop" | "nimbus" | "heli" | "blimp" | "saucer";
+export type SubId = "classic" | "pod" | "shark" | "diver" | "dredger" | "sleuth" | "leviathan" | "manta" | "squid" | "bathy" | "torpedo";
 export type VehicleMode = "land" | "boat" | "plane" | "sub";
 
 export interface CharacterDef {
@@ -354,8 +354,8 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
 export const THEME_LIST: ThemeId[] = ["frutiger", "eco", "aero", "liquid", "y2k", "win98", "vapor", "techno", "aqua", "sunset", "dreamcore", "cyberpunk", "noir"];
 
 // ---------------------------------------------------------------------------
-// Vehicle customization: 11 shapes, 5 wheels, 3 spoilers, 3 boosters,
-// 3 boats, 3 planes and 3 submarines
+// Vehicle customization: 23 shapes, 5 wheels, 3 spoilers, 3 boosters,
+// 10 boats, 10 aircraft and 11 submarines
 // ---------------------------------------------------------------------------
 
 export const SHAPES: { id: ShapeId; bonus: { speed: number; handling: number } }[] = [
@@ -378,6 +378,10 @@ export const SHAPES: { id: ShapeId; bonus: { speed: number; handling: number } }
   { id: "orbit", bonus: { speed: 0.5, handling: 1.5 } },
   { id: "dune", bonus: { speed: 0.2, handling: 1.0 } },
   { id: "phantom", bonus: { speed: 0.8, handling: 1.3 } },
+  { id: "shell", bonus: { speed: -0.3, handling: 1.4 } },
+  { id: "board", bonus: { speed: 0.7, handling: 1.2 } },
+  { id: "winglet", bonus: { speed: 1.5, handling: 0.0 } },
+  { id: "pod", bonus: { speed: 1.7, handling: -0.9 } },
 ];
 
 export const BODY_COLORS = ["#ff4d6d", "#ff9f1c", "#fde047", "#4ade80", "#22d3ee", "#6366f1", "#f472b6", "#ffffff", "#111827", "#a855f7", "#14b8a6"];
@@ -394,9 +398,9 @@ export const FINISH_META: Record<FinishId, { swatch: string; labelKey: string }>
   holo: { swatch: "#ff9ee0", labelKey: "fin_holo" },
 };
 export const BOOSTERS: BoosterId[] = ["single", "twin", "neon"];
-export const BOATS: BoatId[] = ["cat", "speed", "ski", "yacht", "tug", "raft", "hovercraft"];
-export const PLANES: PlaneId[] = ["wing", "bi", "delta", "stealth", "jetliner", "twinprop", "nimbus"];
-export const SUBS: SubId[] = ["classic", "pod", "shark", "diver", "dredger", "sleuth", "leviathan"];
+export const BOATS: BoatId[] = ["cat", "speed", "ski", "yacht", "tug", "raft", "hovercraft", "airboat", "viking", "duck"];
+export const PLANES: PlaneId[] = ["wing", "bi", "delta", "stealth", "jetliner", "twinprop", "nimbus", "heli", "blimp", "saucer"];
+export const SUBS: SubId[] = ["classic", "pod", "shark", "diver", "dredger", "sleuth", "leviathan", "manta", "squid", "bathy", "torpedo"];
 
 /**
  * Per-craft speed and handling, taken from the second lineage and extended to every
@@ -416,6 +420,9 @@ export const BOAT_STATS: CraftStat[] = [
   { id: "tug", speed: 0.82, handling: 1.0 },
   { id: "raft", speed: 0.95, handling: 1.4 },
   { id: "hovercraft", speed: 1.3, handling: 1.15 },
+  { id: "airboat", speed: 1.26, handling: 0.84 },
+  { id: "viking", speed: 0.88, handling: 1.08 },
+  { id: "duck", speed: 0.9, handling: 1.32 },
 ];
 
 export const PLANE_STATS: CraftStat[] = [
@@ -426,6 +433,9 @@ export const PLANE_STATS: CraftStat[] = [
   { id: "jetliner", speed: 1.35, handling: 0.82 },
   { id: "twinprop", speed: 0.85, handling: 1.3 },
   { id: "nimbus", speed: 1.18, handling: 1.22 },
+  { id: "heli", speed: 0.88, handling: 1.36 },
+  { id: "blimp", speed: 0.8, handling: 1.12 },
+  { id: "saucer", speed: 1.08, handling: 1.26 },
 ];
 
 export const SUB_STATS: CraftStat[] = [
@@ -436,6 +446,10 @@ export const SUB_STATS: CraftStat[] = [
   { id: "dredger", speed: 0.8, handling: 0.95 },
   { id: "sleuth", speed: 0.92, handling: 1.35 },
   { id: "leviathan", speed: 1.4, handling: 0.72 },
+  { id: "manta", speed: 1.06, handling: 1.28 },
+  { id: "squid", speed: 1.14, handling: 1.1 },
+  { id: "bathy", speed: 0.84, handling: 1.2 },
+  { id: "torpedo", speed: 1.36, handling: 0.76 },
 ];
 
 const CRAFT_SPEEDS: Record<string, number> = {};

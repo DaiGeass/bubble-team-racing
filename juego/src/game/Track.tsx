@@ -2,7 +2,7 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { trackCurve, halfWidthAt, getActiveTrack, nearestT, surfaceYAt, trapTransform, portalTransform, getPaths, getPads, getSkyRings, getSkyBlocks, plainRoadAt, sectorIndexAt, sectorMix, trackBounds, FLY_BASE, ROUTE_COLOURS, groundAt, makeGround, F_SOLID, F_WALL_POS, F_WALL_NEG, F_TUNNEL, type PathRT } from "../trackCurve";
+import { trackCurve, halfWidthAt, getActiveTrack, nearestT, surfaceYAt, trapTransform, portalTransform, getPaths, getPads, getSkyRings, getSkyBlocks, plainRoadAt, sectorIndexAt, sectorMix, trackBounds, terrainAt, terrainY, FLY_BASE, ROUTE_COLOURS, groundAt, makeGround, F_SOLID, F_WALL_POS, F_WALL_NEG, F_TUNNEL, type PathRT } from "../trackCurve";
 import { TRACK_WIDTH, ZONES, hazardState, zoneAt, zoneOfKind, raceSnapshot, biomeMix, themeOnLap, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
 function makeRoadTexture(theme: ThemeDef) {
@@ -233,6 +233,70 @@ function buildBanks(floor: number) {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * The land as one mesh: hills, valleys, islands and sea bed, coloured by the
+ * aesthetic of the stretch of road each piece of ground lies beside, so the
+ * countryside changes with the lap as well.
+ */
+function buildTerrain(themes: ThemeDef[], base: ThemeDef) {
+  const def = getActiveTrack();
+  const bb = trackBounds();
+  const size = (bb.r + 270) * 2;
+  const N = Math.max(60, Math.min(128, Math.round(size / 15)));
+  const step = size / N;
+  const pos = new Float32Array((N + 1) * (N + 1) * 3);
+  const col = new Float32Array((N + 1) * (N + 1) * 3);
+  const idx: number[] = [];
+  const pt = { y: 0, prog: 0 };
+  const sea = def.sea;
+  const floor = def.floor ?? 0;
+  const c = new THREE.Color();
+  const hi = new THREE.Color();
+  const sand = new THREE.Color("#ead9a6");
+  let v = 0;
+  for (let iz = 0; iz <= N; iz++) {
+    for (let ix = 0; ix <= N; ix++) {
+      const x = bb.cx - size / 2 + ix * step;
+      const z = bb.cz - size / 2 + iz * step;
+      terrainAt(x, z, pt);
+      pos[v * 3] = x;
+      pos[v * 3 + 1] = pt.y;
+      pos[v * 3 + 2] = z;
+      const th = pt.prog >= 0 ? themes[sectorIndexAt(pt.prog)] ?? base : base;
+      if (sea !== undefined && pt.y < sea - 0.6) {
+        // sea bed: darker the deeper it lies
+        c.set(th.isle).multiplyScalar(Math.max(0.3, 0.7 + (pt.y - sea) * 0.02));
+      } else if (sea !== undefined && pt.y < sea + 1.3) {
+        c.copy(sand);
+      } else {
+        // low ground in the ground colour, high ground turning to the colour of the hills
+        const up = Math.min(1, Math.max(0, (pt.y - (sea ?? floor) - 4) / 26));
+        c.set(th.ground).lerp(hi.set(th.isle), up * 0.75);
+        c.multiplyScalar(0.92 + 0.14 * Math.sin(x * 0.37 + z * 0.23));
+      }
+      col[v * 3] = c.r;
+      col[v * 3 + 1] = c.g;
+      col[v * 3 + 2] = c.b;
+      v++;
+    }
+  }
+  for (let iz = 0; iz < N; iz++) {
+    for (let ix = 0; ix < N; ix++) {
+      const a = iz * (N + 1) + ix;
+      const b = a + 1;
+      const d2 = a + N + 1;
+      const e = d2 + 1;
+      idx.push(a, d2, b, b, d2, e);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  g.setIndex(idx);
   g.computeVertexNormals();
   return g;
 }
@@ -616,7 +680,7 @@ function Props({ themes }: { themes: ThemeDef[] }) {
   const def = getActiveTrack();
   const islet = def.sea !== undefined;
   const items = useMemo(() => {
-    const arr: { pos: THREE.Vector3; rot: number; s: number; kind: number; sector: number }[] = [];
+    const arr: { pos: THREE.Vector3; rot: number; s: number; kind: number; sector: number; afloat: boolean }[] = [];
     const probe = makeGround();
     for (let i = 0; i < 86; i++) {
       const t = i / 86;
@@ -633,12 +697,14 @@ function Props({ themes }: { themes: ThemeDef[] }) {
         let covered = false;
         for (const [ox, oz] of [[0, 0], [5, 0], [-5, 0], [0, 5], [0, -5]]) if (groundAt(p.x + ox, p.z + oz, 1e6, probe, 0)) covered = true;
         if (covered) continue;
-        p.y = def.sea !== undefined ? def.sea + 0.25 : def.floor;
+        // on the land where there is land, on an islet where the sea is open
+        const land = terrainY(p.x, p.z);
+        p.y = def.sea !== undefined ? Math.max(land, def.sea + 0.25) : land;
       } else {
         const g = groundReach(t);
         p.y = Math.min(groundYAt(t, dist - g.edge), surfaceYAt(nearestT(p, t))) - 0.25;
       }
-      arr.push({ pos: p, rot: Math.random() * Math.PI, s: 0.8 + Math.random() * 0.9, kind: i % 3, sector: sectorIndexAt(t) });
+      arr.push({ pos: p, rot: Math.random() * Math.PI, s: 0.8 + Math.random() * 0.9, kind: i % 3, sector: sectorIndexAt(t), afloat: def.sea !== undefined && p.y <= def.sea + 0.3 });
     }
     return arr;
   }, []);
@@ -649,7 +715,7 @@ function Props({ themes }: { themes: ThemeDef[] }) {
         const theme = themes[it.sector] ?? themes[0];
         return (
         <group key={i} position={[it.pos.x, it.pos.y, it.pos.z]} rotation={[0, it.rot, 0]} scale={it.s}>
-          {islet && (
+          {islet && it.afloat && (
             <mesh position={[0, -0.9, 0]} receiveShadow>
               <cylinderGeometry args={[3.4, 4.6, 1.8, 10]} />
               <meshStandardMaterial color={theme.isle} roughness={0.9} flatShading />
@@ -1634,7 +1700,7 @@ function Scatter() {
         if (groundAt(p.x + ox, p.z + oz, 1e6, probe, 0)) onRoad = true;
       }
       if (onRoad) continue;
-      p.y = floor ?? groundYAt(t, lateral - g.edge);
+      p.y = floor !== undefined ? terrainY(p.x, p.z) : groundYAt(t, lateral - g.edge);
       const { a, b, u } = biomeMix(t);
       const style = u > 0.5 ? b : a;
       const z = zoneAt(t);
@@ -2069,6 +2135,7 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
   const barriers = useMemo(() => buildBarriers(), []);
   const rails = useMemo(() => buildRails(themes), [themes]);
   const banks = useMemo(() => (def.floor !== undefined && def.sea === undefined ? buildBanks(def.floor) : null), [def]);
+  const land = useMemo(() => (def.floor !== undefined ? buildTerrain(themes, theme) : null), [def, themes, theme]);
   const voidCircuit = !!def.noGround;
   const ground = useMemo(() => (voidCircuit ? null : buildGround()), [voidCircuit]);
   const techno = theme.id === "techno";
@@ -2092,10 +2159,16 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
       )}
       {def.floor !== undefined && (
         <>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, def.floor, 0]} receiveShadow>
-            <circleGeometry args={[1500, 72]} />
-            <meshStandardMaterial color={floorTexture ? "#ffffff" : theme.isle} map={floorTexture} roughness={0.9} />
+          {/* far below everything, so the horizon is never a hole */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, def.floor - 4.5, 0]}>
+            <circleGeometry args={[2400, 48]} />
+            <meshStandardMaterial color={def.sea !== undefined ? new THREE.Color(theme.isle).multiplyScalar(0.45) : theme.ground} map={floorTexture} roughness={1} />
           </mesh>
+          {land && (
+            <mesh geometry={land} receiveShadow>
+              <meshStandardMaterial vertexColors roughness={1} flatShading />
+            </mesh>
+          )}
           <Pillars floor={def.floor} theme={theme} />
         </>
       )}

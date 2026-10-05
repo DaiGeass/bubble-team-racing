@@ -26,6 +26,8 @@ export interface Body {
   vy: number;
   airborne: boolean;
   heading: number;
+  /** direction of travel. The same as the heading on tarmac; a hull on water slides, so there it lags the bow */
+  course: number;
   speed: number;
   /** ribbon and sample last stood on */
   path: number;
@@ -100,7 +102,7 @@ export function progDelta(from: number, to: number) {
  * any height, so a crest never throws a car out of a walled stretch.
  * Returns true when it pushed the body back.
  */
-function wall(b: Body, opts: StepOpts, dt: number, res: StepResult): boolean {
+function wall(b: Body, opts: StepOpts, dt: number, res: StepResult, vx: number, vz: number): boolean {
   if (opts.ghost) return false;
   const onFloor = !opts.fly && groundAt(b.pos.x, b.pos.z, b.y, W, 1.6) && W.y > b.y - 2.5;
   if (!onFloor) {
@@ -124,16 +126,16 @@ function wall(b: Body, opts: StepOpts, dt: number, res: StepResult): boolean {
   b.pos.x -= nx * over;
   b.pos.z -= nz * over;
 
-  const sgn = b.speed >= 0 ? 1 : -1;
-  const vx = Math.sin(b.heading) * sgn;
-  const vz = Math.cos(b.heading) * sgn;
+  // (vx, vz) is the direction the body is really moving in
   const into = vx * nx + vz * nz;
   if (into > 0) {
     // sine of the angle to the barrier: 0 is a graze, 1 is head-on
     const impact = Math.min(1, into);
     const fwd = vx * W.tx + vz * W.tz >= 0 ? 1 : -1;
-    const along = Math.atan2(W.tx * fwd, W.tz * fwd) + (sgn > 0 ? 0 : Math.PI);
-    b.heading += wrapAngle(along - b.heading) * Math.min(1, dt * (4 + 9 * impact));
+    // swing the travel round to run along the barrier, and the nose with it
+    const turn = wrapAngle(Math.atan2(W.tx * fwd, W.tz * fwd) - Math.atan2(vx, vz)) * Math.min(1, dt * (4 + 9 * impact));
+    b.heading += turn;
+    b.course += turn;
     if (!b.touching) {
       // the hit costs what was driven into the barrier, a graze costs next to nothing
       b.speed *= 1 - 0.1 * impact - 0.62 * impact * impact;
@@ -160,10 +162,25 @@ export function moveBody(b: Body, dx: number, dz: number, dt: number, opts: Step
   const dist = Math.hypot(dx, dz);
   const steps = Math.min(6, Math.max(1, Math.ceil(dist / 0.7)));
   let touched = false;
+  // direction of travel; standing still it is taken to be the way the body points
+  let vx = dist > 1e-5 ? dx / dist : Math.sin(b.heading);
+  let vz = dist > 1e-5 ? dz / dist : Math.cos(b.heading);
   for (let s = 0; s < steps; s++) {
-    b.pos.x += dx / steps;
-    b.pos.z += dz / steps;
-    if (wall(b, opts, dt / steps, res)) touched = true;
+    b.pos.x += (vx * dist) / steps;
+    b.pos.z += (vz * dist) / steps;
+    const before = b.course;
+    if (wall(b, opts, dt / steps, res, vx, vz)) {
+      touched = true;
+      // the rest of this move goes the way the barrier turned it
+      const turned = b.course - before;
+      if (turned !== 0) {
+        const c = Math.cos(turned);
+        const s2 = Math.sin(turned);
+        const nvx = vx * c + vz * s2;
+        vz = vz * c - vx * s2;
+        vx = nvx;
+      }
+    }
   }
   b.touching = touched;
 
@@ -250,6 +267,7 @@ export function placeBody(b: Body, pathId: number, idx: number, lat = 0) {
   b.airborne = false;
   b.touching = false;
   b.heading = Math.atan2(p.tx[i], p.tz[i]);
+  b.course = b.heading;
   b.path = pathId;
   b.idx = i;
   b.total += progDelta(b.prog, p.prog[i]);

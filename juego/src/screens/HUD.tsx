@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n, ordinal } from "../i18n";
 import { useGame, DEFAULT_TOUCH, type Action, type TouchSlot } from "../store";
-import { WEAPON_META, THEMES, mutateTheme, type WeaponId, type VehicleMode } from "../data";
+import { WEAPON_META, WEAPONS, THEMES, mutateTheme, type WeaponId, type VehicleMode } from "../data";
 import { getActiveTrack } from "../trackCurve";
 import type { UseControlsReturn } from "../controls";
 import Minimap from "../ui/Minimap";
@@ -16,6 +16,26 @@ function formatTime(ms: number) {
 
 const MODE_GLYPH: Record<VehicleMode, string> = { land: "▬", boat: "≈", plane: "✈", sub: "◒" };
 const MODE_KEY: Record<VehicleMode, string> = { land: "modeLand", boat: "modeBoat", plane: "modePlane", sub: "modeSub" };
+
+/**
+ * Whether to lay the screen out for fingers. The width of the window says
+ * nothing about it: a phone on its side is wider than a small laptop window.
+ */
+function useTouchScreen() {
+  const [touch, setTouch] = useState(() => typeof window !== "undefined" && (window.matchMedia?.("(pointer: coarse)").matches || navigator.maxTouchPoints > 0));
+  useEffect(() => {
+    // whichever was used last wins, so a laptop with a touch screen gets both
+    const onTouch = () => setTouch(true);
+    const onKey = () => setTouch(false);
+    window.addEventListener("touchstart", onTouch, { passive: true });
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("touchstart", onTouch);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+  return touch;
+}
 
 function TouchButton({
   label,
@@ -93,7 +113,14 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
   useEffect(() => setCdKey((k) => k + 1), [telemetry.countdown]);
 
   const w = telemetry.weapon ? WEAPON_META[telemetry.weapon as WeaponId] : null;
+  // the big button shows the item itself while it is the item button
+  const itemSlot = (layout.touchLayout.item ?? "item") === "item";
+  // the roulette: the symbols flick past until the draw settles
+  const rollGlyph = WEAPON_META[WEAPONS[Math.floor(Date.now() / 70) % WEAPONS.length]].glyph;
   const speedPct = Math.min(100, (telemetry.speedKph / 190) * 100);
+  const touch = useTouchScreen();
+  // on a touch screen the three item buttons stack in the corner beside the pedals
+  const side = touch ? 50 : 56;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 select-none">
@@ -129,9 +156,19 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
           </div>
         ))}
 
+      {/* ---------- something is coming for you: the closer, the fuller the bar ---------- */}
+      {telemetry.incoming > 0 && (
+        <div className={`absolute left-1/2 flex -translate-x-1/2 animate-pulse items-center gap-2 rounded-full px-3 py-1.5 ${touch ? "bottom-40" : "bottom-32"}`} style={{ background: "rgba(220,20,40,0.88)", boxShadow: "0 0 22px rgba(255,60,80,0.9)" }}>
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-sm font-black" style={{ color: "#d40000" }}>!</span>
+          <span className="block h-2 w-24 overflow-hidden rounded-full bg-white/30">
+            <span className="block h-full rounded-full bg-white" style={{ width: `${Math.round(telemetry.incoming * 100)}%` }} />
+          </span>
+        </div>
+      )}
+
       {/* ---------- drift: one light per mini-turbo level reached ---------- */}
       {telemetry.driftLevel > 0 && (
-        <div className="absolute bottom-28 left-1/2 flex -translate-x-1/2 gap-2 sm:bottom-20">
+        <div className={`absolute left-1/2 flex -translate-x-1/2 gap-2 ${touch ? "bottom-28" : "bottom-24"}`}>
           {["#8be9ff", "#ffb347", "#ff5fd2"].map((c, i) => (
             <span
               key={i}
@@ -213,9 +250,20 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         ))}
       </div>
 
-      {/* ---------- speed + turbo bars ---------- */}
-      <div className="absolute bottom-3 left-1/2 hidden w-72 -translate-x-1/2 flex-col gap-1.5 sm:flex">
-        <div className="glass-panel h-4 overflow-hidden rounded-full p-0.5">
+      {/* ---------- speed + turbo: under the clock on a touch screen, where no thumb covers them ---------- */}
+      <div className={`absolute left-1/2 flex -translate-x-1/2 flex-col ${touch ? "top-[5.4rem] w-44 gap-1" : "bottom-3 w-80 gap-1.5"}`}>
+        {!touch && (
+          <div className="flex items-end justify-center gap-1.5 leading-none">
+            <span
+              className="font-display text-4xl font-extrabold tabular-nums text-white"
+              style={{ WebkitTextStroke: "1.5px rgba(10,60,90,0.45)", textShadow: telemetry.boosting ? "0 0 18px #ffd166" : `0 0 14px ${themeGlow}` }}
+            >
+              {telemetry.speedKph}
+            </span>
+            <span className="pb-1 text-[11px] font-extrabold uppercase tracking-wide text-sky-900/70">km/h</span>
+          </div>
+        )}
+        <div className={`glass-panel overflow-hidden rounded-full p-0.5 ${touch ? "h-3" : "h-4"}`}>
           <div
             className="h-full rounded-full transition-[width] duration-100"
             style={{
@@ -227,10 +275,10 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         </div>
         {/* drift-charged TURBO meter */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-extrabold uppercase tracking-wide text-sky-900/70">{t("turboBtn")}</span>
+          <span className="text-[10px] font-extrabold uppercase tracking-wide text-sky-900/80">{t("turboBtn")}</span>
           <div className="glass-panel h-3 flex-1 overflow-hidden rounded-full p-0.5">
             <div
-              className="h-full rounded-full transition-[width] duration-150"
+              className={`h-full rounded-full transition-[width] duration-150 ${telemetry.turbo > 0.99 ? "animate-pulse" : ""}`}
               style={{
                 width: `${telemetry.turbo * 100}%`,
                 background: "linear-gradient(90deg,#ffe066,#ff9f1c,#ff4d6d)",
@@ -238,14 +286,13 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
               }}
             />
           </div>
-          <span className="font-mono text-[10px] font-bold text-sky-900/70">{Math.round(telemetry.turbo * 100)}%</span>
+          {!touch && <span className="w-8 text-right font-mono text-[10px] font-bold text-sky-900/70">{Math.round(telemetry.turbo * 100)}%</span>}
         </div>
-        {telemetryOn && <div className="text-center font-mono text-xs font-bold text-sky-900/70">{telemetry.speedKph} km/h</div>}
       </div>
 
       {/* ---------- fusion turret health bar ---------- */}
       {telemetry.fused && (
-        <div className="absolute left-1/2 top-24 w-56 -translate-x-1/2">
+        <div className={`absolute left-1/2 w-56 -translate-x-1/2 ${touch ? "top-[8.2rem]" : "top-24"}`}>
           <div className="glass-panel rounded-full p-1">
             <div className="flex items-center gap-1.5 px-1">
               <span className="text-[10px] font-extrabold uppercase tracking-wide text-purple-800">{t("fusionHp")}</span>
@@ -295,9 +342,13 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
       )}
 
       {/* ---------- weapon + tag swap + fusion ---------- */}
-      <div className="pointer-events-auto absolute bottom-24 right-3 flex items-center gap-2 sm:bottom-6 sm:right-4">
-        <div className="relative" style={{ width: px(56), height: px(56) }}>
-          <svg className="absolute inset-0 -rotate-90" style={{ width: px(56), height: px(56) }} viewBox="0 0 56 56">
+      <div
+        className={`pointer-events-auto absolute ${
+          touch ? `bottom-3 grid grid-cols-2 justify-items-center gap-1.5 ${layout.handed === "left" ? "left-3" : "right-3"}` : "bottom-6 right-4 flex items-center gap-2"
+        }`}
+      >
+        <div className="relative" style={{ width: px(side), height: px(side) }}>
+          <svg className="absolute inset-0 -rotate-90" style={{ width: px(side), height: px(side) }} viewBox="0 0 56 56">
             <circle cx="28" cy="28" r="24" stroke="rgba(255,255,255,0.55)" strokeWidth="4" fill="none" />
             <circle
               cx="28"
@@ -314,14 +365,14 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
           <TouchButton
             label={TOUCH_GLYPH[layout.touchLayout.swap] ?? "⇄"}
             className="absolute inset-0 text-xl text-sky-800"
-            style={{ width: px(56), height: px(56) }}
+            style={{ width: px(side), height: px(side) }}
             onDown={() => controls.setAction(layout.touchLayout.swap, true)}
             onUp={() => controls.setAction(layout.touchLayout.swap, false)}
           />
         </div>
         {/* FUSION — partner mans the turret */}
-        <div className={`relative ${telemetry.fused ? "animate-pulse" : ""}`} style={{ width: px(56), height: px(56) }}>
-          <svg className="absolute inset-0 -rotate-90" style={{ width: px(56), height: px(56) }} viewBox="0 0 56 56">
+        <div className={`relative ${telemetry.fused ? "animate-pulse" : ""}`} style={{ width: px(side), height: px(side) }}>
+          <svg className="absolute inset-0 -rotate-90" style={{ width: px(side), height: px(side) }} viewBox="0 0 56 56">
             <circle cx="28" cy="28" r="24" stroke="rgba(255,255,255,0.55)" strokeWidth="4" fill="none" />
             <circle
               cx="28"
@@ -338,23 +389,32 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
           <TouchButton
             label={TOUCH_GLYPH[layout.touchLayout.fuse] ?? "✚"}
             className={`absolute inset-0 text-xl ${telemetry.fused ? "text-amber-500" : "text-purple-700"}`}
-            style={{ width: px(56), height: px(56) }}
+            style={{ width: px(side), height: px(side) }}
             onDown={() => controls.setAction(layout.touchLayout.fuse, true)}
             onUp={() => controls.setAction(layout.touchLayout.fuse, false)}
           />
         </div>
-        <TouchButton
-          label={TOUCH_GLYPH[layout.touchLayout.item] ?? (w ? w.glyph : "·")}
-          color={w && layout.touchLayout.item === "item" ? w.color : undefined}
-          className={`text-4xl ${w ? "animate-pulse" : "opacity-40"}`}
-          style={{ width: px(80), height: px(80) }}
-          onDown={() => controls.setAction(layout.touchLayout.item, true)}
-          onUp={() => controls.setAction(layout.touchLayout.item, false)}
-        />
+        <div className={`relative ${touch ? "col-span-2" : ""}`}>
+          {/* the name of what you are holding, so nobody has to learn the symbols */}
+          {itemSlot && w && !telemetry.rolling && (
+            <div className="glass-panel pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-extrabold" style={{ color: w.color }}>
+              {t(`weapon_${telemetry.weapon}`)}
+            </div>
+          )}
+          <TouchButton
+            label={itemSlot ? (telemetry.rolling ? rollGlyph : w ? w.glyph : "·") : TOUCH_GLYPH[layout.touchLayout.item]}
+            color={itemSlot && w && !telemetry.rolling ? w.color : undefined}
+            className={`text-4xl ${telemetry.rolling ? "" : w ? "animate-pulse" : "opacity-40"}`}
+            style={{ width: px(80), height: px(80) }}
+            onDown={() => controls.setAction(layout.touchLayout.item, true)}
+            onUp={() => controls.setAction(layout.touchLayout.item, false)}
+          />
+        </div>
       </div>
 
       {/* ---------- touch steering + pedals: slots are remappable in Options ---------- */}
-      <div className={`pointer-events-auto absolute bottom-3 flex items-end gap-2 sm:hidden ${layout.handed === "left" ? "left-[112px]" : "left-3"}`}>
+      {touch && (<>
+      <div className={`pointer-events-auto absolute bottom-3 flex items-end gap-2 ${layout.handed === "left" ? "left-[128px]" : "left-3"}`}>
         {(["padL", "padR", "drift", "turbo"] as TouchSlot[]).map((slot) => {
           const action = layout.touchLayout[slot] ?? DEFAULT_TOUCH[slot];
           const glyph = TOUCH_GLYPH[action] ?? "·";
@@ -372,7 +432,7 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
           );
         })}
       </div>
-      <div className={`pointer-events-auto absolute bottom-3 flex flex-col items-center gap-2 sm:hidden ${layout.handed === "left" ? "right-3" : "right-[112px]"}`}>
+      <div className={`pointer-events-auto absolute bottom-3 flex flex-col items-center gap-2 ${layout.handed === "left" ? "right-3" : "right-[128px]"}`}>
         {(["gas", "brake"] as TouchSlot[]).map((slot) => {
           const action = layout.touchLayout[slot];
           const big = slot === "gas";
@@ -390,10 +450,20 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         })}
       </div>
 
-      {/* ---------- desktop hints ---------- */}
-      <div className="pointer-events-none absolute bottom-4 left-4 hidden text-[11px] font-semibold text-sky-900/60 sm:block">
-        ↑↓←→ / WASD · SHIFT {t("drift")} · SPACE {t("useItem")} · K {t("turboBtn")} · Q {t("swapRacer")} · F {t("fuse")} · ESC {t("pauseGame")}
-      </div>
+      </>)}
+
+      {/* ---------- keyboard hints: there for the start, and again whenever the keys change meaning ---------- */}
+      {!touch && (
+        <div key={telemetry.gunning ? "g" : telemetry.fused ? "f" : "d"} className="hint-fade pointer-events-none absolute bottom-4 left-4 max-w-[calc(50vw-190px)]">
+          <div className="glass-panel rounded-2xl px-3 py-1.5 text-[11px] font-semibold leading-relaxed text-sky-900/80">
+          {telemetry.gunning
+            ? `←→ ⟳ · SPACE ● · Q ⇄ · F ✕ · ESC ${t("pauseGame")}`
+            : telemetry.fused
+              ? `↑↓←→ / WASD · SHIFT ${t("drift")} · SPACE ${t("useItem")} · K ${t("turboBtn")} · Q ⇄ · F ✕ · ESC ${t("pauseGame")}`
+              : `↑↓←→ / WASD · SHIFT ${t("drift")} · SPACE ${t("useItem")} · K ${t("turboBtn")} · Q ${t("swapRacer")} · F ${t("fuse")} · ESC ${t("pauseGame")}`}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
