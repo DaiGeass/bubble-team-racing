@@ -17,7 +17,8 @@ export type ShapeId =
   | "tank" | "wedge" | "sled" | "orbit" | "dune" | "phantom" | "mech" | "board" | "shell" | "winglet" | "pod";
 export type ThemeId =
   | "frutiger" | "aero" | "techno" | "eco" | "aqua" | "sunset"
-  | "y2k" | "liquid" | "win98" | "vapor" | "dreamcore" | "cyberpunk" | "noir" | "backrooms" | "liminal" | "eden";
+  | "y2k" | "liquid" | "win98" | "vapor" | "dreamcore" | "cyberpunk" | "noir" | "backrooms" | "liminal" | "eden"
+  | "metro" | "tux" | "debian" | "arch" | "mac" | "slime" | "webcore";
 export type WheelStyle = "classic" | "sporty" | "glow" | "chrome" | "spike";
 export type SpoilerId = "none" | "wing" | "fin";
 export type FinishId = "solid" | "gloss" | "matte" | "chrome" | "glass" | "holo";
@@ -359,6 +360,56 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     barrierA: "#ff9de1", barrierB: "#fff07a", sun: "#ffffff", sunIntensity: 1.9, ambient: 1.1, ambientColor: "#ffffff",
     hemiSky: "#cfeaff", hemiGround: "#7be36f", cloud: "#ffffff", isle: "#49c24a", glow: "#fff07a",
     particles: ["#ff9de1", "#fff07a", "#9be7ff", "#ffffff"], prop: "eden", bloom: 0.8,
+  },
+  // ---- places the internet remembers: a subway, three operating systems, a swamp of gel and a home page ----
+  metro: {
+    id: "metro", name: "METRO", skyTop: "#cfd6de", skyBottom: "#eef2f6", fog: "#dfe5ec", fogNear: 30, fogFar: 210,
+    water: "#5aa7d6", ground: "#9aa4b1", road: "#737c8a", roadLine: "#ffd21f", roadEdge: "#f4f1e8",
+    barrierA: "#f4f1e8", barrierB: "#e2572b", sun: "#ffffff", sunIntensity: 1.75, ambient: 1.1, ambientColor: "#ffffff",
+    hemiSky: "#eef2f6", hemiGround: "#9aa4b1", cloud: "#e9edf2", isle: "#aab3bf", glow: "#fff4c9",
+    particles: ["#ffd21f", "#e2572b", "#ffffff", "#5aa7d6"], prop: "lamp", bloom: 0.75,
+  },
+  tux: {
+    id: "tux", name: "TUX", skyTop: "#8fd3ff", skyBottom: "#f2fbff", fog: "#e6f6ff", fogNear: 90, fogFar: 340,
+    water: "#3fb6e8", ground: "#f4fbff", road: "#e9f6ff", roadLine: "#ffc21f", roadEdge: "#ffffff",
+    barrierA: "#1f2a3a", barrierB: "#ffc21f", sun: "#ffffff", sunIntensity: 1.75, ambient: 1.1, ambientColor: "#ffffff",
+    hemiSky: "#f2fbff", hemiGround: "#f4fbff", cloud: "#ffffff", isle: "#ffffff", glow: "#9be7ff",
+    particles: ["#ffffff", "#ffc21f", "#9be7ff", "#1f2a3a"], prop: "crystal", bloom: 0.75,
+  },
+  debian: {
+    id: "debian", name: "SWIRL", skyTop: "#ffd6e3", skyBottom: "#fff5f8", fog: "#ffe9f0", fogNear: 80, fogFar: 320,
+    water: "#ff9fbe", ground: "#f7f1f3", road: "#ffffff", roadLine: "#d70a53", roadEdge: "#d70a53",
+    barrierA: "#d70a53", barrierB: "#ffffff", sun: "#ffffff", sunIntensity: 1.75, ambient: 1.1, ambientColor: "#ffffff",
+    hemiSky: "#fff5f8", hemiGround: "#f7f1f3", cloud: "#ffffff", isle: "#f0d5dd", glow: "#ff5c93",
+    particles: ["#d70a53", "#ffffff", "#ff9fbe", "#ff5c93"], prop: "y2k", bloom: 0.75,
+  },
+  arch: {
+    id: "arch", name: "ARCH", skyTop: "#1793d1", skyBottom: "#cdeeff", fog: "#bfe6fa", fogNear: 90, fogFar: 340,
+    water: "#1793d1", ground: "#cfd9e0", road: "#f3f7fa", roadLine: "#1793d1", roadEdge: "#333c47",
+    barrierA: "#1793d1", barrierB: "#333c47", sun: "#ffffff", sunIntensity: 1.75, ambient: 1.1, ambientColor: "#ffffff",
+    hemiSky: "#cdeeff", hemiGround: "#cfd9e0", cloud: "#ffffff", isle: "#b9c7d1", glow: "#6fd0ff",
+    particles: ["#1793d1", "#ffffff", "#6fd0ff", "#333c47"], prop: "crystal", bloom: 0.75,
+  },
+  mac: {
+    id: "mac", name: "AQUA", skyTop: "#6fb4f0", skyBottom: "#eaf4ff", fog: "#d9eafc", fogNear: 80, fogFar: 320,
+    water: "#2f8fe8", ground: "#dfe5ec", road: "#f2f4f7", roadLine: "#2f8fe8", roadEdge: "#c7ced8",
+    barrierA: "#c7ced8", barrierB: "#5aa9f5", sun: "#ffffff", sunIntensity: 1.75, ambient: 1.1, ambientColor: "#ffffff",
+    hemiSky: "#eaf4ff", hemiGround: "#dfe5ec", cloud: "#ffffff", isle: "#cfd6df", glow: "#8fc8ff",
+    particles: ["#ff5f57", "#febc2e", "#28c840", "#5aa9f5"], prop: "liquid", bloom: 0.75,
+  },
+  slime: {
+    id: "slime", name: "SLIME AERO", skyTop: "#9df57a", skyBottom: "#f1ffd9", fog: "#d9ffb8", fogNear: 80, fogFar: 300,
+    water: "#5fe03a", ground: "#8fe85f", road: "#f4ffe6", roadLine: "#39d353", roadEdge: "#ffffff",
+    barrierA: "#39d353", barrierB: "#c8ff5a", sun: "#ffffff", sunIntensity: 1.75, ambient: 1.1, ambientColor: "#ffffff",
+    hemiSky: "#f1ffd9", hemiGround: "#8fe85f", cloud: "#ffffff", isle: "#58c93c", glow: "#c8ff5a",
+    particles: ["#c8ff5a", "#39d353", "#ffffff", "#9df57a"], prop: "liquid", bloom: 0.75,
+  },
+  webcore: {
+    id: "webcore", name: "WEBCORE", skyTop: "#00a0a0", skyBottom: "#b8f0f0", fog: "#9fe0e0", fogNear: 80, fogFar: 300,
+    water: "#0000ee", ground: "#c0c0c0", road: "#ffffcc", roadLine: "#ff00ff", roadEdge: "#0000ee",
+    barrierA: "#ff00ff", barrierB: "#00ff66", sun: "#ffffff", sunIntensity: 1.75, ambient: 1.1, ambientColor: "#ffffff",
+    hemiSky: "#b8f0f0", hemiGround: "#c0c0c0", cloud: "#ffffff", isle: "#a0a0a0", glow: "#ffff00",
+    particles: ["#ff00ff", "#ffff00", "#00ff66", "#0000ee"], prop: "win98", bloom: 0.75,
   },
   cyberpunk: {
     id: "cyberpunk", name: "CYBERPUNK", skyTop: "#141a3c", skyBottom: "#2a2466", fog: "#1c1c4a", fogNear: 80, fogFar: 280,
@@ -1013,6 +1064,13 @@ const THEME_BIOMES: Record<ThemeId, BiomeId[]> = {
   backrooms: ["ruins", "city", "ruins", "city"],
   liminal: ["cloud", "coast", "cloud", "snow"],
   eden: ["meadow", "meadow", "forest", "meadow"],
+  metro: ["city", "ruins", "city", "ruins"],
+  tux: ["snow", "coast", "snow", "cloud"],
+  debian: ["cloud", "meadow", "cloud", "ruins"],
+  arch: ["snow", "city", "snow", "cloud"],
+  mac: ["cloud", "coast", "city", "cloud"],
+  slime: ["meadow", "reef", "coast", "meadow"],
+  webcore: ["city", "meadow", "city", "ruins"],
 };
 
 /** Biome of the stretch at t, and how far we are into the next one. */
@@ -1114,6 +1172,7 @@ export const THEME_BIOME: Record<ThemeId, BiomeId> = {
   frutiger: "meadow", eco: "forest", aero: "cloud", techno: "city", aqua: "reef", sunset: "desert",
   y2k: "city", liquid: "coast", win98: "city", vapor: "ruins", dreamcore: "cloud", cyberpunk: "volcano", noir: "ruins",
   backrooms: "ruins", liminal: "cloud", eden: "meadow",
+  metro: "city", tux: "snow", debian: "cloud", arch: "snow", mac: "cloud", slime: "meadow", webcore: "city",
 };
 
 const MUTATION_STEPS = 6;

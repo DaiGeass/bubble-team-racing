@@ -107,7 +107,7 @@ export function Corridor({ themes }: { themes: ThemeDef[] }) {
   );
 }
 
-type Mark = "turbine" | "lighthouse" | "tower" | "pyramid" | "window" | "door" | "spot";
+type Mark = "turbine" | "lighthouse" | "tower" | "pyramid" | "window" | "door" | "spot" | "penguin" | "swirl" | "peak" | "gel" | "blob" | "construction";
 
 const MARK_OF: Record<string, Mark> = {
   frutiger: "turbine", eco: "turbine", aero: "turbine",
@@ -115,6 +115,7 @@ const MARK_OF: Record<string, Mark> = {
   techno: "tower", cyberpunk: "tower", y2k: "tower",
   sunset: "pyramid", vapor: "pyramid",
   win98: "window", dreamcore: "door", eden: "door", backrooms: "door", liminal: "spot", noir: "spot",
+  metro: "spot", tux: "penguin", debian: "swirl", arch: "peak", mac: "gel", slime: "blob", webcore: "construction",
 };
 
 /**
@@ -149,7 +150,8 @@ export function Landmarks({ themes }: { themes: ThemeDef[] }) {
         const theme = themes[sectorIndexAt(t)] ?? themes[0];
         const land = def.floor !== undefined ? terrainY(x, z) : main.py[i] - 2;
         const y = def.sea !== undefined ? Math.max(land, def.sea) : land;
-        out.push({ x, y, z, rot: Math.atan2(main.tx[i], main.tz[i]) + (side > 0 ? -Math.PI / 2 : Math.PI / 2), kind: MARK_OF[theme.id] ?? "tower", theme, s: 1 + ((k * 7) % 5) * 0.12 });
+        out.push({ x, y, z, // facing the road
+        rot: Math.atan2(main.tx[i], main.tz[i]) + (side > 0 ? Math.PI / 2 : -Math.PI / 2), kind: MARK_OF[theme.id] ?? "tower", theme, s: 1 + ((k * 7) % 5) * 0.12 });
         break;
       }
     }
@@ -303,6 +305,178 @@ export function Landmarks({ themes }: { themes: ThemeDef[] }) {
                   <meshStandardMaterial color="#e8c56a" metalness={0.9} roughness={0.2} />
                 </mesh>
               </group>
+            )}
+            {m.kind === "penguin" && (
+              <group ref={(el) => (bob.current[i] = el)} userData={{ base: 0.6 }} position={[0, 0.6, 0]}>
+                {/* a penguin the size of a house, sitting on the ice */}
+                <mesh position={[0, 7, 0]} scale={[1, 1.25, 0.95]} castShadow>
+                  <sphereGeometry args={[5.4, 18, 16]} />
+                  <meshStandardMaterial color="#1b2330" roughness={0.5} />
+                </mesh>
+                <mesh position={[0, 6.2, 2.1]} scale={[0.82, 1.1, 0.7]}>
+                  <sphereGeometry args={[5, 16, 14]} />
+                  <meshStandardMaterial color="#ffffff" roughness={0.6} />
+                </mesh>
+                <mesh position={[0, 15, 0.4]} castShadow>
+                  <sphereGeometry args={[3.4, 16, 14]} />
+                  <meshStandardMaterial color="#1b2330" roughness={0.5} />
+                </mesh>
+                {[-1.2, 1.2].map((x) => (
+                  <group key={x} position={[x, 15.8, 2.9]}>
+                    <mesh scale={[1, 1.25, 0.5]}>
+                      <sphereGeometry args={[0.95, 10, 10]} />
+                      <meshStandardMaterial color="#ffffff" roughness={0.2} />
+                    </mesh>
+                    <mesh position={[0, -0.1, 0.42]}>
+                      <sphereGeometry args={[0.4, 8, 8]} />
+                      <meshBasicMaterial color="#0b0b12" />
+                    </mesh>
+                  </group>
+                ))}
+                <mesh position={[0, 14.2, 3.6]} rotation={[Math.PI / 2, 0, 0]} scale={[1.3, 1, 0.6]}>
+                  <coneGeometry args={[1.2, 2.4, 10]} />
+                  <meshStandardMaterial color="#ffc21f" roughness={0.5} />
+                </mesh>
+                {[-3, 3].map((x) => (
+                  <mesh key={x} position={[x, 0.5, 3]} scale={[1.3, 0.4, 1.8]}>
+                    <sphereGeometry args={[1.6, 10, 8]} />
+                    <meshStandardMaterial color="#ffc21f" roughness={0.5} />
+                  </mesh>
+                ))}
+                {[-1, 1].map((sd) => (
+                  <mesh key={sd} position={[sd * 5.6, 7.6, 0]} rotation={[0, 0, sd * 0.35]} scale={[0.3, 1, 0.7]}>
+                    <sphereGeometry args={[3.6, 10, 10]} />
+                    <meshStandardMaterial color="#1b2330" roughness={0.5} />
+                  </mesh>
+                ))}
+              </group>
+            )}
+            {m.kind === "swirl" && (
+              <>
+                <mesh position={[0, 5, 0]}>
+                  <cylinderGeometry args={[0.5, 0.9, 10, 8]} />
+                  <meshStandardMaterial color="#ffffff" roughness={0.4} />
+                </mesh>
+                {/* a spiral that keeps winding in on itself */}
+                <group ref={(el) => (spin.current[i] = el)} userData={{ axis: "z", rate: 0.7 }} position={[0, 19, 0]}>
+                  {[9, 6.6, 4.4, 2.6].map((r, k) => (
+                    <mesh key={r} rotation={[0, 0, k * 1.5]} position={[Math.cos(k * 1.5 + 2.4) * 1.1 * k, Math.sin(k * 1.5 + 2.4) * 1.1 * k, 0]}>
+                      <torusGeometry args={[r, 0.9 - k * 0.15, 8, 30, Math.PI * 1.5]} />
+                      <meshStandardMaterial color={th.barrierA} emissive={th.barrierA} emissiveIntensity={0.7} roughness={0.3} />
+                    </mesh>
+                  ))}
+                </group>
+              </>
+            )}
+            {m.kind === "peak" && (
+              <>
+                {/* two blades leaning together, and the gap between them */}
+                {[-1, 1].map((sd) => (
+                  <mesh key={sd} position={[sd * 5.2, 14, 0]} rotation={[0, 0, sd * -0.34]} castShadow>
+                    <boxGeometry args={[4.4, 30, 3.4]} />
+                    <meshStandardMaterial color={th.barrierA} roughness={0.35} metalness={0.3} emissive={th.barrierA} emissiveIntensity={0.25} />
+                  </mesh>
+                ))}
+                <mesh position={[0, 29.5, 0]} rotation={[0, Math.PI / 4, 0]}>
+                  <coneGeometry args={[3.4, 6, 4]} />
+                  <meshStandardMaterial color="#ffffff" emissive={th.glow} emissiveIntensity={1.6} toneMapped={false} />
+                </mesh>
+                <mesh position={[0, 9, 0]}>
+                  <boxGeometry args={[9, 1.4, 3]} />
+                  <meshStandardMaterial color={th.barrierB} roughness={0.5} />
+                </mesh>
+              </>
+            )}
+            {m.kind === "gel" && (
+              <>
+                {/* a brushed-metal bar with three jelly buttons, and a big blue one above it */}
+                <mesh position={[0, 4, 0]} castShadow>
+                  <boxGeometry args={[22, 8, 4]} />
+                  <meshStandardMaterial color="#cfd6df" metalness={0.3} roughness={0.35} />
+                </mesh>
+                {["#ff5f57", "#febc2e", "#28c840"].map((c, k) => (
+                  <mesh key={c} position={[-7 + k * 4, 5.4, 2.2]}>
+                    <sphereGeometry args={[1.5, 14, 12]} />
+                    <meshPhysicalMaterial color={c} roughness={0.08} clearcoat={1} emissive={c} emissiveIntensity={0.35} />
+                  </mesh>
+                ))}
+                <group ref={(el) => (bob.current[i] = el)} userData={{ base: 17 }} position={[0, 17, 0]}>
+                  <mesh scale={[1, 0.62, 1]}>
+                    <sphereGeometry args={[6, 22, 16]} />
+                    <meshPhysicalMaterial color={th.water} roughness={0.05} clearcoat={1} transmission={0.4} thickness={2} emissive={th.water} emissiveIntensity={0.3} />
+                  </mesh>
+                  <mesh position={[0, 2.2, 0]} scale={[0.8, 0.22, 0.8]}>
+                    <sphereGeometry args={[5, 16, 10]} />
+                    <meshBasicMaterial color="#ffffff" transparent opacity={0.55} toneMapped={false} />
+                  </mesh>
+                </group>
+              </>
+            )}
+            {m.kind === "blob" && (
+              <group ref={(el) => (bob.current[i] = el)} userData={{ base: 5 }} position={[0, 5, 0]}>
+                {/* a hill of slime that is paying attention */}
+                <mesh scale={[1.3, 0.9, 1.3]} castShadow>
+                  <sphereGeometry args={[7, 20, 16]} />
+                  <meshPhysicalMaterial color={th.barrierA} roughness={0.05} clearcoat={1} transparent opacity={0.82} emissive={th.barrierA} emissiveIntensity={0.25} />
+                </mesh>
+                {[[-3, 4, 4], [3.5, 2, -3], [0, 6.4, 0], [-4, 1, -3]].map(([x, y, z], k) => (
+                  <mesh key={k} position={[x, y, z]}>
+                    <sphereGeometry args={[1.2 + (k % 2) * 0.6, 10, 10]} />
+                    <meshPhysicalMaterial color={th.barrierB} roughness={0.05} clearcoat={1} transparent opacity={0.7} />
+                  </mesh>
+                ))}
+                {[-2.4, 2.4].map((x) => (
+                  <group key={x} position={[x, 2.4, 7.6]}>
+                    <mesh>
+                      <sphereGeometry args={[1.5, 12, 12]} />
+                      <meshStandardMaterial color="#ffffff" roughness={0.15} />
+                    </mesh>
+                    <mesh position={[0, 0, 1.1]}>
+                      <sphereGeometry args={[0.7, 10, 10]} />
+                      <meshBasicMaterial color="#0b0b12" />
+                    </mesh>
+                  </group>
+                ))}
+              </group>
+            )}
+            {m.kind === "construction" && (
+              <>
+                {/* the sign every home page had, and the globe that never stopped turning */}
+                <mesh position={[0, 6, 0]}>
+                  <cylinderGeometry args={[0.3, 0.3, 12, 6]} />
+                  <meshStandardMaterial color="#808080" metalness={0.6} roughness={0.4} />
+                </mesh>
+                <mesh position={[0, 15, 0]} rotation={[0, 0, Math.PI / 4]} castShadow>
+                  <boxGeometry args={[10, 10, 0.5]} />
+                  <meshStandardMaterial color="#ffd400" emissive="#ffd400" emissiveIntensity={0.5} roughness={0.5} />
+                </mesh>
+                <mesh position={[0, 15, 0.3]} rotation={[0, 0, Math.PI / 4]}>
+                  <boxGeometry args={[8.8, 8.8, 0.1]} />
+                  <meshStandardMaterial color="#111111" wireframe />
+                </mesh>
+                <mesh position={[-0.6, 14.4, 0.4]} rotation={[0, 0, 0.6]}>
+                  <boxGeometry args={[1, 4.4, 0.2]} />
+                  <meshStandardMaterial color="#111111" />
+                </mesh>
+                <mesh position={[0.2, 17.4, 0.4]}>
+                  <sphereGeometry args={[0.8, 8, 8]} />
+                  <meshStandardMaterial color="#111111" />
+                </mesh>
+                <mesh position={[2, 13, 0.4]} scale={[1.6, 0.8, 0.3]}>
+                  <sphereGeometry args={[1.2, 8, 6]} />
+                  <meshStandardMaterial color="#111111" />
+                </mesh>
+                <group ref={(el) => (spin.current[i] = el)} userData={{ axis: "y", rate: 1.4 }} position={[9, 5, 0]}>
+                  <mesh>
+                    <sphereGeometry args={[3.4, 12, 8]} />
+                    <meshStandardMaterial color="#0000ee" emissive="#0000ee" emissiveIntensity={0.4} flatShading />
+                  </mesh>
+                  <mesh scale={1.03}>
+                    <sphereGeometry args={[3.4, 12, 8]} />
+                    <meshBasicMaterial color="#00ff66" wireframe toneMapped={false} />
+                  </mesh>
+                </group>
+              </>
             )}
             {m.kind === "spot" && (
               <>
@@ -465,6 +639,7 @@ const MOTE_OF: Record<string, MoteKind> = {
   techno: "bit", cyberpunk: "bit", y2k: "bit", win98: "bit",
   aqua: "bubble", liquid: "bubble",
   noir: "rain",
+  metro: "dust", tux: "snow", debian: "petal", arch: "snow", mac: "bubble", slime: "bubble", webcore: "bit",
 };
 /** vertical speed, sideways drift, size */
 const MOTE_STYLE: Record<MoteKind, [number, number, number]> = {
