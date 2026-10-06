@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { trackCurve, halfWidthAt, getActiveTrack, nearestT, surfaceYAt, trapTransform, portalTransform, getPaths, getPads, getSkyRings, getSkyBlocks, plainRoadAt, sectorIndexAt, sectorMix, trackBounds, terrainAt, terrainY, FLY_BASE, ROUTE_COLOURS, groundAt, makeGround, F_SOLID, F_WALL_POS, F_WALL_NEG, F_TUNNEL, type PathRT } from "../trackCurve";
-import { Corridor, Flocks, Grandstand, Landmarks } from "./Ambience";
+import { Airships, Corridor, Eden, Fireworks, Flocks, Grandstand, Landmarks, Motes, Pennants } from "./Ambience";
 import { TRACK_WIDTH, ZONES, hazardState, zoneAt, zoneOfKind, raceSnapshot, biomeMix, themeOnLap, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
 function makeRoadTexture(theme: ThemeDef) {
@@ -866,6 +866,36 @@ function Props({ themes }: { themes: ThemeDef[] }) {
                 </mesh>
               )}
             </group>
+          )}
+          {theme.prop === "eden" && (
+            <>
+              {/* a flower taller than you, or a toadstool, by the road */}
+              <mesh position={[0, it.kind === 1 ? 0.7 : 1.6, 0]}>
+                <cylinderGeometry args={it.kind === 1 ? [0.4, 0.5, 1.4, 8] : [0.1, 0.14, 3.2, 6]} />
+                <meshStandardMaterial color={it.kind === 1 ? "#fff6e0" : "#3fae3f"} roughness={0.8} />
+              </mesh>
+              {it.kind === 1 ? (
+                <mesh position={[0, 1.4, 0]} scale={[1, 0.7, 1]} castShadow>
+                  <sphereGeometry args={[1.3, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                  <meshStandardMaterial color={theme.barrierA} roughness={0.4} />
+                </mesh>
+              ) : (
+                <>
+                  <mesh position={[0, 3.4, 0]} scale={[1, 1, 0.3]} castShadow>
+                    <sphereGeometry args={[0.95, 10, 8]} />
+                    <meshStandardMaterial color={it.kind === 0 ? theme.barrierB : theme.barrierA} roughness={0.5} />
+                  </mesh>
+                  <mesh position={[0, 3.4, 0.24]} scale={[1, 1, 0.5]}>
+                    <sphereGeometry args={[0.42, 10, 8]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.2} />
+                  </mesh>
+                  <mesh position={[0, 3.4, 0.42]}>
+                    <sphereGeometry args={[0.16, 8, 6]} />
+                    <meshBasicMaterial color="#0b0b12" />
+                  </mesh>
+                </>
+              )}
+            </>
           )}
           {theme.prop === "lamp" && (
             <>
@@ -2395,8 +2425,13 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
           <Landmarks themes={themes} />
           <Grandstand theme={theme} />
           <Flocks theme={theme} />
+          <Pennants themes={themes} />
+          <Airships theme={theme} />
+          <Fireworks theme={theme} />
+          {def.theme === "eden" && <Eden theme={theme} />}
         </>
       )}
+      <Motes themes={themes} />
     </group>
   );
 }

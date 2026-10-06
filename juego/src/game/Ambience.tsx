@@ -1,8 +1,10 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { getActiveTrack, getPaths, groundAt, makeGround, sectorIndexAt, terrainY, trackBounds, F_SOLID, F_WALL_POS, F_WALL_NEG } from "../trackCurve";
-import { ZONES, type ThemeDef } from "../data";
+import { ZONES, raceSnapshot, type ThemeDef } from "../data";
+import { emitParticles } from "../particles";
 
 // ---------------------------------------------------------------------------
 // What a circuit has around it besides the road: the walls and ceiling of an
@@ -112,7 +114,7 @@ const MARK_OF: Record<string, Mark> = {
   aqua: "lighthouse", liquid: "lighthouse",
   techno: "tower", cyberpunk: "tower", y2k: "tower",
   sunset: "pyramid", vapor: "pyramid",
-  win98: "window", dreamcore: "door", backrooms: "door", liminal: "spot", noir: "spot",
+  win98: "window", dreamcore: "door", eden: "door", backrooms: "door", liminal: "spot", noir: "spot",
 };
 
 /**
@@ -451,5 +453,523 @@ export function Flocks({ theme }: { theme: ThemeDef }) {
     <instancedMesh ref={ref} args={[geo, undefined, N]} frustumCulled={false}>
       <meshBasicMaterial color={theme.dark ? theme.glow : "#3b4252"} side={THREE.DoubleSide} />
     </instancedMesh>
+  );
+}
+
+type MoteKind = "petal" | "snow" | "ember" | "bit" | "bubble" | "dust" | "rain";
+
+const MOTE_OF: Record<string, MoteKind> = {
+  frutiger: "petal", eco: "petal", eden: "petal",
+  aero: "snow", dreamcore: "snow", liminal: "dust", backrooms: "dust",
+  sunset: "ember", vapor: "ember",
+  techno: "bit", cyberpunk: "bit", y2k: "bit", win98: "bit",
+  aqua: "bubble", liquid: "bubble",
+  noir: "rain",
+};
+/** vertical speed, sideways drift, size */
+const MOTE_STYLE: Record<MoteKind, [number, number, number]> = {
+  petal: [-1.4, 1.6, 0.16],
+  snow: [-2.2, 0.9, 0.11],
+  ember: [2.4, 0.8, 0.1],
+  bit: [3.2, 0.1, 0.12],
+  bubble: [1.8, 0.5, 0.17],
+  dust: [-0.25, 0.35, 0.07],
+  rain: [-26, 0.2, 0.07],
+};
+
+/**
+ * What is in the air of the stretch you are driving through: petals over the
+ * meadow, snow in the clouds, embers at sunset, bubbles by the sea, dust in
+ * the corridors. It travels with the camera, so there is always some about.
+ */
+export function Motes({ themes }: { themes: ThemeDef[] }) {
+  const N = 150;
+  const BOX = 64;
+  const TALL = 26;
+  const ref = useRef<THREE.InstancedMesh>(null);
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  const seeds = useMemo(() => Array.from({ length: N }, () => ({ x: Math.random() * BOX, y: Math.random() * TALL, z: Math.random() * BOX, ph: Math.random() * 6.3, k: 0.6 + Math.random() * 0.8 })), []);
+  const d = useMemo(() => new THREE.Object3D(), []);
+  const tint = useMemo(() => new THREE.Color(), []);
+  const wrap = (v: number, size: number) => ((v % size) + size) % size;
+  useFrame((s, dt) => {
+    const m = ref.current;
+    if (!m) return;
+    const theme = themes[sectorIndexAt(raceSnapshot.racers[0]?.t ?? 0)] ?? themes[0];
+    const kind = MOTE_OF[theme.id] ?? "dust";
+    const [vy, sway, size] = MOTE_STYLE[kind];
+    const cam = s.camera.position;
+    const t = s.clock.elapsedTime;
+    const step = Math.min(dt, 0.1);
+    for (let i = 0; i < N; i++) {
+      const p = seeds[i];
+      p.y = wrap(p.y + vy * p.k * step, TALL);
+      p.x = wrap(p.x + Math.sin(t * 0.7 + p.ph) * sway * step, BOX);
+      p.z = wrap(p.z + Math.cos(t * 0.6 + p.ph) * sway * step, BOX);
+      // the box of motes is tiled over the world: only the tile round the camera is drawn
+      d.position.set(cam.x + wrap(p.x - cam.x, BOX) - BOX / 2, cam.y + wrap(p.y - cam.y, TALL) - TALL / 2, cam.z + wrap(p.z - cam.z, BOX) - BOX / 2);
+      d.rotation.set(t * p.k + p.ph, t * 0.7 * p.k, 0);
+      if (kind === "rain") d.scale.set(size * 0.4, size * 14, size * 0.4);
+      else d.scale.setScalar(size * (0.7 + p.k * 0.5));
+      d.updateMatrix();
+      m.setMatrixAt(i, d.matrix);
+    }
+    m.instanceMatrix.needsUpdate = true;
+    if (mat.current) {
+      tint.set(kind === "ember" ? "#ffb347" : kind === "petal" ? theme.barrierA : kind === "bit" ? theme.glow : "#ffffff");
+      mat.current.color.lerp(tint, 0.05);
+      mat.current.opacity = kind === "dust" ? 0.45 : kind === "rain" ? 0.4 : 0.8;
+    }
+  });
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, N]} frustumCulled={false}>
+      <octahedronGeometry args={[1, 0]} />
+      <meshBasicMaterial ref={mat} color="#ffffff" transparent opacity={0.8} toneMapped={false} depthWrite={false} />
+    </instancedMesh>
+  );
+}
+
+/**
+ * Pennants along the road: a pole every so often on alternate sides of every
+ * walled stretch, with a flag in the colours of that stretch, flying.
+ */
+export function Pennants({ themes }: { themes: ThemeDef[] }) {
+  const built = useMemo(() => {
+    const main = getPaths()[0];
+    const poles: THREE.Matrix4[] = [];
+    const flags: { x: number; y: number; z: number; rot: number; ph: number; c: THREE.Color }[] = [];
+    if (!main) return { poles, flags };
+    const probe = makeGround();
+    const d = new THREE.Object3D();
+    const every = Math.max(1, Math.round(58 / main.ds));
+    let n = 0;
+    for (let i = Math.round(every / 2); i < main.n; i += every) {
+      n++;
+      const t = main.prog[i];
+      if (!(main.flags[i] & F_SOLID) || ZONES.some((z) => t >= z.t0 - 0.01 && t <= z.t1 + 0.01)) continue;
+      const side = n % 2 ? 1 : -1;
+      if (!(main.flags[i] & (side === 1 ? F_WALL_POS : F_WALL_NEG))) continue;
+      const lat = (main.half[i] + 2.2) * side;
+      const x = main.px[i] - main.tz[i] * lat;
+      const z = main.pz[i] + main.tx[i] * lat;
+      // not where another road runs alongside
+      if (groundAt(x, z, 1e6, probe, 0)) continue;
+      const th = themes[sectorIndexAt(t)] ?? themes[0];
+      d.position.set(x, main.py[i] + 3.2, z);
+      d.rotation.set(0, 0, 0);
+      d.updateMatrix();
+      poles.push(d.matrix.clone());
+      flags.push({ x, y: main.py[i] + 5.6, z, rot: Math.atan2(main.tx[i], main.tz[i]), ph: n * 1.3, c: new THREE.Color(n % 4 < 2 ? th.barrierA : th.barrierB) });
+    }
+    return { poles, flags };
+  }, [themes]);
+  const pole = useMemo(() => new THREE.CylinderGeometry(0.09, 0.12, 6.4, 6), []);
+  // a pennant hinged on its pole: the geometry starts at the pole and runs back from it
+  const cloth = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute([0, 0.6, 0, 0, -0.6, 0, 0, 0, -2.4], 3));
+    g.computeVertexNormals();
+    return g;
+  }, []);
+  const flagRef = useRef<THREE.InstancedMesh>(null);
+  const d = useMemo(() => new THREE.Object3D(), []);
+  const coloured = useRef(false);
+  useFrame((s) => {
+    const m = flagRef.current;
+    if (!m) return;
+    const t = s.clock.elapsedTime;
+    built.flags.forEach((f, i) => {
+      d.position.set(f.x, f.y, f.z);
+      d.rotation.set(0, f.rot + Math.sin(t * 3.1 + f.ph) * 0.35, Math.sin(t * 4.3 + f.ph) * 0.12);
+      d.scale.setScalar(1);
+      d.updateMatrix();
+      m.setMatrixAt(i, d.matrix);
+      if (!coloured.current) m.setColorAt(i, f.c);
+    });
+    m.instanceMatrix.needsUpdate = true;
+    if (!coloured.current && m.instanceColor) {
+      m.instanceColor.needsUpdate = true;
+      coloured.current = true;
+    }
+  });
+  if (!built.poles.length) return null;
+  return (
+    <group>
+      <instancedMesh
+        ref={(el) => {
+          if (!el) return;
+          built.poles.forEach((mm, i) => el.setMatrixAt(i, mm));
+          el.instanceMatrix.needsUpdate = true;
+        }}
+        args={[pole, undefined, built.poles.length]}
+        frustumCulled={false}
+      >
+        <meshStandardMaterial color="#e2e8f0" metalness={0.6} roughness={0.35} />
+      </instancedMesh>
+      <instancedMesh ref={flagRef} args={[cloth, undefined, built.flags.length]} frustumCulled={false}>
+        <meshBasicMaterial side={THREE.DoubleSide} toneMapped={false} />
+      </instancedMesh>
+    </group>
+  );
+}
+
+/** Airships going slowly round over the circuit, each trailing a banner. */
+export function Airships({ theme }: { theme: ThemeDef }) {
+  const bb = useMemo(() => trackBounds(), []);
+  const refs = useRef<(THREE.Group | null)[]>([]);
+  useFrame((s) => {
+    const t = s.clock.elapsedTime;
+    refs.current.forEach((g, i) => {
+      if (!g) return;
+      const dir = i % 2 ? -1 : 1;
+      const a = t * 0.035 * dir + i * 2.4;
+      const r = bb.r * (0.55 + i * 0.25);
+      g.position.set(bb.cx + Math.cos(a) * r, bb.top + 38 + i * 12 + Math.sin(t * 0.3 + i) * 2, bb.cz + Math.sin(a) * r);
+      g.rotation.y = Math.atan2(-Math.sin(a) * dir, Math.cos(a) * dir);
+    });
+  });
+  return (
+    <group>
+      {[0, 1].map((i) => {
+        const a = theme.particles[(i + 1) % theme.particles.length];
+        const b = theme.particles[(i + 2) % theme.particles.length];
+        return (
+          <group key={i} ref={(el) => (refs.current[i] = el)}>
+            <mesh rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.85]}>
+              <capsuleGeometry args={[4.2, 13, 8, 18]} />
+              <meshStandardMaterial color={a} roughness={0.4} emissive={a} emissiveIntensity={0.15} />
+            </mesh>
+            {[-3, 3].map((z) => (
+              <mesh key={z} position={[0, 0, z]} scale={[1, 0.85, 1]}>
+                <torusGeometry args={[4.25, 0.18, 6, 26]} />
+                <meshStandardMaterial color={b} emissive={b} emissiveIntensity={1.2} toneMapped={false} />
+              </mesh>
+            ))}
+            {[0, 1, 2].map((k) => (
+              <mesh key={k} position={[Math.sin((k * Math.PI * 2) / 3) * 3.4, Math.cos((k * Math.PI * 2) / 3) * 3, -9.5]} rotation={[0, 0, (-k * Math.PI * 2) / 3]}>
+                <boxGeometry args={[0.25, 3.4, 3.2]} />
+                <meshStandardMaterial color={b} roughness={0.5} />
+              </mesh>
+            ))}
+            <mesh position={[0, -4.6, 0.5]}>
+              <boxGeometry args={[2.2, 1.5, 5]} />
+              <meshStandardMaterial color="#f1f5f9" roughness={0.5} />
+            </mesh>
+            {/* the banner it tows */}
+            <mesh position={[0, 0, -21]} rotation={[0, Math.PI / 2, 0]}>
+              <planeGeometry args={[16, 3.6]} />
+              <meshBasicMaterial color={b} side={THREE.DoubleSide} toneMapped={false} />
+            </mesh>
+            <mesh position={[0, 0, -12]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.04, 0.04, 3, 4]} />
+              <meshBasicMaterial color="#ffffff" />
+            </mesh>
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+/** Fireworks over the start line, a rocket every couple of seconds. */
+export function Fireworks({ theme }: { theme: ThemeDef }) {
+  const spot = useMemo(() => {
+    const main = getPaths()[0];
+    return main ? new THREE.Vector3(main.px[0], main.py[0], main.pz[0]) : null;
+  }, []);
+  const next = useRef(1.5);
+  useFrame((s) => {
+    if (!spot || s.clock.elapsedTime < next.current) return;
+    next.current = s.clock.elapsedTime + 1.6 + Math.random() * 2.4;
+    const a = Math.random() * Math.PI * 2;
+    const r = 26 + Math.random() * 30;
+    emitParticles({
+      position: new THREE.Vector3(spot.x + Math.cos(a) * r, spot.y + 26 + Math.random() * 16, spot.z + Math.sin(a) * r),
+      color: theme.particles[Math.floor(Math.random() * theme.particles.length)],
+      count: 26, speed: 9, spread: 3.14, size: 0.5, life: 1.3, gravity: 5,
+    });
+  });
+  return null;
+}
+
+/** A geometry painted one flat colour, ready to be merged with others into one mesh. */
+function painted(g: THREE.BufferGeometry, colour: string) {
+  const flat = g.index ? g.toNonIndexed() : g;
+  const c = new THREE.Color(colour);
+  const n = flat.getAttribute("position").count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    arr[i * 3] = c.r;
+    arr[i * 3 + 1] = c.g;
+    arr[i * 3 + 2] = c.b;
+  }
+  flat.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+  flat.deleteAttribute("uv");
+  return flat;
+}
+
+const CAP_COLOURS = ["#ff5fa2", "#ffb347", "#fff07a", "#7be36f", "#5fd0ff", "#b98cff", "#ff7a7a", "#ffffff"];
+
+/**
+ * The garden that looks back. Sunflowers with an eye where the seeds should
+ * be, all turned towards you wherever you are; mushrooms of every colour with
+ * eyes on their stalks; small houses alone on the hills with a light on and
+ * nobody home; and overhead, wheels within wheels covered in eyes, with wings,
+ * that turn to watch you go by.
+ */
+export function Eden({ theme }: { theme: ThemeDef }) {
+  const def = getActiveTrack();
+  const built = useMemo(() => {
+    const bb = trackBounds();
+    const probe = makeGround();
+    const free = (x: number, z: number, r: number) => {
+      for (const [ox, oz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) if (groundAt(x + ox, z + oz, 1e6, probe, 0)) return false;
+      return true;
+    };
+    const land = (x: number, z: number) => (def.floor !== undefined ? terrainY(x, z) : 0);
+    const main = getPaths()[0];
+    // flowers and mushrooms grow in drifts beside the road, thinning out towards the horizon
+    const flowers: { x: number; y: number; z: number; s: number }[] = [];
+    const shrooms: { x: number; y: number; z: number; s: number; rot: number; c: THREE.Color }[] = [];
+    let guard = 0;
+    while ((flowers.length < 420 || shrooms.length < 220) && guard++ < 9000 && main) {
+      const i = Math.floor(Math.random() * main.n);
+      const lat = (main.half[i] + 5 + Math.random() ** 2 * 64) * (Math.random() < 0.5 ? 1 : -1);
+      const x = main.px[i] - main.tz[i] * lat;
+      const z = main.pz[i] + main.tx[i] * lat;
+      if (!free(x, z, 4)) continue;
+      const y = land(x, z);
+      if (guard % 5 < 3 && flowers.length < 420) flowers.push({ x, y, z, s: 0.8 + Math.random() * 1.5 });
+      else if (shrooms.length < 220) shrooms.push({ x, y, z, s: 0.7 + Math.random() * 2.4, rot: Math.random() * 6.3, c: new THREE.Color(CAP_COLOURS[Math.floor(Math.random() * CAP_COLOURS.length)]) });
+    }
+    // houses stand on the highest ground there is, well away from everything
+    const tops: { x: number; y: number; z: number; rot: number }[] = [];
+    const cand: { x: number; y: number; z: number }[] = [];
+    for (let k = 0; k < 500; k++) {
+      const x = bb.cx + (Math.random() - 0.5) * bb.r * 2.6;
+      const z = bb.cz + (Math.random() - 0.5) * bb.r * 2.6;
+      if (free(x, z, 16)) cand.push({ x, y: land(x, z), z });
+    }
+    cand.sort((a, b) => b.y - a.y);
+    for (const c of cand) {
+      if (tops.length >= 13) break;
+      if (tops.some((t) => Math.hypot(t.x - c.x, t.z - c.z) < 90)) continue;
+      tops.push({ ...c, rot: Math.random() * 6.3 });
+    }
+    // the watchers hang over the lap, one every so often, off to one side
+    const angels: { x: number; y: number; z: number; s: number }[] = [];
+    if (main) {
+      for (let k = 0; k < 7; k++) {
+        const i = Math.floor(((k + 0.5) / 7) * main.n);
+        const lat = (36 + (k % 3) * 16) * (k % 2 ? 1 : -1);
+        angels.push({ x: main.px[i] - main.tz[i] * lat, y: main.py[i] + 30 + (k % 3) * 9, z: main.pz[i] + main.tx[i] * lat, s: 1 + (k % 3) * 0.35 });
+      }
+    }
+    return { flowers, shrooms, tops, angels };
+  }, [def]);
+
+  const geo = useMemo(() => {
+    const stem = new THREE.CylinderGeometry(0.09, 0.12, 3, 5).translate(0, 1.5, 0);
+    const leaf = new THREE.SphereGeometry(0.45, 6, 4).scale(1, 0.18, 0.5).translate(0.45, 1.3, 0);
+    // the head faces +z: petals, a dark disc, and the eye in the middle of it
+    const petals: THREE.BufferGeometry[] = [];
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2;
+      petals.push(painted(new THREE.SphereGeometry(0.36, 5, 4).scale(0.5, 1, 0.16).translate(0, 0.86, 0).rotateZ(a), k % 2 ? "#ffd21f" : "#ffb300"));
+    }
+    const head = mergeGeometries([
+      ...petals,
+      painted(new THREE.CylinderGeometry(0.62, 0.62, 0.16, 14).rotateX(Math.PI / 2), "#5a3a1c"),
+      painted(new THREE.SphereGeometry(0.44, 12, 10).scale(1, 1, 0.5).translate(0, 0, 0.1), "#ffffff"),
+      painted(new THREE.SphereGeometry(0.22, 10, 8).scale(1, 1, 0.4).translate(0, 0, 0.3), "#3a7bd5"),
+      painted(new THREE.SphereGeometry(0.11, 8, 6).scale(1, 1, 0.4).translate(0, 0, 0.37), "#0b0b12"),
+    ])!;
+    const stalk = mergeGeometries([
+      painted(new THREE.CylinderGeometry(0.3, 0.42, 1.3, 8).translate(0, 0.65, 0), "#fff6e0"),
+      ...[-0.16, 0.16].flatMap((x) => [
+        painted(new THREE.SphereGeometry(0.12, 8, 6).translate(x, 0.8, 0.32), "#ffffff"),
+        painted(new THREE.SphereGeometry(0.06, 6, 5).translate(x, 0.8, 0.42), "#0b0b12"),
+      ]),
+    ])!;
+    const cap = new THREE.SphereGeometry(1, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.7, 1).translate(0, 1.2, 0);
+    const spots: THREE.BufferGeometry[] = [];
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      spots.push(new THREE.SphereGeometry(0.15, 6, 5).scale(1, 0.4, 1).translate(Math.cos(a) * 0.62, 1.2 + 0.52, Math.sin(a) * 0.62));
+    }
+    return { stem: mergeGeometries([stem, leaf])!, head, stalk, cap, spots: mergeGeometries(spots)! };
+  }, []);
+
+  const d = useMemo(() => new THREE.Object3D(), []);
+  const headRef = useRef<THREE.InstancedMesh>(null);
+  const angelRefs = useRef<(THREE.Group | null)[]>([]);
+  const wheelRefs = useRef<(THREE.Group | null)[]>([]);
+  const wingRefs = useRef<(THREE.Group | null)[]>([]);
+  useFrame((s) => {
+    const cam = s.camera.position;
+    const t = s.clock.elapsedTime;
+    // every sunflower turns its face to you
+    const m = headRef.current;
+    if (m) {
+      built.flowers.forEach((f, i) => {
+        d.position.set(f.x, f.y + 3 * f.s, f.z);
+        d.rotation.set(-0.15, Math.atan2(cam.x - f.x, cam.z - f.z), Math.sin(t * 1.3 + i) * 0.06);
+        d.scale.setScalar(f.s);
+        d.updateMatrix();
+        m.setMatrixAt(i, d.matrix);
+      });
+      m.instanceMatrix.needsUpdate = true;
+    }
+    angelRefs.current.forEach((g, i) => {
+      if (!g) return;
+      const a = built.angels[i];
+      g.position.y = a.y + Math.sin(t * 0.5 + i * 1.9) * 2.2;
+      g.lookAt(cam.x, cam.y, cam.z);
+    });
+    wheelRefs.current.forEach((g, i) => {
+      if (g) g.rotation.set(t * (0.5 + (i % 3) * 0.2), t * (0.35 + (i % 2) * 0.25), i);
+    });
+    wingRefs.current.forEach((g, i) => {
+      if (g) g.rotation.z = (i % 2 ? -1 : 1) * (0.25 + Math.sin(t * 2.2 + Math.floor(i / 2)) * 0.22);
+    });
+  });
+
+  const stud = (r: number, n: number, key: string) =>
+    Array.from({ length: n }, (_, k) => {
+      const a = (k / n) * Math.PI * 2;
+      return (
+        <group key={`${key}${k}`} position={[Math.cos(a) * r, Math.sin(a) * r, 0]}>
+          <mesh>
+            <sphereGeometry args={[0.42, 8, 8]} />
+            <meshStandardMaterial color="#ffffff" roughness={0.2} />
+          </mesh>
+          <mesh position={[0, 0, 0.3]}>
+            <sphereGeometry args={[0.2, 6, 6]} />
+            <meshBasicMaterial color="#0b0b12" />
+          </mesh>
+        </group>
+      );
+    });
+
+  const setAll = <T,>(list: T[], place: (o: THREE.Object3D, item: T) => void, colour?: (item: T) => THREE.Color) => (el: THREE.InstancedMesh | null) => {
+    if (!el) return;
+    list.forEach((item, i) => {
+      place(d, item);
+      d.updateMatrix();
+      el.setMatrixAt(i, d.matrix);
+      if (colour) el.setColorAt(i, colour(item));
+    });
+    el.instanceMatrix.needsUpdate = true;
+    if (colour && el.instanceColor) el.instanceColor.needsUpdate = true;
+  };
+  const placeShroom = (o: THREE.Object3D, sh: (typeof built.shrooms)[number]) => {
+    o.position.set(sh.x, sh.y, sh.z);
+    o.rotation.set(0, sh.rot, 0);
+    o.scale.setScalar(sh.s);
+  };
+
+  return (
+    <group>
+      <instancedMesh
+        ref={setAll(built.flowers, (o, f) => {
+          o.position.set(f.x, f.y, f.z);
+          o.rotation.set(0, f.x, 0);
+          o.scale.setScalar(f.s);
+        })}
+        args={[geo.stem, undefined, built.flowers.length]}
+        frustumCulled={false}
+      >
+        <meshStandardMaterial color="#3fae3f" roughness={0.9} />
+      </instancedMesh>
+      <instancedMesh ref={headRef} args={[geo.head, undefined, built.flowers.length]} frustumCulled={false}>
+        <meshStandardMaterial vertexColors roughness={0.6} />
+      </instancedMesh>
+      <instancedMesh ref={setAll(built.shrooms, placeShroom)} args={[geo.stalk, undefined, built.shrooms.length]} frustumCulled={false}>
+        <meshStandardMaterial vertexColors roughness={0.7} />
+      </instancedMesh>
+      <instancedMesh ref={setAll(built.shrooms, placeShroom, (sh) => sh.c)} args={[geo.cap, undefined, built.shrooms.length]} frustumCulled={false}>
+        <meshStandardMaterial roughness={0.45} />
+      </instancedMesh>
+      <instancedMesh ref={setAll(built.shrooms, placeShroom)} args={[geo.spots, undefined, built.shrooms.length]} frustumCulled={false}>
+        <meshStandardMaterial color="#ffffff" roughness={0.5} />
+      </instancedMesh>
+
+      {built.tops.map((h, i) => (
+        <group key={`h${i}`} position={[h.x, h.y - 0.3, h.z]} rotation={[0, h.rot, 0]}>
+          <mesh position={[0, 3, 0]} castShadow>
+            <boxGeometry args={[8, 6, 7]} />
+            <meshStandardMaterial color={i % 3 === 0 ? "#fff6e0" : i % 3 === 1 ? "#ffe0ef" : "#e0f0ff"} roughness={0.9} />
+          </mesh>
+          <mesh position={[0, 7.6, 0]} rotation={[0, Math.PI / 4, 0]} castShadow>
+            <coneGeometry args={[6.6, 3.6, 4]} />
+            <meshStandardMaterial color={i % 2 ? "#d9534f" : "#5b7fd6"} roughness={0.8} flatShading />
+          </mesh>
+          <mesh position={[0, 1.6, 3.52]}>
+            <boxGeometry args={[1.5, 3.2, 0.1]} />
+            <meshStandardMaterial color="#6b4a2f" roughness={0.8} />
+          </mesh>
+          {[-2.5, 2.5].map((x) => (
+            <mesh key={x} position={[x, 3.6, 3.52]}>
+              <boxGeometry args={[1.5, 1.5, 0.1]} />
+              <meshStandardMaterial color="#fff7c2" emissive="#ffe98a" emissiveIntensity={2.2} toneMapped={false} />
+            </mesh>
+          ))}
+          <mesh position={[2.4, 8.4, -1.4]}>
+            <boxGeometry args={[1, 2.6, 1]} />
+            <meshStandardMaterial color="#b9b0a4" roughness={0.9} />
+          </mesh>
+        </group>
+      ))}
+
+      {built.angels.map((a, i) => (
+        <group key={`a${i}`} ref={(el) => (angelRefs.current[i] = el)} position={[a.x, a.y, a.z]} scale={a.s}>
+          {/* the eye in the middle */}
+          <mesh>
+            <sphereGeometry args={[2.6, 22, 18]} />
+            <meshStandardMaterial color="#ffffff" roughness={0.15} emissive="#ffffff" emissiveIntensity={0.25} />
+          </mesh>
+          <mesh position={[0, 0, 2.05]}>
+            <sphereGeometry args={[1.3, 16, 14]} />
+            <meshStandardMaterial color={theme.particles[i % theme.particles.length]} emissive={theme.particles[i % theme.particles.length]} emissiveIntensity={0.6} roughness={0.2} />
+          </mesh>
+          <mesh position={[0, 0, 3.0]}>
+            <sphereGeometry args={[0.62, 12, 10]} />
+            <meshBasicMaterial color="#0b0b12" />
+          </mesh>
+          {/* wheels within wheels, set with eyes */}
+          <group ref={(el) => (wheelRefs.current[i * 2] = el)}>
+            <mesh>
+              <torusGeometry args={[5.2, 0.28, 8, 44]} />
+              <meshStandardMaterial color="#ffd86b" metalness={0.9} roughness={0.2} emissive="#ffd86b" emissiveIntensity={0.5} />
+            </mesh>
+            {stud(5.2, 10, "o")}
+          </group>
+          <group ref={(el) => (wheelRefs.current[i * 2 + 1] = el)}>
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[4.1, 0.24, 8, 40]} />
+              <meshStandardMaterial color="#ffd86b" metalness={0.9} roughness={0.2} emissive="#ffd86b" emissiveIntensity={0.5} />
+            </mesh>
+            <group rotation={[Math.PI / 2, 0, 0]}>{stud(4.1, 8, "i")}</group>
+          </group>
+          {/* three pairs of wings */}
+          {[-1, 1].flatMap((side) =>
+            [0, 1, 2].map((k) => (
+              <group key={`${side}${k}`} position={[side * 2.2, (k - 1) * 1.7, -0.6]}>
+                <group ref={(el) => (wingRefs.current[i * 6 + k * 2 + (side > 0 ? 1 : 0)] = el)}>
+                  <mesh position={[side * (4.2 - k * 0.5), 0.9, 0]} rotation={[0, 0, side * (0.5 - k * 0.45)]} scale={[1, 0.34, 0.08]}>
+                    <sphereGeometry args={[4.4 - k * 0.6, 10, 6]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.6} emissive="#ffffff" emissiveIntensity={0.2} />
+                  </mesh>
+                </group>
+              </group>
+            ))
+          )}
+          <mesh position={[0, 0, -1.2]}>
+            <ringGeometry args={[6.4, 7.2, 40]} />
+            <meshBasicMaterial color="#fff7c2" transparent opacity={0.5} toneMapped={false} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        </group>
+      ))}
+    </group>
   );
 }

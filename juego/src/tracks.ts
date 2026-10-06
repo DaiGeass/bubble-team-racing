@@ -44,7 +44,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   design({
     id: "bosque", theme: "eco", difficulty: 2, start: [0, 8, 0, 0], hazards: 3,
     draw: (t) =>
-      t.go(50).mark("go").go(170)
+      t.mark("sA").go(50).mark("go").go(170).mark("sB")
         .left(90, 70, 3).go(100, 5).mark("hairA").go(60, 3)
         .left(180, 40, 5).go(60, 3.75).mark("hairB").go(100, 6.25)
         .right(180, 40, 5)
@@ -67,6 +67,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         holes: [["gap", 17]],
         pads: [["gap", "boost", 1.6]],
       },
+      { from: "sA", to: "sB", draw: (t) => t.bypass("R", 43, 0), kind: "side", pads: [["mid", "boost"]] },
     ],
   }),
 
@@ -137,8 +138,8 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .left(90, 60)
         .mark("bridgeA").go(BYPASS + 183).mark("bridgeB")
         .right(90, 60, -4).go(100, -4).mark("run").go(40, -2).mark("jump").go(60, -2)
-        .right(90, 60, -4).go(120, -4)
-        .right(90, 60, -2).go(180),
+        .right(90, 60, -4).go(20, -0.67).mark("x1").go(100, -3.33)
+        .right(90, 60, -2).go(100).mark("x2").go(80),
     zones: [["coil", "coilB", "mag"]],
     holes: [["jump", 9]],
     pads: [["go", "boost"], ["coil", "boost"], ["run", "boost", 1.5]],
@@ -148,6 +149,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
       { from: "line", to: "lineB", draw: (t) => t.bypass("R", 83, -4), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
       { from: "bridgeA", to: "bridgeB", draw: (t) => t.bypass("L", 183, -11), kind: "low", pads: [["mid", "boost"]] },
       { from: "bridgeA", to: "bridgeB", draw: (t) => t.bypass("R", 183, 9), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
+      { from: "x1", to: "x2", width: 11, walls: false, draw: (t) => t.cut("R", 158.4, 30, -5.33), holes: [["mid", 10]], pads: [["mid", "boost", 1.5]] },
     ],
   }),
 
@@ -196,9 +198,9 @@ export const DESIGNED_TRACKS: TrackDef[] = [
       t.go(50).mark("go").go(110).mark("warpIn").go(200).mark("warpOut")
         .left(90, 30).mark("upA").go(300, 10).mark("upB")
         .left(90, 30).go(120)
-        .right(90, 30).go(160)
+        .right(90, 30).go(60).mark("x1").go(100)
         .left(90, 30)
-        .go(110).mark("run").go(40, -2).mark("jump").go(190, -8)
+        .go(100).mark("x2").go(10).mark("run").go(40, -2).mark("jump").go(190, -8)
         .left(90, 30)
         .mark("barA").go(BYPASS + 260).mark("barB").go(83)
         .left(90, 30).go(160),
@@ -208,10 +210,12 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     sectors: [["warpOut", "y2k"], ["run", "noir"], ["barA", "win98"]],
     traffic: 4,
     routes: [
-      { from: "barA", to: "barB", draw: (t) => t.bypass("L", 260, 10), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
-      { from: "barA", to: "barB", draw: (t) => t.bypass("R", 260, -6), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "barA", to: "barB", draw: (t) => t.bypass("L", 260, 20), kind: "high", holes: [["mid", 18]], pads: [["mid", "boost", 1.7]] },
+      { from: "barA", to: "barB", draw: (t) => t.bypass("R", 260, -10), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
       { from: "upA", to: "upB", draw: (t) => t.bypass("L", 123, 8, 10), kind: "high", pads: [["mid", "boost", 1.5]] },
       { from: "upA", to: "upB", draw: (t) => t.bypass("R", 123, -5, 10), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      // dragged across the corner of the desktop: no barriers
+      { from: "x1", to: "x2", width: 11, walls: false, draw: (t) => t.cut("L", 130, 20), pads: [["mid", "boost", 1.5]] },
     ],
   }),
 
@@ -274,7 +278,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     pads: [["go", "boost"], ["chA", "jump", 12, 150], ["chA", "jump", 12, 300], ["k1", "boost", 1.45, 20], ["homeB", "boost"]],
     routes: [
       { from: "chA", to: "chB", draw: (t) => t.bypass("L", 223, 0), afloat: true, kind: "side" },
-      { from: "chA", to: "chB", draw: (t) => t.bypass("R", 223, 7), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
+      { from: "chA", to: "chB", draw: (t) => t.bypass("R", 223, 15), kind: "high", holes: [["mid", 18]], pads: [["mid", "boost", 1.7]] },
       { from: "tA", to: "tB", draw: (t) => t.bypass("L", 23, 0), afloat: true, kind: "side" },
       { from: "tA", to: "tB", draw: (t) => t.bypass("R", 23, 0), afloat: true, kind: "side" },
       { from: "homeA", to: "homeB", draw: (t) => t.bypass("L", 153, 9), kind: "high", pads: [["mid", "boost", 1.5]] },
@@ -303,7 +307,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     routes: [
       { from: "skyA", to: "skyB", draw: (t) => t.bypass("L", 123, 12), afloat: true, kind: "high" },
       { from: "skyA", to: "skyB", draw: (t) => t.bypass("R", 123, -12), afloat: true, kind: "low" },
-      { from: "runA", to: "runB", draw: (t) => t.bypass("L", 223, 9), kind: "high", holes: [["mid", 11]], pads: [["mid", "boost", 1.5]] },
+      { from: "runA", to: "runB", draw: (t) => t.bypass("L", 223, 18), kind: "high", holes: [["mid", 18]], pads: [["mid", "boost", 1.7]] },
       { from: "runA", to: "runB", draw: (t) => t.bypass("R", 223, -5), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
     ],
   }),
@@ -396,13 +400,13 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .weave("R", 30, 150, -4).go(75).mark("run").go(40).mark("j2").go(100)
         .left(90, 90)
         .go(32),
-    holes: [["j1", 10], ["j2", 9]],
+    holes: [["j1", 10], ["j2", 8]],
     sectors: [["climbA", "dreamcore"], ["j1", "vapor"], ["run", "sunset"]],
     traffic: 3,
     pads: [["go", "boost"], ["climbB", "boost"], ["run", "boost", 1.5]],
     routes: [
       { from: "climbA", to: "climbB", draw: (t) => t.bypass("L", 323, -5, 34), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
-      { from: "climbA", to: "climbB", draw: (t) => t.bypass("R", 323, 8, 34), kind: "high", pads: [["mid", "boost", 1.5]] },
+      { from: "climbA", to: "climbB", draw: (t) => t.bypass("R", 323, 16, 34), kind: "high", holes: [["mid", 14]], pads: [["mid", "boost", 1.7]] },
       { from: "sA", to: "sB", draw: (t) => t.bypass("R", 83, -4), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
     ],
   }),
@@ -430,11 +434,13 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     traffic: 4,
     pads: [["go", "boost"], ["aB", "boost"], ["run", "boost", 1.5], ["cB", "boost"], ["dB", "boost"]],
     routes: [
-      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 223, 9, 14), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 223, 16, 14), kind: "high", holes: [["mid", 14]], pads: [["mid", "boost", 1.6]] },
       { from: "aA", to: "aB", draw: (t) => t.bypass("R", 223, -5, 14), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
-      { from: "cA", to: "cB", draw: (t) => t.bypass("L", 253, 8, -10), kind: "high", pads: [["mid", "boost", 1.5]] },
-      { from: "cA", to: "cB", draw: (t) => t.bypass("R", 253, -4, -10), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("L", 253, 18, -10), kind: "high", holes: [["mid", 18]], pads: [["mid", "boost", 1.7]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("R", 253, -9, -10), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
       { from: "dA", to: "dB", draw: (t) => t.bypass("R", 123, 8), kind: "high", holes: [["mid", 14]], pads: [["mid", "boost", 1.5]] },
+      // straight across the first corner: no barriers and a gap in the middle
+      { from: "aB", to: "hA", width: 11, walls: false, draw: (t) => t.cut("R", 130, 30, 2), holes: [["mid", 10]], pads: [["mid", "boost", 1.5]] },
     ],
   }),
 
@@ -464,8 +470,8 @@ export const DESIGNED_TRACKS: TrackDef[] = [
       { from: "tA", to: "tB", draw: (t) => t.bypass("R", 103, 9, -4), afloat: true, kind: "high" },
       { from: "skyA", to: "skyB", draw: (t) => t.bypass("L", 83, 12), afloat: true, kind: "high" },
       { from: "skyA", to: "skyB", draw: (t) => t.bypass("R", 83, -12), afloat: true, kind: "low" },
-      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 223, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
-      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 223, -4), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 223, 18), kind: "high", holes: [["mid", 18]], pads: [["mid", "boost", 1.7]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 223, -9), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
     ],
   }),
 
@@ -478,9 +484,9 @@ export const DESIGNED_TRACKS: TrackDef[] = [
       t.go(44).mark("go").go(130)
         .right(720, 65, 40).mark("up").go(120, 6)
         .left(90, 80, 4)
-        .mark("bA").go(BYPASS + 173).mark("bB").go(50)
+        .mark("bA").go(BYPASS + 173).mark("bB").go(20).mark("c0x").go(30)
         .left(90, 80)
-        .go(50).drop(-15).go(60).mark("run").go(40).mark("j1").go(48).drop(-15).go(33)
+        .go(30).mark("c1").go(20).drop(-15).go(60).mark("run").go(40).mark("j1").go(48).drop(-15).go(33)
         .left(90, 80, -4)
         .weave("R", 30, 100, -8)
         .go(132, -8).mark("c0").go(8).mark("air").go(60)
@@ -494,6 +500,8 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     routes: [
       { from: "bA", to: "bB", draw: (t) => t.bypass("L", 173, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
       { from: "bA", to: "bB", draw: (t) => t.bypass("R", 173, -4), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      // off the end of the ridge on the diagonal, straight at the first fall
+      { from: "c0x", to: "c1", width: 11, walls: false, draw: (t) => t.cut("L", 101.8, 20), pads: [["mid", "boost", 1.5]] },
     ],
   }),
 
@@ -503,14 +511,19 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   design({
     id: "nudo", theme: "vapor", difficulty: 2, start: [0, 8, -150, 0], hazards: 3,
     draw: (t) =>
-      t.go(50).mark("go").go(250)
+      t.mark("sA").go(50).mark("go").go(250).mark("sB")
         .left(270, 150, 13).mark("over")
-        .go(110).mark("run").go(34).mark("gap").go(156)
+        .go(110).mark("run").go(34).mark("gap").go(156).mark("overB")
         .right(270, 150, -13),
     holes: [["gap", 12]],
     sectors: [["over", "y2k"], ["gap", "sunset"]],
     traffic: 3,
     pads: [["go", "boost"], ["run", "boost", 1.5], ["over", "boost", 1.4, -350], ["gap", "boost", 1.4, 500]],
+    routes: [
+      { from: "sA", to: "sB", draw: (t) => t.bypass("R", 123, -4), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      { from: "sA", to: "sB", draw: (t) => t.bypass("L", 123, 0), kind: "side", pads: [["mid", "boost"]] },
+      { from: "over", to: "overB", draw: (t) => t.bypass("L", 123, 5), kind: "high", pads: [["mid", "boost"]] },
+    ],
   }),
 
   // STAR LIFT — two turns up a tower to fifty units and off the top in a
@@ -535,8 +548,8 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     routes: [
       { from: "skyA", to: "skyB", draw: (t) => t.bypass("L", 123, 12), afloat: true, kind: "high" },
       { from: "skyA", to: "skyB", draw: (t) => t.bypass("R", 123, -12), afloat: true, kind: "low" },
-      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 223, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
-      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 223, -4), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 223, 20), kind: "high", holes: [["mid", 18]], pads: [["mid", "boost", 1.7]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 223, -9), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
     ],
   }),
 
@@ -564,8 +577,8 @@ export const DESIGNED_TRACKS: TrackDef[] = [
       { from: "chA", to: "chB", draw: (t) => t.bypass("R", 263, 7), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
       { from: "tA", to: "tB", draw: (t) => t.bypass("L", 183, -10), afloat: true, kind: "low" },
       { from: "tA", to: "tB", draw: (t) => t.bypass("R", 183, 9), afloat: true, kind: "high" },
-      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 223, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
-      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 223, -3), kind: "low", pads: [["mid", "boost"]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 223, 18), kind: "high", holes: [["mid", 18]], pads: [["mid", "boost", 1.7]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 223, -8), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
     ],
   }),
 
@@ -636,7 +649,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
         .mark("m2A").weave("R", 30, 120, 6).go(40).mark("m2B")
         .mark("cA").go(BYPASS + 103, -6).mark("cB")
         .left(90, 80)
-        .go(100).mark("c0").go(8).mark("air").go(150).mark("land").go(222)
+        .go(100).mark("c0").go(8).mark("air").go(150).mark("land").go(212).mark("eB").go(10)
         .left(90, 80),
     zones: [["mA", "mB", "mag"], ["m2A", "m2B", "mag"]],
     holes: [["air", 140]],
@@ -647,10 +660,179 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     traffic: 2,
     pads: [["go", "boost"], ["run", "boost", 1.5], ["j1", "jump", 13], ["m2A", "jump", 12, 130], ["cB", "boost"]],
     routes: [
-      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 83, 0), kind: "side", pads: [["mid", "boost"]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 83, 7), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
       { from: "aA", to: "aB", draw: (t) => t.bypass("R", 83, -4), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
       { from: "cA", to: "cB", draw: (t) => t.bypass("L", 103, 0, -6), kind: "side", pads: [["mid", "boost"]] },
       { from: "cA", to: "cB", draw: (t) => t.bypass("R", 103, 8, -6), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "land", to: "eB", draw: (t) => t.bypass("L", 35, 0), kind: "side", pads: [["mid", "boost"]] },
+    ],
+  }),
+
+  // FURY VOLCANO — up the outside of the cone on three levels, two turns
+  // round the crater floating on magnets, down the far side in three falls,
+  // and a cannon over the lava to finish.
+  design({
+    id: "volcan", theme: "sunset", difficulty: 3, start: [0, 8, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(50).mark("go").go(90).mark("aA").go(BYPASS + 123, 12).mark("aB").go(60, 4)
+        .left(90, 80, 4)
+        .mark("mA").right(720, 60, 36).mark("mB").go(60).mark("bA").go(BYPASS + 123).mark("bB").go(30).mark("v1").go(30)
+        .left(90, 80)
+        .go(30).mark("c1").go(30).drop(-15).go(70).mark("run").go(40).mark("j1").go(60).drop(-15).go(60).drop(-14).go(58).mark("c2").go(50, -2)
+        .left(90, 80, -4)
+        .go(50, -2).mark("c3").go(50, -4).mark("c0").go(8).mark("air").go(150).mark("land").go(162)
+        .left(90, 80),
+    zones: [["mA", "mB", "mag"]],
+    holes: [["air", 140]],
+    kick: 0,
+    cannons: [["c0", "land", 36]],
+    sectors: [["mA", "cyberpunk"], ["bA", "vapor"], ["run", "cyberpunk"], ["c0", "sunset"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["aB", "boost"], ["bB", "boost"], ["run", "boost", 1.5], ["j1", "jump", 13]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 123, 9, 12), kind: "high", pads: [["mid", "boost", 1.5]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 123, -4, 12), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("L", 123, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("R", 123, -5), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      // across the corner off the rim, with a gap
+      { from: "v1", to: "c1", width: 11, walls: false, draw: (t) => t.cut("L", 101.8, 20), pads: [["mid", "boost", 1.5]] },
+      // and across the last corner, down the slope to the cannon
+      { from: "c2", to: "c3", width: 11, walls: false, draw: (t) => t.cut("L", 130.1, 20, -8), holes: [["mid", 10]], pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
+
+  // THE MALL — indoors, on two floors, with nobody in it. A lift that takes
+  // you straight up, a moving walkway you float along, a mezzanine with a gap
+  // in it and a fall back down to the ground floor.
+  design({
+    id: "centro", theme: "liminal", difficulty: 2, indoor: true, start: [0, 8, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(50).mark("go").go(50).mark("aA").go(BYPASS + 223).mark("aB").go(20)
+        .right(90, 40)
+        .go(40).mark("up").go(140, 10).go(40).mark("p1").go(180)
+        .right(90, 40)
+        .go(20).mark("cA").go(BYPASS + 223).mark("cB").go(60).mark("x1").go(40)
+        .right(90, 40)
+        .go(40).mark("x2").go(20).drop(-10).go(60).mark("mA").go(160).mark("mB").go(93)
+        .right(90, 40),
+    zones: [["mA", "mB", "mag"]],
+    portals: [["up", "p1"]],
+    sectors: [["up", "win98"], ["cA", "liminal"], ["mA", "aqua"], ["mB", "liminal"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["aB", "boost"], ["cB", "boost"], ["mA", "boost", 1.4, 20]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 223, 0), kind: "side", pads: [["mid", "boost"]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 223, -4), kind: "low", pads: [["mid", "boost", 1.5]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("L", 223, 14), kind: "high", holes: [["mid", 14]], pads: [["mid", "boost", 1.6]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("R", 223, 0), kind: "side", pads: [["mid", "boost"]] },
+      // a service corridor across the corner
+      { from: "x1", to: "x2", width: 11, draw: (t) => t.cut("R", 59.4, 20), kind: "cut", pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
+
+  // AURORA GLACIER — a fjord by boat on two channels, an ice sheet you slide
+  // across on magnets, up off the ice in a plane with the flight line split
+  // in two, and down onto a three-lane road home.
+  design({
+    id: "glaciar", theme: "aero", difficulty: 2, sea: 0, start: [0, 6, 0, 0], hazards: 2,
+    draw: (t) =>
+      t.go(50).mark("go").go(110).go(60, -6).mark("w0").mark("chA").go(BYPASS + 183).mark("chB").go(20)
+        .left(90, 90)
+        .go(40).mark("w1").go(60, 6).mark("mA").weave("L", 30, 110, 8).go(60).mark("mB").go(140, 6)
+        .left(90, 90, 4).mark("k0")
+        .go(130, 26).go(30).mark("skyA").go(BYPASS + 123).mark("skyB").go(30).go(110, -24)
+        .left(90, 90, -8)
+        .go(140, -12).mark("k1").mark("dA").go(BYPASS + 203).mark("dB")
+        .left(90, 90),
+    zones: [["w0", "w1", "water"], ["mA", "mB", "mag"], ["k0", "k1", "sky"]],
+    sectors: [["w0", "aqua"], ["mA", "dreamcore"], ["k0", "aero"], ["skyB", "vapor"], ["k1", "frutiger"]],
+    traffic: 2,
+    pads: [["go", "boost"], ["chA", "jump", 12, 160], ["mA", "jump", 11, 120], ["k1", "boost", 1.45, 20], ["dB", "boost"]],
+    routes: [
+      { from: "chA", to: "chB", draw: (t) => t.bypass("L", 183, 0), afloat: true, kind: "side" },
+      { from: "chA", to: "chB", draw: (t) => t.bypass("R", 183, 7), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.5]] },
+      { from: "skyA", to: "skyB", draw: (t) => t.bypass("L", 123, 12), afloat: true, kind: "high" },
+      { from: "skyA", to: "skyB", draw: (t) => t.bypass("R", 123, -12), afloat: true, kind: "low" },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 203, 16), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.7]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 203, -8), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
+
+  // ORBITAL STATION — half of it is flown and half of it is floated: a
+  // magnetic ring up to the docks, out through space in a plane, a magnetic
+  // weave along the hull and a jump across the gap in it.
+  design({
+    id: "estacion", theme: "y2k", difficulty: 3, start: [0, 30, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(50).mark("go").go(70).mark("mA").left(360, 70, 14).go(100).mark("mB").mark("aA").go(BYPASS + 163).mark("aB")
+        .right(90, 80)
+        .go(30).mark("k0").go(70, 18).go(30).mark("skyA").go(BYPASS + 103).mark("skyB").go(30).go(20, -8)
+        .right(90, 80, -10)
+        .go(120, -14).mark("k1").go(40).mark("m2A").weave("L", 30, 100).go(40).mark("m2B").go(100).mark("x1").go(60)
+        .right(90, 80)
+        .go(60).mark("run").go(40).mark("gap").go(60).mark("dA").go(BYPASS + 123).mark("dB")
+        .right(90, 80),
+    zones: [["mA", "mB", "mag"], ["k0", "k1", "sky"], ["m2A", "m2B", "mag"]],
+    holes: [["gap", 9]],
+    sectors: [["mA", "techno"], ["k0", "vapor"], ["m2A", "cyberpunk"], ["run", "y2k"]],
+    traffic: 2,
+    pads: [["go", "boost"], ["aB", "boost"], ["k1", "boost", 1.45, 20], ["run", "boost", 1.5], ["dB", "boost"]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 163, 9), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 163, -4), kind: "low", tunnel: true, pads: [["mid", "boost"]] },
+      { from: "skyA", to: "skyB", draw: (t) => t.bypass("L", 103, 12), afloat: true, kind: "high" },
+      { from: "skyA", to: "skyB", draw: (t) => t.bypass("R", 103, -12), afloat: true, kind: "low" },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 123, -6), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 123, 8), kind: "high", pads: [["mid", "boost", 1.5]] },
+      // off the hull and across open space to the run-up
+      { from: "x1", to: "run", width: 11, walls: false, draw: (t) => t.cut("R", 130), holes: [["mid", 10]], pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
+
+  // THE GARDEN OF EYES — the last one, and everything at once. Eleven other
+  // ways round: over and under both halves of the first straight, across
+  // three corners on the diagonal, a magnetic helix, a hole in the hedge that
+  // skips the weave, and a cannon over the flower beds. Whichever way you go,
+  // you are being watched.
+  design({
+    id: "eden", theme: "eden", difficulty: 3, start: [0, 12, 0, 0], hazards: 4,
+    draw: (t) =>
+      t.go(50).mark("go").go(40)
+        .mark("a1A").go(BYPASS + 123).mark("a1B").go(20).mark("a2A").go(BYPASS + 123).mark("a2B")
+        .go(50).mark("k1a").go(30)
+        .left(90, 80, 4)
+        .go(30).mark("k1b").go(40).mark("mA").right(360, 60, 14).go(40).mark("mB").go(20)
+        .mark("bA").go(BYPASS + 173).mark("bB").go(50).mark("k2a").go(30)
+        .left(90, 80)
+        .go(30).mark("k2b").go(40).mark("p1").weave("R", 30, 85).mark("pOut").go(70)
+        .mark("cA").go(BYPASS + 223, -10).mark("cB").go(50).mark("k3a").go(30)
+        .left(90, 80, -4)
+        .go(30).mark("k3b").go(40).mark("m2A").weave("R", 30, 80, -4).go(30).mark("m2B")
+        .go(40).mark("c0").go(8).mark("air").go(120).mark("land").go(132)
+        .left(90, 80),
+    zones: [["mA", "mB", "mag"], ["m2A", "m2B", "mag"]],
+    holes: [["air", 110]],
+    kick: 0,
+    cannons: [["c0", "land", 30]],
+    portals: [["p1", "pOut"]],
+    sectors: [["mA", "dreamcore"], ["bA", "eden"], ["p1", "liminal"], ["cA", "eden"], ["m2A", "vapor"], ["land", "eden"]],
+    traffic: 4,
+    pads: [
+      ["go", "boost"], ["a1B", "jump", 11, 8], ["a2B", "boost"], ["mA", "jump", 12, 150], ["bB", "boost"],
+      ["pOut", "jump", 12, 30], ["cB", "boost", 1.5], ["m2A", "jump", 12, 90], ["land", "boost", 1.5, 20],
+    ],
+    routes: [
+      { from: "a1A", to: "a1B", draw: (t) => t.bypass("L", 123, 12), kind: "high", holes: [["mid", 14]], pads: [["mid", "boost", 1.6]] },
+      { from: "a1A", to: "a1B", draw: (t) => t.bypass("R", 123, -6), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      { from: "a2A", to: "a2B", draw: (t) => t.bypass("L", 123, -6), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      { from: "a2A", to: "a2B", draw: (t) => t.bypass("R", 123, 12), kind: "high", holes: [["mid", 14]], pads: [["mid", "boost", 1.6]] },
+      { from: "k1a", to: "k1b", width: 11, walls: false, draw: (t) => t.cut("L", 101.8, 20, 4), pads: [["mid", "boost", 1.5]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("L", 173, 14), kind: "high", holes: [["mid", 16]], pads: [["mid", "boost", 1.6]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("R", 173, -7), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      { from: "k2a", to: "k2b", width: 11, walls: false, draw: (t) => t.cut("L", 101.8, 20), holes: [["mid", 10]], pads: [["mid", "boost", 1.5]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("L", 223, 18, -10), kind: "high", holes: [["mid", 18]], pads: [["mid", "boost", 1.7]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("R", 223, -9, -10), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      { from: "k3a", to: "k3b", width: 11, walls: false, draw: (t) => t.cut("L", 101.8, 20, -4), pads: [["mid", "boost", 1.5]] },
     ],
   }),
 ];

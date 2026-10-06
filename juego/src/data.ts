@@ -17,7 +17,7 @@ export type ShapeId =
   | "tank" | "wedge" | "sled" | "orbit" | "dune" | "phantom" | "mech" | "board" | "shell" | "winglet" | "pod";
 export type ThemeId =
   | "frutiger" | "aero" | "techno" | "eco" | "aqua" | "sunset"
-  | "y2k" | "liquid" | "win98" | "vapor" | "dreamcore" | "cyberpunk" | "noir" | "backrooms" | "liminal";
+  | "y2k" | "liquid" | "win98" | "vapor" | "dreamcore" | "cyberpunk" | "noir" | "backrooms" | "liminal" | "eden";
 export type WheelStyle = "classic" | "sporty" | "glow" | "chrome" | "spike";
 export type SpoilerId = "none" | "wing" | "fin";
 export type FinishId = "solid" | "gloss" | "matte" | "chrome" | "glass" | "holo";
@@ -252,7 +252,7 @@ export interface ThemeDef {
   isle: string;
   glow: string;
   particles: string[];
-  prop: "palm" | "crystal" | "circuit" | "tree" | "coral" | "cactus" | "y2k" | "win98" | "liquid" | "vapor" | "door" | "lamp";
+  prop: "palm" | "crystal" | "circuit" | "tree" | "coral" | "cactus" | "y2k" | "win98" | "liquid" | "vapor" | "door" | "lamp" | "eden";
   bloom: number;
   /** dark themes need light text in menus */
   dark?: boolean;
@@ -351,6 +351,14 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     barrierA: "#ffffff", barrierB: "#bfe9f3", sun: "#ffffff", sunIntensity: 1.7, ambient: 1.2, ambientColor: "#ffffff",
     hemiSky: "#e8f8fc", hemiGround: "#cfeaf2", cloud: "#ffffff", isle: "#e6f2f5", glow: "#9fe8ff",
     particles: ["#ffffff", "#9fe8ff", "#bfe9f3", "#5fd0e6"], prop: "lamp", bloom: 0.7,
+  },
+  // the garden that goes on for ever, under a sky that is too blue, and everything in it has eyes
+  eden: {
+    id: "eden", name: "WEIRDCORE", skyTop: "#4aa3ff", skyBottom: "#d6f0ff", fog: "#cfeaff", fogNear: 90, fogFar: 340,
+    water: "#6fd3ff", ground: "#5fd35a", road: "#fdf6e3", roadLine: "#ff8fd0", roadEdge: "#ffffff",
+    barrierA: "#ff9de1", barrierB: "#fff07a", sun: "#ffffff", sunIntensity: 1.9, ambient: 1.1, ambientColor: "#ffffff",
+    hemiSky: "#cfeaff", hemiGround: "#7be36f", cloud: "#ffffff", isle: "#49c24a", glow: "#fff07a",
+    particles: ["#ff9de1", "#fff07a", "#9be7ff", "#ffffff"], prop: "eden", bloom: 0.8,
   },
   cyberpunk: {
     id: "cyberpunk", name: "CYBERPUNK", skyTop: "#141a3c", skyBottom: "#2a2466", fog: "#1c1c4a", fogNear: 80, fogFar: 280,
@@ -1004,6 +1012,7 @@ const THEME_BIOMES: Record<ThemeId, BiomeId[]> = {
   noir: ["city", "ruins", "snow", "city"],
   backrooms: ["ruins", "city", "ruins", "city"],
   liminal: ["cloud", "coast", "cloud", "snow"],
+  eden: ["meadow", "meadow", "forest", "meadow"],
 };
 
 /** Biome of the stretch at t, and how far we are into the next one. */
@@ -1104,7 +1113,7 @@ export function themeOnLap(id: ThemeId, lap: number): ThemeDef {
 export const THEME_BIOME: Record<ThemeId, BiomeId> = {
   frutiger: "meadow", eco: "forest", aero: "cloud", techno: "city", aqua: "reef", sunset: "desert",
   y2k: "city", liquid: "coast", win98: "city", vapor: "ruins", dreamcore: "cloud", cyberpunk: "volcano", noir: "ruins",
-  backrooms: "ruins", liminal: "cloud",
+  backrooms: "ruins", liminal: "cloud", eden: "meadow",
 };
 
 const MUTATION_STEPS = 6;

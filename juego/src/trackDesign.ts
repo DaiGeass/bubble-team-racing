@@ -144,6 +144,26 @@ export class Turtle {
     this.go(18, k * 18);
     return this;
   }
+
+  /**
+   * Straight across the inside of a right-angle corner: off the road, half the
+   * turn, down the diagonal for `d`, the other half and back on. For a corner
+   * of radius R joined `a` before it and `a` after it, d = (a + R - 18 - r) / 0.7071.
+   * Leaves a mark "mid" half way down the diagonal.
+   */
+  cut(side: "L" | "R", d: number, r = 30, dy = 0) {
+    const turn = side === "L" ? this.left.bind(this) : this.right.bind(this);
+    const arc = (Math.PI / 4) * r;
+    const k = dy / (36 + 2 * arc + d);
+    this.go(18, k * 18);
+    turn(45, r, k * arc);
+    this.go(d / 2, (k * d) / 2);
+    this.mark("mid");
+    this.go(d / 2, (k * d) / 2);
+    turn(45, r, k * arc);
+    this.go(18, k * 18);
+    return this;
+  }
 }
 
 /** Forward distance a bypass takes besides its parallel run, for laying the straight it runs beside. */
@@ -298,7 +318,7 @@ export function design(spec: DesignSpec): TrackDef {
   const biomeOf: Record<ThemeId, BiomeId> = {
     frutiger: "meadow", eco: "forest", aero: "cloud", techno: "city", aqua: "reef", sunset: "desert",
     y2k: "city", liquid: "coast", win98: "city", vapor: "ruins", dreamcore: "cloud", cyberpunk: "volcano", noir: "ruins",
-    backrooms: "ruins", liminal: "cloud",
+    backrooms: "ruins", liminal: "cloud", eden: "meadow",
   };
   const biomes: BiomeDef[] = sectors.map((s, i) => ({ id: biomeOf[s.theme], t0: s.t0, t1: sectors[i + 1]?.t0 ?? 1 }));
 
