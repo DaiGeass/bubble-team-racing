@@ -11,7 +11,8 @@
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
     "dist:linux": "tauri build --bundles deb,appimage",
-    "dist:windows": "tauri build --bundles nsis,msi"
+    "dist:windows": "tauri build --bundles nsis,msi",
+    "red": "node servidor/servidor.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

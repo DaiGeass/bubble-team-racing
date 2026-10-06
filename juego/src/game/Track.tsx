@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { trackCurve, halfWidthAt, getActiveTrack, nearestT, surfaceYAt, trapTransform, portalTransform, getPaths, getPads, getSkyRings, getSkyBlocks, plainRoadAt, sectorIndexAt, sectorMix, trackBounds, terrainAt, terrainY, FLY_BASE, ROUTE_COLOURS, groundAt, makeGround, F_SOLID, F_WALL_POS, F_WALL_NEG, F_TUNNEL, type PathRT } from "../trackCurve";
-import { Airships, Corridor, Eden, Fireworks, Flocks, Grandstand, Landmarks, Motes, Pennants } from "./Ambience";
+import { Airships, Corridor, Eden, Fans, Fireworks, SkyBeasts, Vents, Flocks, Grandstand, Landmarks, Motes, Pennants } from "./Ambience";
 import { TRACK_WIDTH, ZONES, hazardState, zoneAt, zoneOfKind, raceSnapshot, biomeMix, themeOnLap, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
 function makeRoadTexture(theme: ThemeDef) {
@@ -2428,6 +2428,9 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
           <Pennants themes={themes} />
           <Airships theme={theme} />
           <Fireworks theme={theme} />
+          <Fans themes={themes} />
+          <Vents themes={themes} />
+          <SkyBeasts theme={theme} />
           {def.theme === "eden" && <Eden theme={theme} />}
         </>
       )}

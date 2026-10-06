@@ -7,6 +7,7 @@ import { EXTRA3 } from "./i18n5";
 import { EXTRA4 } from "./i18n6";
 import { EXTRA5 } from "./i18n7";
 import { EXTRA6 } from "./i18n8";
+import LobbyScreen from "./screens/LobbyScreen";
 import { useGame } from "./store";
 import { bindShakeScale } from "./particles";
 import { useControls } from "./controls";
@@ -82,6 +83,7 @@ export default function App() {
       <div className={`theme-${themeId} h-screen w-screen overflow-hidden text-sky-900`} style={vars}>
         {screen === "start" && <StartScreen />}
         {screen === "select" && <SelectScreen />}
+        {screen === "lobby" && <LobbyScreen />}
         {screen === "highscores" && <HighScoresScreen />}
         {screen === "howto" && <HowToScreen />}
         {screen === "options" && <OptionsScreen />}

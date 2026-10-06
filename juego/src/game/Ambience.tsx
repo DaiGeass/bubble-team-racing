@@ -1148,3 +1148,226 @@ export function Eden({ theme }: { theme: ThemeDef }) {
     </group>
   );
 }
+
+/**
+ * The people who came to watch: a row of them behind the barrier on the long
+ * straights, in the colours of the stretch, jumping as the karts go by.
+ */
+export function Fans({ themes }: { themes: ThemeDef[] }) {
+  const list = useMemo(() => {
+    const main = getPaths()[0];
+    const out: { x: number; y: number; z: number; ph: number; s: number; c: THREE.Color }[] = [];
+    if (!main) return out;
+    const probe = makeGround();
+    const step = Math.max(1, Math.round(2.6 / main.ds));
+    const block = Math.max(1, Math.round(120 / main.ds));
+    for (let i = 0; i < main.n && out.length < 170; i += step) {
+      // a group of them, then a gap, then another group on the other side
+      const b = Math.floor(i / block);
+      if (b % 3 !== 0) continue;
+      const t = main.prog[i];
+      if (!(main.flags[i] & F_SOLID) || ZONES.some((z) => t >= z.t0 - 0.01 && t <= z.t1 + 0.01)) continue;
+      const side = (b / 3) % 2 ? 1 : -1;
+      if (!(main.flags[i] & (side === 1 ? F_WALL_POS : F_WALL_NEG))) continue;
+      const lat = (main.half[i] + 1.9 + ((i * 7) % 3) * 0.7) * side;
+      const x = main.px[i] - main.tz[i] * lat;
+      const z = main.pz[i] + main.tx[i] * lat;
+      if (groundAt(x, z, 1e6, probe, 0)) continue;
+      const th = themes[sectorIndexAt(t)] ?? themes[0];
+      out.push({ x, y: main.py[i] + 0.2, z, ph: i * 0.37, s: 0.75 + ((i * 13) % 5) * 0.08, c: new THREE.Color(th.particles[(i / step) % th.particles.length | 0]) });
+    }
+    return out;
+  }, [themes]);
+  const ref = useRef<THREE.InstancedMesh>(null);
+  const d = useMemo(() => new THREE.Object3D(), []);
+  const coloured = useRef(false);
+  const geo = useMemo(() => new THREE.CapsuleGeometry(0.42, 0.55, 3, 8).translate(0, 0.7, 0), []);
+  useFrame((s) => {
+    const m = ref.current;
+    if (!m) return;
+    const t = s.clock.elapsedTime;
+    const me = raceSnapshot.racers[0];
+    list.forEach((f, i) => {
+      // they jump higher the nearer the player is
+      const near = me ? Math.max(0, 1 - Math.hypot(me.x - f.x, me.z - f.z) / 45) : 0;
+      d.position.set(f.x, f.y + Math.abs(Math.sin(t * 5 + f.ph)) * (0.15 + near * 0.9), f.z);
+      d.rotation.set(0, f.ph, Math.sin(t * 3 + f.ph) * 0.12);
+      d.scale.setScalar(f.s);
+      d.updateMatrix();
+      m.setMatrixAt(i, d.matrix);
+      if (!coloured.current) m.setColorAt(i, f.c);
+    });
+    m.instanceMatrix.needsUpdate = true;
+    if (!coloured.current && m.instanceColor) {
+      m.instanceColor.needsUpdate = true;
+      coloured.current = true;
+    }
+  });
+  if (!list.length) return null;
+  return (
+    <instancedMesh ref={ref} args={[geo, undefined, list.length]} frustumCulled={false}>
+      <meshStandardMaterial roughness={0.55} />
+    </instancedMesh>
+  );
+}
+
+type Vent = "spray" | "fire" | "spark" | "bubble" | "glitter";
+const VENT_OF: Record<string, Vent> = {
+  aqua: "spray", liquid: "spray", mac: "spray", tux: "spray", liminal: "spray",
+  sunset: "fire", cyberpunk: "fire", vapor: "fire",
+  techno: "spark", y2k: "spark", webcore: "spark", win98: "spark", metro: "spark", arch: "spark",
+  slime: "bubble", backrooms: "bubble",
+};
+
+/** Things that go off beside the road every few seconds: a geyser, a jet of flame, a shower of sparks, a burst of glitter. */
+export function Vents({ themes }: { themes: ThemeDef[] }) {
+  const spots = useMemo(() => {
+    const main = getPaths()[0];
+    const out: { p: THREE.Vector3; theme: ThemeDef; next: number; left: number }[] = [];
+    if (!main) return out;
+    const probe = makeGround();
+    for (let k = 0; k < 12; k++) {
+      const i = Math.floor(((k + 0.21) / 12) * main.n) % main.n;
+      const lat = (main.half[i] + 9 + (k % 3) * 4) * (k % 2 ? 1 : -1);
+      const x = main.px[i] - main.tz[i] * lat;
+      const z = main.pz[i] + main.tx[i] * lat;
+      if (groundAt(x, z, 1e6, probe, 0)) continue;
+      out.push({ p: new THREE.Vector3(x, main.py[i] - 0.5, z), theme: themes[sectorIndexAt(main.prog[i])] ?? themes[0], next: 1 + k * 0.7, left: 0 });
+    }
+    return out;
+  }, [themes]);
+  useFrame((s, dt) => {
+    const t = s.clock.elapsedTime;
+    for (const v of spots) {
+      if (t > v.next) {
+        v.next = t + 3.5 + Math.random() * 4;
+        v.left = 1.1;
+      }
+      if (v.left <= 0) continue;
+      v.left -= dt;
+      const kind = VENT_OF[v.theme.id] ?? "glitter";
+      const colour = kind === "fire" ? (Math.random() < 0.5 ? "#ffb347" : "#ff5f3a") : kind === "spray" ? "#e8fbff" : kind === "spark" ? v.theme.glow : kind === "bubble" ? v.theme.barrierB : v.theme.particles[Math.floor(Math.random() * v.theme.particles.length)];
+      emitParticles({
+        position: v.p,
+        color: colour,
+        count: 3,
+        speed: kind === "bubble" ? 4 : 11,
+        spread: kind === "spark" || kind === "glitter" ? 0.9 : 0.28,
+        size: kind === "spray" || kind === "bubble" ? 0.34 : 0.24,
+        life: kind === "bubble" ? 1.6 : 1.0,
+        upBias: 2.6,
+        gravity: kind === "bubble" ? 1 : 16,
+      });
+    }
+  });
+  return null;
+}
+
+type Beast = "whale" | "saucer" | "jelly";
+const BEAST_OF: Record<string, Beast> = {
+  aqua: "whale", liquid: "whale", mac: "whale", tux: "whale", frutiger: "whale", slime: "whale",
+  techno: "saucer", cyberpunk: "saucer", y2k: "saucer", webcore: "saucer", win98: "saucer", arch: "saucer", noir: "saucer",
+};
+
+/** Something very large and in no hurry, going by overhead: a whale, a saucer or a jellyfish, as the place has it. */
+export function SkyBeasts({ theme }: { theme: ThemeDef }) {
+  const bb = useMemo(() => trackBounds(), []);
+  const kind = BEAST_OF[theme.id] ?? "jelly";
+  const refs = useRef<(THREE.Group | null)[]>([]);
+  const parts = useRef<(THREE.Object3D | null)[]>([]);
+  useFrame((s) => {
+    const t = s.clock.elapsedTime;
+    refs.current.forEach((g, i) => {
+      if (!g) return;
+      const dir = i % 2 ? 1 : -1;
+      const a = t * 0.028 * dir + i * 3.3 + 1;
+      const r = bb.r * (0.3 + i * 0.5);
+      g.position.set(bb.cx + Math.cos(a) * r, bb.top + 60 + i * 22 + Math.sin(t * 0.35 + i) * 4, bb.cz + Math.sin(a) * r);
+      g.rotation.set(Math.sin(t * 0.35 + i) * 0.08, Math.atan2(-Math.sin(a) * dir, Math.cos(a) * dir), 0);
+    });
+    parts.current.forEach((o, i) => {
+      if (!o) return;
+      if (kind === "whale") o.rotation.x = Math.sin(t * 1.3 + i) * 0.35;
+      else if (kind === "saucer") o.rotation.y = t * 1.2;
+      else o.scale.set(1, 1 + Math.sin(t * 1.6 + i) * 0.18, 1);
+    });
+  });
+  const a = theme.particles[0];
+  const b = theme.particles[1 % theme.particles.length];
+  return (
+    <group>
+      {[0, 1].map((i) => (
+        <group key={i} ref={(el) => (refs.current[i] = el)} scale={1 + i * 0.4}>
+          {kind === "whale" && (
+            <>
+              <mesh rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.8]}>
+                <capsuleGeometry args={[7, 20, 8, 18]} />
+                <meshStandardMaterial color="#5b8fd6" roughness={0.6} />
+              </mesh>
+              <mesh position={[0, -3, 2]} rotation={[Math.PI / 2, 0, 0]} scale={[0.85, 0.9, 0.4]}>
+                <capsuleGeometry args={[7, 17, 6, 14]} />
+                <meshStandardMaterial color="#eaf4ff" roughness={0.7} />
+              </mesh>
+              <group ref={(el) => (parts.current[i] = el)} position={[0, 0, -16]}>
+                <mesh position={[0, 0, -4]} scale={[1, 0.12, 0.6]}>
+                  <sphereGeometry args={[8, 12, 8]} />
+                  <meshStandardMaterial color="#5b8fd6" roughness={0.6} />
+                </mesh>
+              </group>
+              {[-1, 1].map((sd) => (
+                <mesh key={sd} position={[sd * 8, -2.5, 6]} rotation={[0, 0, sd * 0.5]} scale={[1, 0.1, 0.45]}>
+                  <sphereGeometry args={[6, 10, 8]} />
+                  <meshStandardMaterial color="#4a7cc0" roughness={0.6} />
+                </mesh>
+              ))}
+              {[-1, 1].map((sd) => (
+                <mesh key={sd} position={[sd * 5.6, 1.2, 12]}>
+                  <sphereGeometry args={[0.7, 8, 8]} />
+                  <meshBasicMaterial color="#0b0b12" />
+                </mesh>
+              ))}
+            </>
+          )}
+          {kind === "saucer" && (
+            <>
+              <mesh scale={[1, 0.18, 1]}>
+                <sphereGeometry args={[16, 26, 12]} />
+                <meshStandardMaterial color="#aab6c8" metalness={0.5} roughness={0.3} />
+              </mesh>
+              <mesh position={[0, 2.4, 0]}>
+                <sphereGeometry args={[6.5, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                <meshStandardMaterial color={a} emissive={a} emissiveIntensity={0.7} transparent opacity={0.75} />
+              </mesh>
+              <group ref={(el) => (parts.current[i] = el)}>
+                {Array.from({ length: 10 }, (_, k) => (
+                  <mesh key={k} position={[Math.cos((k / 10) * 6.283) * 13, -1, Math.sin((k / 10) * 6.283) * 13]}>
+                    <sphereGeometry args={[1, 8, 8]} />
+                    <meshStandardMaterial color={k % 2 ? a : b} emissive={k % 2 ? a : b} emissiveIntensity={3} toneMapped={false} />
+                  </mesh>
+                ))}
+              </group>
+              <mesh position={[0, -16, 0]}>
+                <coneGeometry args={[9, 30, 18, 1, true]} />
+                <meshBasicMaterial color={b} transparent opacity={0.13} toneMapped={false} depthWrite={false} side={THREE.DoubleSide} />
+              </mesh>
+            </>
+          )}
+          {kind === "jelly" && (
+            <group ref={(el) => (parts.current[i] = el)}>
+              <mesh>
+                <sphereGeometry args={[10, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                <meshPhysicalMaterial color={a} roughness={0.1} clearcoat={1} transparent opacity={0.7} emissive={a} emissiveIntensity={0.35} side={THREE.DoubleSide} />
+              </mesh>
+              {Array.from({ length: 8 }, (_, k) => (
+                <mesh key={k} position={[Math.cos((k / 8) * 6.283) * 6, -9, Math.sin((k / 8) * 6.283) * 6]}>
+                  <cylinderGeometry args={[0.5, 0.15, 18, 5]} />
+                  <meshStandardMaterial color={b} emissive={b} emissiveIntensity={0.6} transparent opacity={0.8} />
+                </mesh>
+              ))}
+            </group>
+          )}
+        </group>
+      ))}
+    </group>
+  );
+}

@@ -290,3 +290,25 @@ button, a, [role="button"] {
   100% { opacity: 0; }
 }
 .hint-fade { animation: hint-fade 16s ease-out both; }
+
+/* race effects */
+@keyframes boost-streaks {
+  from { transform: scale(1) rotate(0deg); opacity: 0.55; }
+  to { transform: scale(1.5) rotate(3deg); opacity: 0.2; }
+}
+.boost-streaks {
+  animation: boost-streaks 0.22s linear infinite;
+  mask-image: radial-gradient(ellipse at 50% 46%, transparent 26%, black 75%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 46%, transparent 26%, black 75%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+@keyframes hit-flash {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.hit-flash {
+  animation: hit-flash 0.55s ease-out both;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(255, 40, 70, 0.6) 100%);
+  pointer-events: none;
+}

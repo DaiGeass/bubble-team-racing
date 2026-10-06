@@ -143,6 +143,14 @@ const RAW_CHARACTERS: RawCharacter[] = [
   { id: "cobalt", name: "COBALT", form: "drop", eye: "sharp", primary: "#2b5cff", secondary: "#e7ecff", accent: "#12239c", speed: 4, accel: 4, handling: 3, weight: 3, role: "balanced", favorite: "missile" },
   { id: "kiwi", name: "KIWI", form: "leaf", eye: "sparkle", primary: "#c6ff4f", secondary: "#f7ffe4", accent: "#6da300", speed: 3, accel: 5, handling: 4, weight: 1, role: "trickster", favorite: "slime" },
   { id: "magma", name: "MAGMA", form: "flame", eye: "visor", primary: "#ff2d00", secondary: "#ffe6dc", accent: "#8f1500", speed: 5, accel: 3, handling: 2, weight: 5, role: "heavy", favorite: "zap" },
+  { id: "zuri", name: "ZURI", form: "cloud", eye: "sharp", primary: "#fda4af", secondary: "#fff1f2", accent: "#be123c", speed: 4, accel: 4, handling: 4, weight: 1, role: "trickster", favorite: "ghost" },
+  { id: "jade", name: "JADE", form: "crystal", eye: "sleepy", primary: "#10b981", secondary: "#d1fae5", accent: "#065f46", speed: 3, accel: 3, handling: 5, weight: 3, role: "handler", favorite: "bubble" },
+  { id: "volt", name: "VOLT", form: "star", eye: "visor", primary: "#a3e635", secondary: "#f7fee7", accent: "#3f6212", speed: 5, accel: 4, handling: 2, weight: 2, role: "speed", favorite: "zap" },
+  { id: "nimbo", name: "NIMBO", form: "cloud", eye: "visor", primary: "#94a3b8", secondary: "#f1f5f9", accent: "#334155", speed: 3, accel: 2, handling: 3, weight: 5, role: "heavy", favorite: "quake" },
+  { id: "coral", name: "CORAL", form: "bubble", eye: "sharp", primary: "#ff7f50", secondary: "#fff1e8", accent: "#c2410c", speed: 3, accel: 4, handling: 3, weight: 3, role: "balanced", favorite: "slime" },
+  { id: "byte", name: "BYTE", form: "holo", eye: "sharp", primary: "#60a5fa", secondary: "#eff6ff", accent: "#1d4ed8", speed: 4, accel: 3, handling: 4, weight: 2, role: "tech", favorite: "popup" },
+  { id: "ash", name: "ASH", form: "flame", eye: "sparkle", primary: "#9ca3af", secondary: "#f3f4f6", accent: "#374151", speed: 4, accel: 5, handling: 3, weight: 1, role: "trickster", favorite: "mine" },
+  { id: "tuxi", name: "TUXI", form: "drop", eye: "sleepy", primary: "#334155", secondary: "#ffffff", accent: "#fbbf24", speed: 3, accel: 3, handling: 4, weight: 4, role: "balanced", favorite: "freeze" },
 ];
 
 const fixEarColors: Record<string, { primary?: string; secondary?: string; accent?: string }> = {
@@ -673,6 +681,14 @@ export const FUSION_SHOTS: Record<string, FusionShot> = {
   cobalt: { name: "TWIN CANNON", kind: "bolt", effect: "spin", color: "#2b5cff", rate: 0.85, count: 2, power: 0.8 },
   kiwi: { name: "SEED SPRAY", kind: "fan", effect: "coins", color: "#c6ff4f", rate: 1.0, count: 4, power: 0.8 },
   magma: { name: "ERUPTION", kind: "nova", effect: "burn", color: "#ff2d00", rate: 1.9, count: 1, power: 1.3 },
+  zuri: { name: "MIRAGE", kind: "homing", effect: "blind", color: "#fda4af", rate: 1.5, count: 2, power: 0.8 },
+  jade: { name: "SHARD WALL", kind: "fan", effect: "stun", color: "#10b981", rate: 1.3, count: 3, power: 0.9 },
+  volt: { name: "ARC", kind: "lance", effect: "stun", color: "#a3e635", rate: 0.9, count: 1, power: 0.8 },
+  nimbo: { name: "THUNDERHEAD", kind: "nova", effect: "lift", color: "#94a3b8", rate: 2.1, count: 1, power: 1.2 },
+  coral: { name: "REEF SPIT", kind: "bolt", effect: "tug", color: "#ff7f50", rate: 0.9, count: 2, power: 0.9 },
+  byte: { name: "PACKET STORM", kind: "fan", effect: "steal", color: "#60a5fa", rate: 1.6, count: 3, power: 1 },
+  ash: { name: "CINDERS", kind: "rear", effect: "burn", color: "#9ca3af", rate: 0.8, count: 3, power: 0.8 },
+  tuxi: { name: "SNOWBALL", kind: "mortar", effect: "freeze", color: "#e2e8f0", rate: 1.7, count: 1, power: 1 },
 };
 
 /**
@@ -761,7 +777,7 @@ export function partLabels(e: PartEffect): [string, string][] {
 // ---------------------------------------------------------------------------
 
 export interface GameMode {
-  id: "quick" | "trial" | "chaos" | "sprint" | "duel" | "endurance";
+  id: "quick" | "trial" | "chaos" | "sprint" | "duel" | "endurance" | "battle";
   laps: number;
   aiCount: number;
   itemsEnabled: boolean;
@@ -823,7 +839,7 @@ export const AI_PROFILES: Record<AiSkillId, AiProfile> = {
 
 export const AI_SKILL_LIST: AiSkillId[] = ["rookie", "amateur", "pro", "ace"];
 
-export type ModeId = "quick" | "trial" | "chaos" | "sprint" | "duel" | "endurance";
+export type ModeId = "quick" | "trial" | "chaos" | "sprint" | "duel" | "endurance" | "battle";
 
 export const MODES: Record<ModeId, GameMode> = {
   quick: { id: "quick", laps: 3, aiCount: 5, itemsEnabled: true, itemFrequency: 1, rubberband: 1 },
@@ -832,6 +848,8 @@ export const MODES: Record<ModeId, GameMode> = {
   sprint: { id: "sprint", laps: 1, aiCount: 7, itemsEnabled: true, itemFrequency: 1.3, rubberband: 1.1 },
   duel: { id: "duel", laps: 5, aiCount: 1, itemsEnabled: true, itemFrequency: 1.2, rubberband: 1.5 },
   endurance: { id: "endurance", laps: 8, aiCount: 8, itemsEnabled: true, itemFrequency: 1.5, rubberband: 1.25 },
+  // no laps to win: every hit costs a life, and the last one with any left takes it
+  battle: { id: "battle", laps: 99, aiCount: 5, itemsEnabled: true, itemFrequency: 3, rubberband: 0 },
 };
 
 // ---------------------------------------------------------------------------

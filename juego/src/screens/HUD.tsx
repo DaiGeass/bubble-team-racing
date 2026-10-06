@@ -131,6 +131,15 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-20 select-none">
       {/* ---------- speed blur: cheap streaks that grow with velocity ---------- */}
+      {/* ---------- a boost: streaks pulled out from the middle of the screen ---------- */}
+      {telemetry.boosting && (
+        <div
+          className="boost-streaks absolute inset-0"
+          style={{ background: "repeating-conic-gradient(from 0deg at 50% 46%, rgba(255,255,255,0) 0deg, rgba(255,255,255,0.5) 0.6deg, rgba(255,255,255,0) 1.4deg, rgba(255,255,255,0) 7deg)" }}
+        />
+      )}
+      {/* ---------- a hit: the edges of the screen go red for a moment ---------- */}
+      {telemetry.hitAt > 0 && Date.now() - telemetry.hitAt < 600 && <div key={telemetry.hitAt} className="hit-flash absolute inset-0" />}
       {motionBlur > 0 && (
         <div
           className="absolute inset-0 mix-blend-screen"
@@ -187,7 +196,17 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
 
       {/* ---------- top left: lap / position / mode ---------- */}
       <div className="pointer-events-auto absolute left-3 top-3 flex items-stretch gap-2">
-        <div className="glass-panel relative flex flex-col items-center rounded-2xl px-3 py-1.5">
+        {telemetry.lives >= 0 ? (
+          <div className="glass-panel flex flex-col items-center justify-center rounded-2xl px-3 py-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-sky-900/60">{t("lives")}</span>
+            <div className="mt-0.5 grid grid-cols-4 gap-0.5">
+              {Array.from({ length: telemetry.maxLives }, (_, k) => (
+                <span key={k} className={`text-base leading-none ${k < telemetry.lives ? "text-rose-500" : "text-sky-900/20"}`}>♥</span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <div className={`glass-panel relative flex-col items-center rounded-2xl px-3 py-1.5 ${telemetry.lives >= 0 ? "hidden" : "flex"}`}>
           <span className="text-[10px] font-bold uppercase tracking-wide text-sky-900/60">{t("lap")}</span>
           <span className="font-display text-2xl font-extrabold leading-none text-sky-900">
             {telemetry.lap}
@@ -250,8 +269,9 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
             }`}
           >
             <span className="w-3 text-right opacity-60">{i + 1}</span>
-            <span className="h-3 w-3 rounded-full" style={{ background: s.color, border: "1.5px solid #fff" }} />
-            {s.name}
+            <span className="h-3 w-3 rounded-full" style={{ background: s.color, border: `1.5px solid ${s.team === 0 ? "#ff4d6d" : s.team === 1 ? "#3b82f6" : "#fff"}` }} />
+            <span className={s.out ? "line-through opacity-50" : ""}>{s.name}</span>
+            {s.lives !== undefined && !s.out && <span className="text-[10px] tracking-tighter text-rose-500">{"♥".repeat(Math.max(0, s.lives))}</span>}
           </div>
         ))}
       </div>
@@ -322,12 +342,65 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         <div className={`absolute left-1/2 w-56 -translate-x-1/2 ${touch ? "top-[8.2rem]" : "top-24"}`}>
           <div className="glass-panel rounded-full p-1">
             <div className="flex items-center gap-1.5 px-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wide text-amber-700">{t("soloTurret")}</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wide text-amber-700">{telemetry.turretMod ? t(`up_${telemetry.turretMod}`) : t("soloTurret")}</span>
               <div className="h-3 flex-1 overflow-hidden rounded-full bg-white/40">
                 <div className="h-full rounded-full" style={{ width: `${telemetry.soloTurret * 100}%`, background: "linear-gradient(90deg,#ffe066,#ff9f1c)", boxShadow: "0 0 12px #ffd166" }} />
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ---------- the sight of the turret: its shape says how the shot in the barrel flies ---------- */}
+      {telemetry.gunning && telemetry.gunKind && (
+        <div className="pointer-events-none absolute left-1/2 top-[40%] -translate-x-1/2 -translate-y-1/2">
+          <svg width="150" height="150" viewBox="-75 -75 150 150" style={{ filter: "drop-shadow(0 0 4px rgba(0,30,60,0.7))" }}>
+            <g fill="none" stroke={telemetry.gunLock ? "#ff4d6d" : "#ffffff"} strokeWidth="3" strokeLinecap="round">
+              {telemetry.gunKind === "bolt" && (
+                <>
+                  <path d="M-28 0H-9M9 0H28M0 -28V-9M0 9V28" />
+                  <circle r="3" fill="currentColor" />
+                </>
+              )}
+              {telemetry.gunKind === "homing" && (
+                <g className={telemetry.gunLock ? "animate-spin" : ""} style={{ transformOrigin: "0 0", animationDuration: "2.4s" }}>
+                  <path d="M0 -34L34 0L0 34L-34 0Z" strokeDasharray="14 10" />
+                  <path d="M-12 0H12M0 -12V12" />
+                </g>
+              )}
+              {telemetry.gunKind === "fan" && (
+                <>
+                  <path d="M-58 -16Q0 -44 58 -16" />
+                  <path d="M-44 6L-58 -16M0 12V-30M44 6L58 -16" />
+                </>
+              )}
+              {telemetry.gunKind === "lance" && (
+                <>
+                  <path d="M-64 0H-8M8 0H64M0 -20V-6M0 6V20" strokeWidth="2" />
+                  <circle r="5" />
+                </>
+              )}
+              {telemetry.gunKind === "nova" && (
+                <>
+                  <circle r="46" strokeDasharray="6 9" />
+                  <circle r="22" />
+                </>
+              )}
+              {telemetry.gunKind === "mortar" && (
+                <>
+                  <circle r="26" />
+                  <path d="M0 -52V-32M-8 -40L0 -30L8 -40" />
+                  <circle r="3" />
+                </>
+              )}
+              {telemetry.gunKind === "rear" && (
+                <>
+                  <path d="M-30 -14L0 14L30 -14" />
+                  <path d="M-30 6L0 34L30 6" />
+                </>
+              )}
+            </g>
+          </svg>
         </div>
       )}
 

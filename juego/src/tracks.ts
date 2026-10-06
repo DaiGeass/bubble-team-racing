@@ -13,7 +13,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // FRUTIGER AERO — the gentle one. A hill with a hairpin on top, a jump on the
   // way down, a run across the open sea and a long home straight with a ramp lane.
   design({
-    id: "bahia", theme: "frutiger", difficulty: 1, sea: 0, start: [0, 3, 0, 0], hazards: 2,
+    id: "bahia", warp: "soft", theme: "frutiger", difficulty: 1, sea: 0, start: [0, 3, 0, 0], hazards: 2,
     draw: (t) =>
       t.go(60).mark("go").go(180)
         .right(90, 60).go(40, 5).right(90, 50, 4)
@@ -42,7 +42,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // down. The chute off the summit is the fast way and the risky one: no
   // barriers and a gap in the middle.
   design({
-    id: "bosque", theme: "eco", difficulty: 2, start: [0, 8, 0, 0], hazards: 3,
+    id: "bosque", warp: false, theme: "eco", difficulty: 2, start: [0, 8, 0, 0], hazards: 3,
     draw: (t) =>
       t.mark("sA").go(50).mark("go").go(170).mark("sB")
         .left(90, 70, 3).go(100, 5).mark("hairA").go(60, 3)
@@ -74,7 +74,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // AQUA — off the pier onto the sea, then down a glass tube to twenty units
   // under the surface, back up, and a cannon over the last corner.
   design({
-    id: "arrecife", theme: "aqua", difficulty: 2, sea: 0, start: [0, 4, 0, 0], hazards: 2,
+    id: "arrecife", warp: false, theme: "aqua", difficulty: 2, sea: 0, start: [0, 4, 0, 0], hazards: 2,
     draw: (t) =>
       t.go(50).mark("go").go(150)
         .right(90, 70, -4).mark("w0")
@@ -129,7 +129,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // and the road comes back across the start straight twenty-two units up.
   // Along the bridge there is a road above and a road below.
   design({
-    id: "orbita", theme: "y2k", difficulty: 2, start: [0, 8, 0, 0], hazards: 3,
+    id: "orbita", warp: "soft", theme: "y2k", difficulty: 2, start: [0, 8, 0, 0], hazards: 3,
     draw: (t) =>
       t.mark("line").go(50).mark("go").go(210).mark("lineB")
         .left(90, 60, 2).go(120, 2)
@@ -193,7 +193,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // WINDOWS 98 — square corners and flat decks, like windows on a desktop. The
   // taskbar straight is three lanes deep: the title bar above, a tunnel below.
   design({
-    id: "escritorio", theme: "win98", difficulty: 2, start: [0, 8, 0, 0], hazards: 4,
+    id: "escritorio", warp: false, theme: "win98", difficulty: 2, start: [0, 8, 0, 0], hazards: 4,
     draw: (t) =>
       t.go(50).mark("go").go(110).mark("warpIn").go(200).mark("warpOut")
         .left(90, 30).mark("upA").go(300, 10).mark("upB")
@@ -223,7 +223,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // open sea, a dive, a cannon and a three-lane run to the line. The palette
   // turns into a different aesthetic every lap.
   design({
-    id: "fusion", theme: "vapor", difficulty: 3, sea: 0, start: [0, 10, 0, 0], hazards: 4,
+    id: "fusion", warp: "soft", theme: "vapor", difficulty: 3, sea: 0, start: [0, 10, 0, 0], hazards: 4,
     draw: (t) =>
       t.go(50).mark("go").go(70)
         .left(90, 70).go(120, 6)
@@ -316,7 +316,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // two sides of the lap, with the tube forking into a deep tunnel and a
   // shallow one, then up to the surface and home across an island.
   design({
-    id: "fosa", theme: "aqua", difficulty: 3, sea: 0, start: [0, 4, 0, 0], hazards: 2,
+    id: "fosa", warp: "soft", theme: "aqua", difficulty: 3, sea: 0, start: [0, 4, 0, 0], hazards: 2,
     draw: (t) =>
       t.go(50).mark("go").go(110)
         .right(90, 80, -4).mark("w0")
@@ -343,7 +343,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // brings the road back across the straight it came from, a floor higher, so
   // the lap is one long descent that keeps passing over itself.
   design({
-    id: "trebol", theme: "y2k", difficulty: 3, start: [0, 28, 0, 0], hazards: 3,
+    id: "trebol", warp: "soft", theme: "y2k", difficulty: 3, start: [0, 28, 0, 0], hazards: 3,
     draw: (t) => {
       t.mark("a1").go(BYPASS + 73, -16).mark("b1").go(70, -4).left(270, 70, 20);
       t.go(110, -7).mark("run").go(40, -3).mark("jump").go(170, -10).left(270, 70, 20);
@@ -364,7 +364,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // the crater in two full turns. Three lanes across the floor, and a cannon
   // back up to the rim.
   design({
-    id: "crater", theme: "sunset", difficulty: 3, start: [0, 40, 0, 0], hazards: 2,
+    id: "crater", warp: "soft", theme: "sunset", difficulty: 3, start: [0, 40, 0, 0], hazards: 2,
     draw: (t) =>
       t.go(50).mark("go").go(150).mark("spiral")
         .right(720, 70, -36).mark("pit")
@@ -479,7 +479,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // units, along the ridge on three levels, down the far face in two falls
   // with a springboard between them, and a cannon over the last corner.
   design({
-    id: "cumbre", theme: "eco", difficulty: 3, start: [0, 8, 0, 0], hazards: 3,
+    id: "cumbre", warp: "soft", theme: "eco", difficulty: 3, start: [0, 8, 0, 0], hazards: 3,
     draw: (t) =>
       t.go(44).mark("go").go(130)
         .right(720, 65, 40).mark("up").go(120, 6)
@@ -557,7 +557,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // under in a spiral to forty units, a weave along the bottom, a tube that
   // forks, and a long climb back to the surface and the pier.
   design({
-    id: "atlantida", theme: "liquid", difficulty: 3, sea: 0, start: [0, 4, 0, 0], hazards: 2,
+    id: "atlantida", warp: "soft", theme: "liquid", difficulty: 3, sea: 0, start: [0, 4, 0, 0], hazards: 2,
     draw: (t) =>
       t.go(50).mark("go").go(90).go(60, -4).mark("w0")
         .mark("chA").go(BYPASS + 263).mark("chB")
@@ -586,7 +586,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // last one. Five ways to go wrong, two holes in the wall that put you
   // somewhere else, and strip lights on their way out.
   design({
-    id: "backrooms", theme: "backrooms", difficulty: 2, indoor: true, start: [0, 8, 0, 0], hazards: 4,
+    id: "backrooms", warp: false, theme: "backrooms", difficulty: 2, indoor: true, start: [0, 8, 0, 0], hazards: 4,
     draw: (t) =>
       t.go(50).mark("go").go(60).mark("aA").go(BYPASS + 143).mark("aB").go(30)
         .right(90, 30)
@@ -705,7 +705,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // you straight up, a moving walkway you float along, a mezzanine with a gap
   // in it and a fall back down to the ground floor.
   design({
-    id: "centro", theme: "liminal", difficulty: 2, indoor: true, start: [0, 8, 0, 0], hazards: 3,
+    id: "centro", warp: "soft", theme: "liminal", difficulty: 2, indoor: true, start: [0, 8, 0, 0], hazards: 3,
     draw: (t) =>
       t.go(50).mark("go").go(50).mark("aA").go(BYPASS + 223).mark("aB").go(20)
         .right(90, 40)
@@ -762,7 +762,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // magnetic ring up to the docks, out through space in a plane, a magnetic
   // weave along the hull and a jump across the gap in it.
   design({
-    id: "estacion", theme: "y2k", difficulty: 3, start: [0, 30, 0, 0], hazards: 3,
+    id: "estacion", warp: "soft", theme: "y2k", difficulty: 3, start: [0, 30, 0, 0], hazards: 3,
     draw: (t) =>
       t.go(50).mark("go").go(70).mark("mA").left(360, 70, 14).go(100).mark("mB").mark("aA").go(BYPASS + 163).mark("aB")
         .right(90, 80)
@@ -840,7 +840,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // half, a stretch of live rail you float along, a service door that puts
   // you further down the line, and more trains than there should be.
   design({
-    id: "metro", theme: "metro", difficulty: 2, indoor: true, start: [0, 8, 0, 0], hazards: 3,
+    id: "metro", warp: false, theme: "metro", difficulty: 2, indoor: true, start: [0, 8, 0, 0], hazards: 3,
     draw: (t) =>
       t.go(50).mark("go").go(50).mark("aA").go(BYPASS + 223).mark("aB").go(60)
         .right(90, 40)
@@ -895,7 +895,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // down one, up one, down one, with a road over and a road under on every
   // straight between.
   design({
-    id: "debian", theme: "debian", difficulty: 3, start: [0, 8, 0, 0], hazards: 3,
+    id: "debian", warp: "soft", theme: "debian", difficulty: 3, start: [0, 8, 0, 0], hazards: 3,
     draw: (t) =>
       t.go(50).mark("go").go(60).mark("mA").right(360, 60, 15).mark("mB").go(40).mark("aA").go(BYPASS + 123).mark("aB").go(50)
         .left(90, 80)
@@ -925,7 +925,7 @@ export const DESIGNED_TRACKS: TrackDef[] = [
   // three levels, two more turns to the summit on magnets, and then all of it
   // back in one glide.
   design({
-    id: "arch", theme: "arch", difficulty: 3, start: [0, 8, 0, 0], hazards: 3,
+    id: "arch", warp: false, theme: "arch", difficulty: 3, start: [0, 8, 0, 0], hazards: 3,
     draw: (t) =>
       t.go(50).mark("go").go(50).mark("aA").go(BYPASS + 223, 30).mark("aB").go(60, 4.5)
         .left(90, 90, 7.5)
@@ -1036,5 +1036,135 @@ export const DESIGNED_TRACKS: TrackDef[] = [
       { from: "cA", to: "cB", draw: (t) => t.bypass("L", 223, 14, -4), kind: "high", holes: [["mid", 14]], pads: [["mid", "boost", 1.6]] },
       { from: "cA", to: "cB", draw: (t) => t.bypass("R", 223, 0, -4), kind: "side", pads: [["mid", "boost"]] },
     ],
+  }),
+
+  // MOSAIC ARENA — made for battles: a ring with a lane either side of every
+  // straight and a way across three of its corners, so there is always
+  // somebody coming the other way round. Eight aesthetics, one after another,
+  // and item boxes everywhere.
+  design({
+    id: "arena", warp: false, theme: "frutiger", difficulty: 1, start: [0, 8, 0, 0], hazards: 0,
+    draw: (t) =>
+      t.go(40).mark("go").go(20).mark("aA").go(BYPASS + 63).mark("aB").go(30).mark("k1a").go(30)
+        .left(90, 50)
+        .go(30).mark("k1b").go(20).mark("bA").go(BYPASS + 23).mark("bB").go(20).mark("k2a").go(30)
+        .left(90, 50)
+        .go(30).mark("k2b").go(30).mark("cA").go(BYPASS + 63).mark("cB").go(30).mark("k3a").go(30)
+        .left(90, 50)
+        .go(30).mark("k3b").go(20).mark("dA").go(BYPASS + 23).mark("dB").go(50)
+        .left(90, 50),
+    sectors: [["aA", "vapor"], ["k1b", "techno"], ["bA", "eden"], ["k2b", "aqua"], ["cA", "sunset"], ["k3b", "y2k"], ["dA", "webcore"]],
+    pads: [["go", "boost"], ["aB", "jump", 10], ["bB", "boost"], ["cB", "jump", 10], ["dB", "boost"]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 63, 0), kind: "side", pads: [["mid", "boost"]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 63, 0), kind: "side", pads: [["mid", "jump", 10]] },
+      { from: "k1a", to: "k1b", width: 12, draw: (t) => t.cut("L", 59.4, 20), kind: "cut" },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("L", 23, 0), kind: "side" },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("R", 23, 0), kind: "side" },
+      { from: "k2a", to: "k2b", width: 12, draw: (t) => t.cut("L", 59.4, 20), kind: "cut" },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("L", 63, 0), kind: "side", pads: [["mid", "jump", 10]] },
+      { from: "cA", to: "cB", draw: (t) => t.bypass("R", 63, 0), kind: "side", pads: [["mid", "boost"]] },
+      { from: "k3a", to: "k3b", width: 12, draw: (t) => t.cut("L", 59.4, 20), kind: "cut" },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("L", 23, 0), kind: "side" },
+      { from: "dA", to: "dB", draw: (t) => t.bypass("R", 23, 0), kind: "side" },
+    ],
+  }),
+
+  // ---- circuits that are not rectangles: two of their straights are of whatever length closes the lap ----
+
+  // THREE PETALS — a flower: three long loops out and back, each ending in a
+  // twist the other way, the middle one on magnets.
+  design({
+    id: "flor", theme: "eden", difficulty: 2, start: [0, 10, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(40).mark("go").flex("f1", 160)
+        .left(240, 110, 10).mark("p1").right(120, 70, -4).go(30)
+        .mark("aA").go(BYPASS + 83).mark("aB").go(30)
+        .left(240, 110, 8).mark("p2").right(120, 70, -6)
+        .flex("f2", 200)
+        .left(240, 110, 6).mark("p3").right(120, 70, -14)
+        .go(80),
+    zones: [["aB", "p2", "mag"]],
+    sectors: [["p1", "dreamcore"], ["aB", "vapor"], ["p2", "eden"], ["p3", "slime"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["p1", "boost", 1.4], ["aB", "boost"], ["p2", "jump", 11, 30], ["p3", "boost", 1.4]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 83, 8), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 83, -5), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
+
+  // SHOOTING STAR — five points, every one a hairpin, and five corners between
+  // them that turn the other way. Nothing on it is straight for long.
+  design({
+    id: "estrella", warp: false, theme: "y2k", difficulty: 3, start: [0, 10, 0, 0], hazards: 2,
+    draw: (t) =>
+      t.go(30).mark("go").flex("f1", 150).left(144, 34, 3).go(180, -3).right(72, 40)
+        .mark("aA").go(BYPASS + 23).mark("aB").left(144, 34, 3).flex("f2", 180, -3).right(72, 40)
+        .go(90).mark("j1").go(90).left(144, 34, 3).go(180, -3).right(72, 40)
+        .go(180).left(144, 34, 3).mark("m0").go(180, -3).right(72, 40).mark("m1")
+        .go(180).left(144, 34, 3).go(180, -3).right(72, 40),
+    zones: [["m0", "m1", "mag"]],
+    sectors: [["aA", "vapor"], ["j1", "techno"], ["m0", "webcore"], ["m1", "y2k"]],
+    traffic: 2,
+    pads: [["go", "boost"], ["aB", "boost"], ["j1", "jump", 11], ["m1", "boost", 1.5, 20]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 23, 0), kind: "side", pads: [["mid", "boost"]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 23, 0), kind: "side", pads: [["mid", "jump", 10]] },
+    ],
+  }),
+
+  // THE AMOEBA — no two bends alike and no reason for any of them: it goes
+  // where it goes.
+  design({
+    id: "ameba", warp: "soft", theme: "slime", difficulty: 2, start: [0, 10, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(40).mark("go").go(20).mark("aA").go(BYPASS + 103).mark("aB").flex("f1", 137)
+        .left(100, 160, 6).right(40, 140, 2).left(130, 110, 4)
+        .mark("bA").go(BYPASS + 173, -4).mark("bB").go(100)
+        .left(80, 60, -2).flex("f2", 84).mark("m0").right(60, 60).go(120).mark("m1").left(150, 60, -6).go(60),
+    zones: [["m0", "m1", "mag"]],
+    sectors: [["aB", "liquid"], ["bA", "eden"], ["m0", "aqua"], ["m1", "slime"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["aB", "boost"], ["bB", "boost"], ["m0", "jump", 11, 40], ["m1", "boost", 1.4]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 103, 10), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 103, -5), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("L", 173, -6, -4), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("R", 173, 14, -4), kind: "high", holes: [["mid", 14]], pads: [["mid", "boost", 1.6]] },
+    ],
+  }),
+
+  // LIGHTNING — a zigzag out, a hairpin, and a zigzag back beside it: sixty
+  // degrees one way, sixty the other, all the way down.
+  design({
+    id: "rayo", warp: "soft", theme: "cyberpunk", difficulty: 3, start: [0, 10, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(40).mark("go").flex("f1", 120).right(60, 50).go(140).left(60, 50).go(140).right(60, 50).go(140).left(60, 50).go(100)
+        .left(180, 125, 8).mark("top")
+        .go(100).right(60, 50).flex("f2", 140).left(60, 50).mark("aA").go(BYPASS + 43, -4).mark("aB").right(60, 50).go(140).left(60, 50).go(120, -4)
+        .left(180, 125).go(40),
+    sectors: [["top", "techno"], ["aA", "vapor"], ["aB", "cyberpunk"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["top", "boost", 1.5], ["aB", "boost"]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 43, 0, -4), kind: "side", pads: [["mid", "boost"]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 43, 0, -4), kind: "side", pads: [["mid", "jump", 10]] },
+    ],
+  }),
+
+  // THE SNAIL — round and round inwards, two full turns and climbing, the
+  // last of it on magnets; then out over the top of all of it on a bridge.
+  design({
+    id: "caracol", theme: "debian", difficulty: 3, start: [0, 8, 0, 0], hazards: 2,
+    draw: (t) =>
+      t.go(40).mark("go").flex("f1", 120)
+        .left(180, 230, 6).left(180, 190, 6).mark("m0").left(180, 150, 6).left(180, 110, 6).mark("m1")
+        .left(180, 45, 12).mark("br")
+        .go(300, -10).left(90, 90, -10).flex("f2", 220, -8).left(90, 90, -8).go(80),
+    zones: [["m0", "m1", "mag"]],
+    sectors: [["m0", "vapor"], ["br", "dreamcore"]],
+    traffic: 2,
+    pads: [["go", "boost"], ["m0", "boost", 1.4], ["br", "boost", 1.6, 30]],
   }),
 ];

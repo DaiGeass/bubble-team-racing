@@ -6,6 +6,7 @@ import Vehicle, { type KartVisualState, type VehicleConfig } from "./Vehicle";
 import ParticleSystem from "./ParticleSystem";
 import type { UseControlsReturn } from "../controls";
 import { useGame } from "../store";
+import { useNet, netSend, onRace, isHost } from "../net";
 import {
   CHARACTERS,
   MODES,
@@ -124,6 +125,8 @@ interface Racer extends Body {
   turretTimer: number;
   turretCd: number;
   turretAim: number;
+  /** battle: the upgrade the turret is running on, picked up from a box */
+  turretMod: TurretMod | null;
   turboMeter: number;
   hazardCd: number;
   magnetTimer: number;
@@ -139,6 +142,19 @@ interface Racer extends Body {
   driftLevel: number;
   /** where the turret is pointing, relative to the nose */
   explodeTimer: number;
+  /** battle: lives left, the side it fights on (-1 for none), out of it, and the moment of grace after losing one */
+  lives: number;
+  team: number;
+  out: boolean;
+  lifeCd: number;
+  /** network: this kart is run on another machine, and here it only follows what that machine says */
+  remote: boolean;
+  fix: NetFix | null;
+  /** the name shown for it: a player's own, or the character's */
+  label: string;
+  /** who landed the last hit on it, and what it looked like when its owner last reported, to spot what we did to it since */
+  hitBy: string;
+  seen: { hit: number; stun: number; frozen: number; slow: number; burn: number; vy: number };
   exploding: boolean;
   portalCd: number;
   driftCharge: number;
@@ -186,7 +202,7 @@ interface FusionPair {
 }
 
 /** A gunner riding on another kart is not on the road in its own right: nothing hits or targets it. */
-const gone = (o: Racer) => o.finished || o.riding;
+const gone = (o: Racer) => o.finished || o.riding || o.out;
 
 interface Projectile {
   active: boolean;
@@ -208,6 +224,10 @@ interface Projectile {
   path: number;
   idx: number;
   lat: number;
+  /** network: only the picture of a shot fired on another machine, which hits nothing here */
+  fake: boolean;
+  /** network: the others have been told about it */
+  told: boolean;
 }
 
 /** How fast a missile runs along the road: quicker than any kart, boost or no boost. */
@@ -223,6 +243,19 @@ interface Puddle {
   /** dropped by a turret: what it does to whoever drives into it */
   effect: ShotEffect | null;
   power: number;
+  /** network: the others have been told about it */
+  told: boolean;
+}
+
+/** Where another machine last said one of its karts was, and how it was moving. */
+interface NetFix {
+  x: number;
+  y: number;
+  z: number;
+  h: number;
+  vx: number;
+  vz: number;
+  age: number;
 }
 
 function activeChar(r: Racer) {
@@ -284,6 +317,28 @@ const SOLO_TIME = 7;
 const SOLO_COOLDOWN = 16;
 const SOLO_POWER = 0.55;
 const SOLO_RATE = 1.6;
+/**
+ * Battle only: what a box can do to your turret instead of handing you an
+ * item. The turret comes out by itself, at full strength, changed like this.
+ */
+type TurretMod = "rapid" | "triple" | "heavy" | "seeker" | "burst";
+const TURRET_MODS: TurretMod[] = ["rapid", "triple", "heavy", "seeker", "burst"];
+const UPGRADE_TIME = 12;
+const UPGRADE_COLOUR = "#ffd166";
+function upgraded(shot: FusionShot, mod: TurretMod): FusionShot {
+  switch (mod) {
+    case "rapid":
+      return { ...shot, rate: shot.rate * 0.45 };
+    case "triple":
+      return { ...shot, kind: shot.kind === "bolt" || shot.kind === "rear" ? "fan" : shot.kind, count: shot.count + 2 };
+    case "heavy":
+      return { ...shot, power: shot.power * 1.7, rate: shot.rate * 1.2 };
+    case "seeker":
+      return { ...shot, kind: shot.kind === "nova" || shot.kind === "lance" ? shot.kind : "homing", rate: shot.rate * 0.85 };
+    case "burst":
+      return { ...shot, kind: "nova", rate: shot.rate * 1.3 };
+  }
+}
 
 export default function Scene({ controls: controlsApi }: { controls: UseControlsReturn }) {
   const { poll } = controlsApi;
@@ -299,6 +354,13 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const aestheticLap = useGame((s) => s.telemetry.lap);
   const theme = useMemo(() => mutateTheme(THEMES[getActiveTrack().theme], aestheticLap - 1), [aestheticLap]);
   const mode = MODES[modeId];
+  const battle = modeId === "battle";
+  // a race over the network: who is in it, which of them I am, and whether the bots are mine to drive
+  const session = useMemo(() => useNet.getState().session, []);
+  const myNetId = useMemo(() => useNet.getState().id, []);
+  const hosting = useMemo(() => isHost(), []);
+  // read once: the terms of a race do not change while it is being run
+  const setup = useMemo(() => useGame.getState().raceSetup, []);
 
 
   const skyRings = useMemo(() => getSkyRings(), []);
@@ -308,7 +370,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const list: Racer[] = [];
     const mainChar = CHARACTERS.find((c) => c.id === characterId) ?? CHARACTERS[0];
     const partnerChar = CHARACTERS.find((c) => c.id === partnerId) ?? null;
-    const total = 1 + mode.aiCount;
+    // never more than eight on the road
+    // in a network race the grid is the one the host drew up: my own kart first here, the rest in its order
+    const mine = session?.roster.find((x) => !x.bot && x.owner === myNetId) ?? null;
+    const grid = session && mine ? [mine, ...session.roster.filter((x) => x !== mine)] : null;
+    const total = grid ? grid.length : 1 + Math.max(0, Math.min(7, setup.bots ?? mode.aiCount));
+    const charOf = (id: string | null) => CHARACTERS.find((c) => c.id === id) ?? null;
     const mainPath = getPaths()[0];
     // the opponents are drawn at random each race from everyone the player is not using,
     // and each brings its own stats: the same numbers that apply to the player
@@ -320,17 +387,22 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const pick = <T,>(list: readonly T[]) => list[Math.floor(Math.random() * list.length)];
     for (let i = 0; i < total; i++) {
       const isPlayer = i === 0;
-      const row = Math.floor(i / 2);
-      const col = i % 2 === 0 ? -1 : 1;
+      const e = grid ? grid[i] : null;
+      // everyone lines up in the same place on every machine
+      const slot = e && session ? session.roster.indexOf(e) : i;
+      const row = Math.floor(slot / 2);
+      const col = slot % 2 === 0 ? -1 : 1;
       // grid starts just AHEAD of the finish line so the first crossing = lap 1 done
       const aiChar = pool[(i - 1 + pool.length) % pool.length] ?? CHARACTERS[i % CHARACTERS.length];
       list.push({
-        id: isPlayer ? "player" : `ai-${i}`,
+        id: e ? e.key : isPlayer ? "player" : `ai-${i}`,
         isPlayer,
-        main: isPlayer ? mainChar : aiChar,
-        partner: isPlayer ? partnerChar : null,
+        main: e ? charOf(e.char) ?? aiChar : isPlayer ? mainChar : aiChar,
+        partner: e ? charOf(e.partner) : isPlayer ? partnerChar : null,
         activeIsPartner: false,
-        vehicle: isPlayer
+        vehicle: e
+          ? e.vehicle
+          : isPlayer
           ? vehicleCfg
           : {
               body: BODY_COLORS[(i * 2 + 1) % BODY_COLORS.length],
@@ -403,6 +475,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         turretTimer: 0,
         turretCd: 0,
         turretAim: 0,
+        turretMod: null,
         turboMeter: 0,
         hazardCd: 0,
         magnetTimer: 0,
@@ -413,6 +486,15 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         burnTimer: 0,
         driftLevel: 0,
         explodeTimer: 0,
+        lives: setup.lives,
+        team: e ? e.team : battle && setup.teams ? i % 2 : -1,
+        out: false,
+        lifeCd: 0,
+        remote: e ? (e.bot ? !hosting : e.owner !== myNetId) : false,
+        fix: null,
+        label: e && !e.bot ? e.name : "",
+        hitBy: "",
+        seen: { hit: 0, stun: 0, frozen: 0, slow: 0, burn: 0, vy: 0 },
         exploding: false,
         portalCd: 0,
         driftCharge: 0,
@@ -437,11 +519,87 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const me = list[i];
       placeBody(me, 0, Math.round((4 + row * 3.4) / mainPath.ds), col * 3.3);
       me.total = me.prog;
+      // nothing has been done to it yet: what was last seen of it is what it is now
+      me.seen.hit = me.lastHit;
       me.bestTotal = me.total;
       me.t = me.prog;
       me.course = me.heading;
     }
     return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const byId = useMemo(() => new Map(racers.map((r) => [r.id, r])), [racers]);
+  const netClock = useRef(0);
+
+  // ---- what the other machines tell mine during a race ----
+  useEffect(() => {
+    if (!session) return;
+    return onRace((m) => {
+      if (m.t === "s") {
+        for (const a of m.a as unknown[][]) accept(a);
+      } else if (m.t === "hit") {
+        const r = byId.get(m.k as string);
+        if (r && !r.remote && !gone(r)) applyHit(r, !!m.spin);
+      } else if (m.t === "fx") {
+        const r = byId.get(m.k as string);
+        if (!r || r.remote || gone(r) || protectedNow(r)) return;
+        r.stunTimer = Math.max(r.stunTimer, m.stun as number);
+        r.frozenTimer = Math.max(r.frozenTimer, m.frozen as number);
+        r.slowTimer = Math.max(r.slowTimer, m.slow as number);
+        r.burnTimer = Math.max(r.burnTimer, m.burn as number);
+        if ((m.vy as number) > 3) {
+          r.vy = m.vy as number;
+          r.airborne = true;
+        }
+        r.speed = Math.min(r.speed, Math.max(0, m.speed as number));
+        r.lastHit = raceClock.current;
+        if (r.isPlayer) {
+          addShake(0.3);
+          sfx.hit();
+        }
+      } else if (m.t === "proj") {
+        const p = projectiles.find((x) => !x.active);
+        if (!p) return;
+        p.active = true;
+        p.fake = true;
+        p.told = true;
+        p.road = false;
+        p.type = m.w as WeaponId;
+        p.ownerId = m.o as string;
+        p.allyId = "";
+        p.targetId = (m.tg as string | null) ?? null;
+        p.effect = null;
+        p.power = 1;
+        p.color = m.c as string;
+        p.homing = !!m.hm;
+        p.life = m.life as number;
+        p.pos.set(m.x as number, m.y as number, m.z as number);
+        p.vel.set(m.vx as number, m.vy as number, m.vz as number);
+      } else if (m.t === "mine") {
+        const p = puddles.find((x) => !x.active);
+        if (!p) return;
+        p.active = true;
+        p.told = true;
+        p.kind = m.kind as "slime" | "mine";
+        p.ownerId = m.o as string;
+        p.ignoreUntil = 0;
+        p.life = m.life as number;
+        p.effect = (m.fx as ShotEffect | null) ?? null;
+        p.power = (m.pw as number) ?? 1;
+        p.pos.set(m.x as number, m.y as number, m.z as number);
+      } else if (m.t === "bye") {
+        // whoever left takes their kart with them, and a host takes the bots too
+        for (const r of racers) {
+          const e = session.roster.find((x) => x.key === r.id);
+          if (e && e.owner === m.from && r.remote) {
+            r.out = true;
+            r.finished = true;
+            if (r.group.current) r.group.current.visible = false;
+          }
+        }
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -568,14 +726,14 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
   const PROJ_POOL = 18;
   const projectiles = useMemo<Projectile[]>(
-    () => Array.from({ length: PROJ_POOL }, () => ({ active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), type: "orb" as WeaponId, ownerId: "", life: 0, targetId: null, effect: null, power: 1, color: "#ffffff", homing: false, allyId: "", road: false, path: 0, idx: 0, lat: 0 })),
+    () => Array.from({ length: PROJ_POOL }, () => ({ active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), type: "orb" as WeaponId, ownerId: "", life: 0, targetId: null, effect: null, power: 1, color: "#ffffff", homing: false, allyId: "", road: false, path: 0, idx: 0, lat: 0, fake: false, told: false })),
     []
   );
   const projRefs = useMemo(() => Array.from({ length: PROJ_POOL }, () => ({ current: null as THREE.Group | null })), []);
 
   const PUDDLE_POOL = 10;
   const puddles = useMemo<Puddle[]>(
-    () => Array.from({ length: PUDDLE_POOL }, () => ({ active: false, pos: new THREE.Vector3(0, -999, 0), ownerId: "", ignoreUntil: 0, life: 0, kind: "slime" as const, effect: null, power: 1 })),
+    () => Array.from({ length: PUDDLE_POOL }, () => ({ active: false, pos: new THREE.Vector3(0, -999, 0), ownerId: "", ignoreUntil: 0, life: 0, kind: "slime" as const, effect: null, power: 1, told: false })),
     []
   );
   const puddleRefs = useMemo(() => Array.from({ length: PUDDLE_POOL }, () => ({ current: null as THREE.Group | null })), []);
@@ -610,6 +768,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const camPos = useRef(new THREE.Vector3(0, 6, -14));
   const camLook = useRef(new THREE.Vector3());
   const camSlip = useRef(0);
+  const camAim = useRef(0);
 
   // tyre marks: strips of rubber left on the road by a slide, the oldest replaced by the newest
   const skids = useMemo(() => {
@@ -676,6 +835,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const p = projectiles.find((x) => !x.active);
     if (!p) return null;
     p.road = false;
+    p.fake = false;
     const heading = owner.heading + angle;
     const fwd = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
     p.active = true;
@@ -749,6 +909,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
   /** A turret shot lands: each character's does its own thing to the victim. */
   function applyShot(v: Racer, owner: Racer, effect: ShotEffect, power: number, color: string) {
+    if (battle && owner !== v && owner.team >= 0 && owner.team === v.team) return;
     if (protectedNow(v)) {
       v.shieldActive = false;
       v.shieldTimer = 0;
@@ -756,8 +917,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       return;
     }
     // a fused pair takes it on the turret's health instead
-    if (v.pair) return applyHit(v.pair.driver, false);
+    if (v.pair) return applyHit(v.pair.driver, false, owner);
     v.lastHit = raceClock.current;
+    v.hitBy = owner.id;
+    if (battle) takeLife(v);
     // what a shot wins goes to the kart the shooter is on
     const body = owner.pair ? owner.pair.driver : owner;
     const give = statsFor(activeChar(v), v.vehicle).grip;
@@ -858,6 +1021,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const p = projectiles.find((x) => !x.active);
       if (!p) return;
       p.active = true;
+      p.fake = false;
       p.type = "missile";
       p.ownerId = r.id;
       p.targetId = homing && target ? target.id : null;
@@ -1132,7 +1296,25 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
   }
 
-  function applyHit(r: Racer, spinner: boolean) {
+  /** Battle: a hit that lands costs a life, and the last life puts you out. */
+  function takeLife(r: Racer) {
+    if (r.lifeCd > 0 || r.out) return;
+    r.lives--;
+    r.lifeCd = 1.8;
+    emitParticles({ position: r.pos.clone().setY(r.y + 1.6), color: "#ff4d6d", count: 16, speed: 4, spread: 1.2, size: 0.26, life: 0.7 });
+    if (r.lives > 0) return;
+    r.out = true;
+    r.speed = 0;
+    if (r.pair) split(r.pair, false);
+    if (r.group.current) r.group.current.visible = false;
+    emitParticles({ position: r.pos.clone().setY(r.y + 1), color: activeChar(r).primary, count: 50, speed: 8, spread: 2, size: 0.3, life: 1 });
+    emitDebris({ position: r.pos.clone().setY(r.y + 0.9), color: activeChar(r).primary, count: 10, speed: 7, spread: 1.5, size: 0.42, life: 4.5 });
+  }
+
+  function applyHit(r: Racer, spinner: boolean, by?: Racer) {
+    // nobody on your own side can hurt you, and nothing can for a moment after a life goes
+    if (battle && by && by !== r && by.team >= 0 && by.team === r.team) return;
+    if (battle && r.lifeCd > 0) return;
     if (protectedNow(r)) {
       r.shieldActive = false;
       r.shieldTimer = 0;
@@ -1169,6 +1351,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       if (r.isPlayer) { addShake(0.8); sfx.bump(); }
     }
     r.lastHit = raceClock.current;
+    if (r.isPlayer) useGame.getState().setTelemetry({ hitAt: Date.now() });
+    r.hitBy = by?.id ?? "";
+    if (battle) takeLife(r);
     r.stunTimer = spinner ? 1.25 : 0.95;
     r.speed *= 1 - (spinner ? 0.65 : 0.45) * statsFor(activeChar(r), r.vehicle).grip;
     r.boostTimer = 0;
@@ -1362,7 +1547,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     } else if (w === "swap") {
       // position swap: trade places with the racer right in front
       const target = r.pair ? null : findTargetAhead(r, 0.5);
-      if (target && !target.pair) {
+      // trading places needs both karts to be mine to move
+      if (target && !target.pair && !target.remote) {
         const myPos = r.pos.clone();
         r.pos.copy(target.pos);
         target.pos.copy(myPos);
@@ -1436,7 +1622,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       let near = 0.5;
       for (const o of racers) {
         const gap = o.total - r.total;
-        if (o !== r && !gone(o) && o.weapon && gap > 0 && gap < near && !protectedNow(o)) {
+        if (o !== r && !gone(o) && !o.remote && o.weapon && gap > 0 && gap < near && !protectedNow(o)) {
           near = gap;
           victim = o;
         }
@@ -1546,20 +1732,24 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.fuseCd > 0) r.fuseCd -= dt;
     // ---- the partner on the turret: finds its own target, turns to it and fires ----
     if (r.turretTimer > 0) {
-      const gunner = r.activeIsPartner ? r.main : r.partner;
+      // an upgrade works for anyone, on their own character's shot if they have no partner
+      const gunner = (r.activeIsPartner ? r.main : r.partner) ?? (r.turretMod ? r.main : null);
       r.turretTimer -= dt;
       if (r.turretCd > 0) r.turretCd -= dt;
       if (!gunner || r.pair || r.turretTimer <= 0) {
         r.turretTimer = 0;
-        r.fuseCd = r.fuseCdMax = SOLO_COOLDOWN;
+        // an upgrade costs nothing when it runs out; the partner's own turret costs the long wait
+        if (!r.turretMod) r.fuseCd = r.fuseCdMax = SOLO_COOLDOWN;
+        r.turretMod = null;
       } else {
-        const shot = fusionShot(gunner.id, r.mode);
+        const base = fusionShot(gunner.id, r.mode);
+        const shot = r.turretMod ? upgraded(base, r.turretMod) : base;
         const target = findTurretTarget(r, shot.kind === "rear");
         const bearing = target ? wrapAngle(Math.atan2(target.pos.x - r.pos.x, target.pos.z - r.pos.z) - r.heading) : shot.kind === "rear" ? Math.PI : 0;
         r.turretAim = wrapAngle(r.turretAim + wrapAngle(bearing - r.turretAim) * Math.min(1, dt * 6));
         if (target && r.turretCd <= 0 && r.stunTimer <= 0 && !r.launch && Math.abs(wrapAngle(bearing - r.turretAim)) < 0.3) {
-          r.turretCd = shot.rate * SOLO_RATE;
-          fireShot(r, { ...shot, power: shot.power * SOLO_POWER, count: Math.max(1, Math.ceil(shot.count / 2)) }, target, r.heading + r.turretAim, null);
+          r.turretCd = shot.rate * (r.turretMod ? 1 : SOLO_RATE);
+          fireShot(r, r.turretMod ? shot : { ...shot, power: shot.power * SOLO_POWER, count: Math.max(1, Math.ceil(shot.count / 2)) }, target, r.heading + r.turretAim, null);
           if (r.isPlayer) sfx.click();
         }
       }
@@ -1822,7 +2012,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       }
 
       // ---- fusion: with someone to shoot at and the partner ready ----
-      if (!r.pair && r.fuseCd <= 0 && raceClock.current > 12000 && Math.random() < ai.fuse * dt) fusePressed = true;
+      if (!session && !r.pair && r.fuseCd <= 0 && raceClock.current > 12000 && Math.random() < ai.fuse * dt) fusePressed = true;
     }
 
     if (r.stunTimer > 0) {
@@ -2061,6 +2251,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.touching && Math.abs(r.speed) > 8 && frame.current % 3 === 0) {
       emitParticles({ position: r.pos.clone().setY(r.y + 0.35), color: "#ffd166", count: 2, speed: 3, spread: 0.6, size: 0.12, life: 0.3 });
     }
+    if (stepRes.landed > 4 && r.mode !== "plane" && r.mode !== "sub") {
+      // dust thrown out either side where it comes down, more of it the harder it lands
+      const n = Math.min(14, Math.round(stepRes.landed * 0.7));
+      emitParticles({ position: r.pos.clone().setY(r.y + 0.15), color: r.mode === "boat" ? "#e8fbff" : theme.roadEdge, count: n, speed: 3 + stepRes.landed * 0.12, spread: 1.6, size: 0.3, life: 0.5, upBias: 0.25, gravity: 6 });
+    }
     if (stepRes.landed > 8) {
       emitParticles({ position: r.pos.clone().setY(r.y + 0.2), color: theme.particles[1], count: 10, speed: 2.6, spread: 1.1, size: 0.18, life: 0.4 });
       if (r.isPlayer) {
@@ -2173,7 +2368,20 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     for (const box of itemBoxes) {
       if (!box.active) continue;
       if (Math.hypot(box.pos.x - r.pos.x, box.pos.z - r.pos.z) < 2.9 && Math.abs(box.pos.y - r.y) < (r.mode === "plane" ? 12 : r.mode === "sub" ? 7 : 3)) {
-        if (!r.weapon || !r.weapon2) {
+        if (battle && !r.pair && Math.random() < 0.35) {
+          // battle: one box in three goes to the turret instead
+          r.turretMod = TURRET_MODS[Math.floor(Math.random() * TURRET_MODS.length)];
+          r.turretTimer = UPGRADE_TIME;
+          r.turretCd = 0.3;
+          r.turretAim = 0;
+          box.active = false;
+          box.respawn = 4.5 + Math.random() * 2.5;
+          emitParticles({ position: box.pos.clone().add(new THREE.Vector3(0, 0.7, 0)), color: UPGRADE_COLOUR, count: 22, speed: 4, spread: 1.2, size: 0.24, life: 0.6 });
+          if (r.isPlayer) {
+            addShake(0.12);
+            sfx.swap();
+          }
+        } else if (!r.weapon || !r.weapon2) {
           let ahead = 0;
           for (const o of racers) if (o !== r && o.total > r.total) ahead++;
           const rolled: WeaponId = rollWeapon(racers.length > 1 ? ahead / (racers.length - 1) : 0.5);
@@ -2329,10 +2537,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         if (r.pair) {
           if (r.pair.age > 0.5 && mine) split(r.pair, false);
         } else if (r.turretTimer > 0) {
-          // put it away early: the cooldown is the same
-          r.turretTimer = 0.001;
+          // put it away early: the cooldown is the same. An upgrade stays out until it is spent.
+          if (!r.turretMod) r.turretTimer = 0.001;
         } else if (r.fuseCd <= 0 && !r.launch && !r.exploding) {
-          const mate = fuseMate(r);
+          // over the network two karts stay two karts: the partner's own turret is the fusion there
+          const mate = session ? null : fuseMate(r);
           if (mate) {
             r.turretTimer = 0;
             fuse(r, mate);
@@ -2433,12 +2642,144 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
   }
 
+  /**
+   * A kart run on another machine: glide to where its owner last said it was,
+   * carried on by the speed it had, and dress it as its owner says it is.
+   */
+  function followNet(r: Racer, dt: number) {
+    const f = r.fix;
+    if (f) {
+      f.age += dt;
+      const lead = Math.min(f.age, 0.4);
+      const tx = f.x + f.vx * lead;
+      const tz = f.z + f.vz * lead;
+      const far = (tx - r.pos.x) ** 2 + (tz - r.pos.z) ** 2 > 45 * 45;
+      const k = far ? 1 : 1 - Math.exp(-12 * dt);
+      r.pos.x += (tx - r.pos.x) * k;
+      r.pos.z += (tz - r.pos.z) * k;
+      r.y += (f.y - r.y) * k;
+      r.heading += wrapAngle(f.h - r.heading) * k;
+      r.course = r.heading;
+    }
+    const v = r.visual.current;
+    v.boosting = r.boostTimer > 0;
+    v.shielded = protectedNow(r);
+    v.steer = 0;
+    v.speedFrac = THREE.MathUtils.clamp(Math.abs(r.speed) / 26, 0, 1);
+    v.mode = r.mode;
+    v.drift = r.isDrifting;
+    v.activeIsPartner = r.activeIsPartner;
+    v.fused = r.turretTimer > 0;
+    v.gunning = false;
+    v.ghost = r.ghostTimer > 0;
+    v.magnet = false;
+    v.stunned = r.stunTimer > 0 && r.frozenTimer <= 0;
+    if (r.group.current) {
+      r.group.current.visible = !r.out && !!f;
+      r.group.current.position.set(r.pos.x, r.y, r.pos.z);
+      r.group.current.rotation.set(0, r.heading, 0);
+      r.group.current.scale.setScalar(r.giantTimer > 0 ? 1.7 : 1);
+    }
+  }
+
+  /** What my machine says about a kart it runs, for the others to follow. */
+  function report(r: Racer) {
+    const flags =
+      (r.isDrifting ? 1 : 0) | (r.boostTimer > 0 ? 2 : 0) | (r.shieldActive ? 4 : 0) | (r.airborne ? 8 : 0) | (r.activeIsPartner ? 16 : 0) |
+      (r.finished ? 32 : 0) | (r.out ? 64 : 0) | (r.ghostTimer > 0 ? 128 : 0) | (r.giantTimer > 0 ? 256 : 0) | (r.turretTimer > 0 ? 512 : 0) | (r.swapInvuln > 0 ? 1024 : 0);
+    const q = (n: number) => Math.round(n * 100) / 100;
+    return [r.id, q(r.pos.x), q(r.y), q(r.pos.z), q(r.heading), q(r.speed), r.mode, Math.round(r.total * 1e5) / 1e5, r.lap, flags, r.lives, q(r.stunTimer), q(r.frozenTimer), q(r.slowTimer), q(r.burnTimer), q(r.course)];
+  }
+
+  /** The other end of report(): take what a kart's owner says and make it so. */
+  function accept(a: unknown[]) {
+    const r = byId.get(a[0] as string);
+    if (!r || !r.remote) return;
+    const [, x, y, z, h, speed, m, total, lap, flags, lives, stun, frozen, slow, burn, course] = a as [string, number, number, number, number, number, VehicleMode, number, number, number, number, number, number, number, number, number];
+    const first = !r.fix;
+    r.fix = { x, y, z, h, vx: Math.sin(course) * speed, vz: Math.cos(course) * speed, age: 0 };
+    if (first) {
+      r.pos.set(x, 0, z);
+      r.y = y;
+      r.heading = h;
+    }
+    r.speed = speed;
+    r.mode = m;
+    r.total = total;
+    r.bestTotal = Math.max(r.bestTotal, total);
+    r.prog = ((total % 1) + 1) % 1;
+    r.t = r.prog;
+    r.lap = lap;
+    r.path = 0;
+    r.idx = Math.floor(r.prog * getPaths()[0].n) % getPaths()[0].n;
+    r.isDrifting = !!(flags & 1);
+    r.boostTimer = flags & 2 ? 0.3 : 0;
+    r.shieldActive = !!(flags & 4);
+    r.airborne = !!(flags & 8);
+    r.activeIsPartner = !!(flags & 16);
+    r.finished = !!(flags & 32);
+    r.out = !!(flags & 64);
+    r.ghostTimer = flags & 128 ? 0.3 : 0;
+    r.giantTimer = flags & 256 ? 3 : 0;
+    r.turretTimer = flags & 512 ? 0.3 : 0;
+    r.swapInvuln = flags & 1024 ? 0.3 : 0;
+    r.lives = lives;
+    r.stunTimer = stun;
+    r.frozenTimer = frozen;
+    r.slowTimer = slow;
+    r.burnTimer = burn;
+    r.vy = 0;
+    r.seen = { hit: r.lastHit, stun, frozen, slow, burn, vy: 0 };
+  }
+
+  /**
+   * After a step of my own game: whatever it did to karts that are not mine
+   * has to be told to whoever runs them. A hit goes as a hit, so it costs a
+   * life there if lives are being counted; anything else as what it did.
+   */
+  function tellOthers() {
+    for (const r of racers) {
+      if (!r.remote) continue;
+      const s = r.seen;
+      if (r.lastHit !== s.hit) netSend({ t: "hit", k: r.id, spin: r.stunTimer > 1.1, by: r.hitBy });
+      else if (r.stunTimer > s.stun + 0.15 || r.frozenTimer > s.frozen + 0.15 || r.slowTimer > s.slow + 0.15 || r.burnTimer > s.burn + 0.15 || r.vy > s.vy + 3) {
+        netSend({ t: "fx", k: r.id, stun: r.stunTimer, frozen: r.frozenTimer, slow: r.slowTimer, burn: r.burnTimer, vy: r.vy, speed: r.speed });
+      }
+      r.seen = { hit: r.lastHit, stun: r.stunTimer, frozen: r.frozenTimer, slow: r.slowTimer, burn: r.burnTimer, vy: r.vy };
+    }
+    // shots and things left on the road, so the others see them coming
+    for (const p of projectiles) {
+      if (!p.active) {
+        p.told = false;
+        continue;
+      }
+      if (p.told || p.fake) continue;
+      p.told = true;
+      const owner = byId.get(p.ownerId);
+      if (!owner || owner.remote) continue;
+      netSend({ t: "proj", w: p.type, o: p.ownerId, x: p.pos.x, y: p.pos.y, z: p.pos.z, vx: p.vel.x, vy: p.vel.y, vz: p.vel.z, tg: p.targetId, c: p.color, life: p.life, hm: p.homing });
+    }
+    for (const p of puddles) {
+      if (!p.active) {
+        p.told = false;
+        continue;
+      }
+      if (p.told) continue;
+      p.told = true;
+      const owner = byId.get(p.ownerId);
+      if (!owner || owner.remote) continue;
+      netSend({ t: "mine", kind: p.kind, o: p.ownerId, x: p.pos.x, y: p.pos.y, z: p.pos.z, life: p.life, fx: p.effect, pw: p.power });
+    }
+  }
+
   function simulate(dt: number, controls: ReturnType<typeof poll>, over: boolean) {
     frame.current++;
     if (!over) raceClock.current += dt * 1000;
 
     for (const r of racers) {
-      if (!r.finished) updateRacer(r, dt, r.isPlayer ? controls : null);
+      if (r.lifeCd > 0) r.lifeCd -= dt;
+      if (r.remote) followNet(r, dt);
+      else if (!r.finished && !r.out) updateRacer(r, dt, r.isPlayer ? controls : null);
     }
 
 
@@ -2578,12 +2919,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         emitParticles({ position: p.pos.clone(), color: p.color, count: 1, speed: 0.6, spread: 0.2, size: 0.16, life: 0.3, gravity: 0 });
       }
       for (const r of racers) {
-        if (r.id === p.ownerId || r.id === p.allyId || gone(r)) continue;
+        if (p.fake || r.id === p.ownerId || r.id === p.allyId || gone(r)) continue;
         const d = Math.hypot(r.pos.x - p.pos.x, r.pos.z - p.pos.z);
         if (d < 1.7 && Math.abs(r.y + 0.6 - p.pos.y) < 2.2) {
           const owner = racers.find((o) => o.id === p.ownerId);
           if (p.effect && owner) applyShot(r, owner, p.effect, p.power, p.color);
-          else applyHit(r, p.type === "missile");
+          else applyHit(r, p.type === "missile", owner);
           p.active = false;
           emitParticles({ position: p.pos.clone(), color: p.color, count: 20, speed: 4.5, spread: 1.4, size: 0.22, life: 0.6 });
           break;
@@ -2720,7 +3061,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const sliding = me && !state.paused && started.current && me.isDrifting && !me.airborne && !me.riding && !me.finished;
       setSkid(sliding ? (me.mode === "boat" ? 0.35 : 0.55 + Math.min(0.45, Math.abs(wrapAngle(me.heading - me.course)))) : 0);
     }
-    if (state.paused || !started.current) {
+    if ((state.paused && !session) || !started.current) {
       // on the grid, before the lights go out, nothing has moved the karts yet: stand them on their marks
       if (!started.current) {
         for (const r of racers) {
@@ -2744,15 +3085,34 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const held = steps > 1 ? { ...controls, itemPressed: false, swapPressed: false, fusePressed: false, turboPressed: false } : controls;
     for (let step = 0; step < steps; step++) simulate(h, step === 0 ? controls : held, state.telemetry.finished);
 
+    if (session) {
+      tellOthers();
+      netClock.current += Math.min(deltaRaw, 0.1);
+      if (netClock.current >= 1 / 15) {
+        netClock.current = 0;
+        netSend({ t: "s", a: racers.filter((r) => !r.remote).map(report) });
+      }
+    }
+
     const player = racers[0];
-    const sorted = [...racers].sort((a, b) => b.total - (a.total));
+    // a race is ordered by distance; a battle by who is still in it and with how many lives
+    const sorted = [...racers].sort((a, b) => (battle ? Number(a.out) - Number(b.out) || b.lives - a.lives : 0) || b.total - a.total);
     const position = sorted.indexOf(player) + 1;
 
-    if (!finishedOnce.current && player.lap > mode.laps) {
+    // a race ends at the line; a battle ends for you when your lives do, or when nobody else has any
+    let endPos = 0;
+    if (battle) {
+      const alive = racers.filter((r) => !r.out);
+      const over = setup.teams ? new Set(alive.map((r) => r.team)).size <= 1 : alive.length <= 1;
+      if (player.out) endPos = setup.teams ? 2 : alive.length + 1;
+      else if (over && racers.length > 1) endPos = 1;
+    } else if (player.lap > mode.laps) endPos = position;
+    if (!finishedOnce.current && endPos > 0) {
+      const position = endPos;
       finishedOnce.current = true;
       if (player.pair) split(player.pair, false);
       player.finished = true;
-      const timeBonus = Math.max(0, Math.round((mode.laps * 55000 - raceClock.current) / 18));
+      const timeBonus = battle ? player.lives * 400 : Math.max(0, Math.round((mode.laps * 55000 - raceClock.current) / 18));
       const positionBonus = (racers.length - position + 1) * 180;
       const running = player.coins * 12 + player.boostsUsed * 25 + player.tagSwaps * 40 + player.rings * 120;
       const finalScore = Math.round(running + timeBonus + positionBonus);
@@ -2764,7 +3124,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         coins: player.coins,
         tagSwaps: player.tagSwaps,
         rings: player.rings,
-        lapsCompleted: mode.laps,
+        lapsCompleted: battle ? Math.max(0, player.lap - 1) : mode.laps,
       });
       addShake(0.45);
       sfx.finish();
@@ -2804,10 +3164,15 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         tagCooldown: 1 - Math.min(1, player.tagCooldown / TAG_COOLDOWN_MAX),
         fuseReady: player.pair || player.turretTimer > 0 ? 1 : 1 - Math.min(1, player.fuseCd / player.fuseCdMax),
         fuseWait: player.pair || player.turretTimer > 0 ? 0 : Math.max(0, Math.ceil(player.fuseCd)),
-        soloTurret: player.turretTimer / SOLO_TIME,
+        soloTurret: player.turretTimer / (player.turretMod ? UPGRADE_TIME : SOLO_TIME),
+        turretMod: player.turretMod,
         fused: !!player.pair,
         fusionHp: player.pair ? Math.max(0, player.pair.hp) : 1,
         gunning: !!player.pair && player.pair.gunner === player,
+        gunKind: player.pair && player.pair.gunner === player ? fusionShot(activeChar(player).id, player.pair.driver.mode).kind : null,
+        gunLock: !!(player.pair && player.pair.gunner === player && player.pair.lock),
+        lives: battle ? player.lives : -1,
+        maxLives: battle ? setup.lives : 0,
         turbo: player.turboMeter,
         driftLevel: player.driftLevel,
         rolling: player.rollTimer > 0,
@@ -2825,7 +3190,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         activeIsPartner: player.activeIsPartner,
         mode: player.mode,
         rings: player.rings,
-        standings: sorted.map((r) => ({ id: r.id, name: activeChar(r).name, isPlayer: r.isPlayer, progress: r.total, lap: Math.min(r.lap, mode.laps), color: r.vehicle.body })),
+        standings: sorted.map((r) => ({ id: r.id, name: r.label || activeChar(r).name, isPlayer: r.isPlayer, progress: r.total, lap: Math.min(r.lap, mode.laps), color: r.vehicle.body, lives: battle ? r.lives : undefined, team: r.team, out: r.out })),
       });
     }
 
@@ -2868,7 +3233,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // kart is seen at an angle, crossed up, instead of the world swinging round it
     const slip = player.mode === "land" ? wrapAngle(player.heading - player.course) : 0;
     camSlip.current += (slip - camSlip.current) * (1 - Math.exp(-(player.isDrifting ? 9 : 4.5) * dt));
-    const camDir = player.heading - camSlip.current * 0.72;
+    // on the turret the camera looks where the barrel does: turning the gun turns the view
+    const gun = player.pair && player.pair.gunner === player ? player.pair : null;
+    camAim.current += wrapAngle((gun ? gun.aim : 0) - camAim.current) * (1 - Math.exp(-8 * dt));
+    const camDir = player.heading - camSlip.current * 0.72 + camAim.current;
     const fwd = new THREE.Vector3(Math.sin(camDir), 0, Math.cos(camDir));
     const flying = player.mode === "plane";
     const wet = player.mode === "boat" || player.mode === "sub";

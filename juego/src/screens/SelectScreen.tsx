@@ -18,6 +18,7 @@ import {
   THEME_LIST,
   TRACKS,
   MODES,
+  AI_SKILL_LIST,
   WEAPONS,
   WEAPON_META,
   FINISH_META,
@@ -45,7 +46,8 @@ import Portrait from "../ui/Portrait";
 
 type Tab = "mode" | "track" | "racer" | "partner" | "garage" | "aesthetic" | "settings";
 
-const MODE_INFO: { id: "quick" | "trial" | "chaos" | "sprint" | "duel" | "endurance"; glyph: string; titleKey: string; descKey: string }[] = [
+const MODE_INFO: { id: "quick" | "trial" | "chaos" | "sprint" | "duel" | "endurance" | "battle"; glyph: string; titleKey: string; descKey: string }[] = [
+  { id: "battle", glyph: "♥", titleKey: "battleMode", descKey: "battleDesc" },
   { id: "quick", glyph: "⚑", titleKey: "quickRace", descKey: "quickRaceDesc" },
   { id: "sprint", glyph: "➤", titleKey: "sprintMode", descKey: "sprintDesc" },
   { id: "trial", glyph: "◷", titleKey: "timeTrial", descKey: "timeTrialDesc" },
@@ -77,6 +79,58 @@ function TrackPreview({ points, color, water }: { points: [number, number, numbe
       <polygon points={pts} fill="none" stroke={color} strokeWidth="6" strokeLinejoin="round" />
       <polygon points={pts} fill="none" stroke={water} strokeWidth="2" strokeDasharray="6 10" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+/** Who else is in the race and how hard they try; and for a battle, how many lives and whether there are sides. */
+export function RaceTerms({ maxBots = 7 }: { maxBots?: number }) {
+  const { t } = useI18n();
+  const modeId = useGame((s) => s.modeId);
+  const setup = useGame((s) => s.raceSetup);
+  const setSetup = useGame((s) => s.setRaceSetup);
+  const skill = useGame((s) => s.settings.aiSkill);
+  const setSettings = useGame((s) => s.setSettings);
+  const bots = Math.min(maxBots, setup.bots ?? MODES[modeId].aiCount);
+  const chip = (on: boolean) => `rounded-xl px-3 py-1.5 text-xs font-bold transition ${on ? "glass-btn text-sky-900" : "bg-white/25 text-sky-800/70 hover:bg-white/45"}`;
+  const stepper = (value: number, min: number, max: number, set: (v: number) => void) => (
+    <div className="flex items-center gap-2">
+      <button className={chip(false)} onClick={() => set(Math.max(min, value - 1))}>−</button>
+      <span className="font-display w-6 text-center text-xl font-extrabold text-sky-900">{value}</span>
+      <button className={chip(false)} onClick={() => set(Math.min(max, value + 1))}>+</button>
+    </div>
+  );
+  return (
+    <Panel className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-3 p-4">
+      <div>
+        <div className="mb-1 text-xs font-extrabold uppercase tracking-wide text-sky-900/70">{t("bots")}</div>
+        {stepper(bots, 0, maxBots, (v) => setSetup({ bots: v }))}
+      </div>
+      <div>
+        <div className="mb-1 text-xs font-extrabold uppercase tracking-wide text-sky-900/70">{t("botSkill")}</div>
+        <div className="flex gap-1.5">
+          {AI_SKILL_LIST.map((id) => (
+            <button key={id} className={chip(skill === id)} onClick={() => setSettings({ aiSkill: id })}>
+              {t(`skill_${id}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+      {modeId === "battle" && (
+        <>
+          <div>
+            <div className="mb-1 text-xs font-extrabold uppercase tracking-wide text-sky-900/70">{t("lives")}</div>
+            {stepper(setup.lives, 1, 8, (v) => setSetup({ lives: v }))}
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-extrabold uppercase tracking-wide text-sky-900/70">{t("sides")}</div>
+            <div className="flex gap-1.5">
+              <button className={chip(!setup.teams)} onClick={() => setSetup({ teams: false })}>{t("freeForAll")}</button>
+              <button className={chip(setup.teams)} onClick={() => setSetup({ teams: true })}>{t("twoTeams")}</button>
+            </div>
+          </div>
+        </>
+      )}
+    </Panel>
   );
 }
 
@@ -465,10 +519,18 @@ export default function SelectScreen() {
           )}
 
           {/* ---------------- MODE ---------------- */}
+          {tab === "mode" && <RaceTerms />}
           {tab === "mode" && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {MODE_INFO.map((m) => (
-                <button key={m.id} onClick={() => setMode(m.id as any)} className={`text-left transition hover:-translate-y-1 ${modeId === m.id ? "" : ""}`}>
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    setMode(m.id as any);
+                    // a battle is fought in the arena unless you say otherwise afterwards
+                    if (m.id === "battle") setTrackId("arena");
+                  }}
+                  className={`text-left transition hover:-translate-y-1 ${modeId === m.id ? "" : ""}`}>
                   <Panel className={`h-full p-5 ${modeId === m.id ? "ring-4 ring-white" : ""}`}>
                     <div className="flex items-center gap-3">
                       <span className="font-display text-4xl font-extrabold" style={{ color: THEMES[theme].barrierA }}>
@@ -478,7 +540,7 @@ export default function SelectScreen() {
                     </div>
                     <p className="mt-2 text-sm text-sky-800/80">{t(m.descKey)}</p>
                     <div className="mt-3 flex gap-2 text-[11px] font-bold text-sky-700">
-                      <span className="rounded-full bg-white/60 px-2 py-0.5">{MODES[m.id].laps} {t("lap")}</span>
+                      {m.id !== "battle" && <span className="rounded-full bg-white/60 px-2 py-0.5">{MODES[m.id].laps} {t("lap")}</span>}
                       <span className="rounded-full bg-white/60 px-2 py-0.5">{MODES[m.id].aiCount} ✦</span>
                       <span className="rounded-full bg-white/60 px-2 py-0.5">{MODES[m.id].itemsEnabled ? t("weapons") : "—"}</span>
                     </div>

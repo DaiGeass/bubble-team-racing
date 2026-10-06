@@ -1,3 +1,4 @@
+import { backToLobby, inRoom, isHost, recall } from "../net";
 import { useState } from "react";
 import { useI18n, ordinal } from "../i18n";
 import { useGame } from "../store";
@@ -159,7 +160,11 @@ export function ResultsScreen() {
         </Panel>
 
         <div className="flex flex-wrap justify-center gap-2">
-          <PrimaryButton onClick={handleRestart}>↻ {t("playAgain")}</PrimaryButton>
+          {inRoom() ? (
+            <PrimaryButton onClick={() => (isHost() ? recall() : backToLobby())}>⇄ {t("backToLobby")}</PrimaryButton>
+          ) : (
+            <PrimaryButton onClick={handleRestart}>↻ {t("playAgain")}</PrimaryButton>
+          )}
           <GlassButton onClick={() => goto("select")}>◕ {t("changeRacer")}</GlassButton>
           <GlassButton onClick={() => goto("highscores")}>⚑ {t("viewHighScores")}</GlassButton>
         </div>

@@ -64,6 +64,21 @@ export class Turtle {
     return this;
   }
 
+  /** lengths the designer has worked out for the flexible straights, and the way each one points */
+  adjust: Record<string, number> = {};
+  flexDir: Record<string, number> = {};
+
+  /**
+   * A straight whose length is only a suggestion. A drawing with two of these,
+   * pointing different ways, always comes back to where it started: the
+   * designer stretches or shortens them until it does. It is what lets a
+   * circuit be any shape at all instead of a rectangle.
+   */
+  flex(name: string, len: number, dy = 0) {
+    this.flexDir[name] = this.h;
+    return this.go(Math.max(20, len + (this.adjust[name] ?? 0)), dy);
+  }
+
   /** Straight on for `len`, ending at absolute height `y`. */
   toY(len: number, y: number) {
     return this.go(len, y - this.y);
@@ -216,14 +231,39 @@ interface DesignSpec {
   /** [mark of the mouth, mark of the exit]: a warp gate by the barrier */
   portals?: [string, string][];
   routes?: RouteSpec[];
+  /** false keeps the drawing exactly as drawn; otherwise it is pulled out of true, each circuit its own way */
+  warp?: boolean | "soft";
 }
 
 /** What the designer had to bend to make each circuit close, for the checker. */
 export const DESIGN_REPORT: Record<string, { closeError: number; routeErrors: number[]; length: number }> = {};
 
 export function design(spec: DesignSpec): TrackDef {
-  const t = new Turtle(spec.start[0], spec.start[1], spec.start[2], spec.start[3]);
+  let t = new Turtle(spec.start[0], spec.start[1], spec.start[2], spec.start[3]);
   spec.draw(t);
+  // Two flexible straights: solve for the lengths that bring the drawing home, and draw it again.
+  const flex = Object.keys(t.flexDir);
+  if (flex.length >= 2) {
+    const adjust: Record<string, number> = {};
+    for (let pass = 0; pass < 6; pass++) {
+      const end = t.pts[t.pts.length - 1];
+      const ex0 = end[0] - t.pts[0][0];
+      const ez0 = end[2] - t.pts[0][2];
+      if (Math.hypot(ex0, ez0) < 0.01) break;
+      const [a, b] = flex;
+      const ax = Math.sin(t.flexDir[a]);
+      const az = Math.cos(t.flexDir[a]);
+      const bx = Math.sin(t.flexDir[b]);
+      const bz = Math.cos(t.flexDir[b]);
+      const det = ax * bz - az * bx;
+      if (Math.abs(det) < 0.05) throw new Error(`track ${spec.id}: the flexible straights "${a}" and "${b}" point the same way`);
+      adjust[a] = (adjust[a] ?? 0) + (-ex0 * bz + ez0 * bx) / det;
+      adjust[b] = (adjust[b] ?? 0) + (-ax * ez0 + az * ex0) / det;
+      t = new Turtle(spec.start[0], spec.start[1], spec.start[2], spec.start[3]);
+      t.adjust = adjust;
+      spec.draw(t);
+    }
+  }
 
   // Close the loop: whatever the drawing misses the start by is spread evenly
   // along the lap, which keeps straights straight and bends smooth.
@@ -238,7 +278,51 @@ export function design(spec: DesignSpec): TrackDef {
     t.pts[i][1] -= ey * k;
     t.pts[i][2] -= ez * k;
   }
-  const pts = t.pts.slice(0, last);
+  const raw = t.pts.slice(0, last);
+  // Pull the whole drawing out of true: a twist about its middle and a slow
+  // wave across it, different for every circuit, and on dry land a roll in
+  // the ground as well. Every road of the circuit goes through the same
+  // distortion, so they still meet where they met and cross where they crossed.
+  let seed = 0;
+  for (const ch of spec.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  const rnd = (k: number) => {
+    const v = Math.sin(seed * 0.001 + k * 12.9898) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const p of raw) {
+    x0 = Math.min(x0, p[0]);
+    x1 = Math.max(x1, p[0]);
+    z0 = Math.min(z0, p[2]);
+    z1 = Math.max(z1, p[2]);
+  }
+  const wcx = (x0 + x1) / 2;
+  const wcz = (z0 + z1) / 2;
+  const wR = Math.max(x1 - x0, z1 - z0) / 2 || 1;
+  const on = spec.warp !== false;
+  const twist = on ? (rnd(1) - 0.5) * 0.7 : 0;
+  const ax = on ? 0.06 + rnd(2) * 0.08 : 0;
+  const az = on ? 0.06 + rnd(3) * 0.08 : 0;
+  const fx = 1.6 + rnd(4) * 1.6;
+  const fz = 1.6 + rnd(5) * 1.6;
+  const roll = on && spec.sea === undefined && !spec.indoor ? 2.5 : 0;
+  // and lobes: the outline is pushed out in two, three or five places and drawn in between them,
+  // which is what stops a four-sided drawing from looking four-sided
+  const lobes = [2, 3, 5][Math.floor(rnd(10) * 3)];
+  const bulge = on && spec.warp !== "soft" ? 0.44 / lobes : 0;
+  const lobeAt = rnd(11) * 6.28;
+  const W = (p: P3): P3 => {
+    const u = p[0] - wcx;
+    const v = p[2] - wcz;
+    const ang = twist * Math.max(0, 1 - Math.hypot(u, v) / (wR * 1.5));
+    const ru = u * Math.cos(ang) - v * Math.sin(ang);
+    const rv = u * Math.sin(ang) + v * Math.cos(ang);
+    const swell = 1 + bulge * Math.sin(lobes * Math.atan2(rv, ru) + lobeAt) * Math.min(1, Math.hypot(ru, rv) / (wR * 0.35));
+    const wu = ru * swell + ax * wR * Math.sin((rv / wR) * fx + rnd(6) * 6.28);
+    const wv = rv * swell + az * wR * Math.sin((ru / wR) * fz + rnd(7) * 6.28);
+    return [wcx + wu, p[1] + roll * Math.sin((u / wR) * 2.1 + rnd(8) * 6.28) * Math.cos((v / wR) * 1.7 + rnd(9) * 6.28), wcz + wv];
+  };
+  const pts = raw.map(W);
 
   const curve = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(p[0], p[1], p[2])), true, "centripetal");
   const length = curve.getLength();
@@ -274,8 +358,9 @@ export function design(spec: DesignSpec): TrackDef {
     const a = t.marks[r.from];
     const b = t.marks[r.to];
     if (!a || !b) throw new Error(`track ${spec.id}: route needs marks "${r.from}" and "${r.to}"`);
-    const pa = pts[Math.min(a.i, last - 1)];
-    const pb = pts[Math.min(b.i, last - 1)];
+    // a route is drawn against the circuit as it was drawn, and distorted with it afterwards
+    const pa = raw[Math.min(a.i, last - 1)];
+    const pb = raw[Math.min(b.i, last - 1)];
     const rt = new Turtle(pa[0], pa[1], pa[2], a.h / RAD);
     r.draw(rt);
     // bend the route so it lands exactly on the junction it is meant to reach
@@ -301,7 +386,7 @@ export function design(spec: DesignSpec): TrackDef {
       t0: tOf(r.from),
       t1: tOf(r.to),
       // the first and last stretch belong to the junctions, which the runtime lays along the main road
-      points: rt.pts.slice(2, rl - 1),
+      points: rt.pts.slice(2, rl - 1).map(W),
       width: r.width,
       walls: r.walls,
       tunnel: r.tunnel,

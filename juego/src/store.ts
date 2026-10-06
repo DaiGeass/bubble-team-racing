@@ -19,7 +19,7 @@ import {
   type SubId,
 } from "./data";
 
-export type Screen = "start" | "select" | "howto" | "options" | "race" | "results" | "highscores";
+export type Screen = "start" | "select" | "howto" | "options" | "race" | "results" | "highscores" | "lobby";
 
 export interface HighScoreEntry {
   name: string;
@@ -37,6 +37,20 @@ export interface Standing {
   progress: number;
   lap: number;
   color: string;
+  /** battle: lives left, the side it is on (-1 for none), and whether it is out */
+  lives?: number;
+  team?: number;
+  out?: boolean;
+}
+
+/** How the next race is set up, on top of the mode: who else is in it and, in a battle, on what terms. */
+export interface RaceSetup {
+  /** number of opponents driven by the game; null leaves it to the mode */
+  bots: number | null;
+  /** battle: lives each, 1 to 8 */
+  lives: number;
+  /** battle: two sides instead of everyone for themselves */
+  teams: boolean;
 }
 
 export interface Telemetry {
@@ -67,6 +81,8 @@ export interface Telemetry {
   fuseWait: number;
   /** 0..1 of the time the partner's own turret has left; 0 when it is away */
   soloTurret: number;
+  /** battle: which upgrade the turret is running on */
+  turretMod: string | null;
   fused: boolean;
   fusionHp: number; // 0..1 turret partner health
   turbo: number; // 0..1 drift-charged turbo meter
@@ -76,11 +92,19 @@ export interface Telemetry {
   incoming: number;
   /** fused and on the turret: the steering aims it and the item button fires */
   gunning: boolean;
+  /** on the turret: how the shot in the barrel flies, for the sight, and whether it has somebody */
+  gunKind: string | null;
+  gunLock: boolean;
+  /** battle: lives left out of how many, or -1 when it is a race */
+  lives: number;
+  maxLives: number;
   /** mini-turbo level the current drift has reached, 0..3 */
   driftLevel: number;
   /** until when (Date.now()) error windows cover the screen */
   popupUntil: number;
   shortcutFlash: number; // timestamp of the last alternative-path jump
+  /** when (Date.now()) the player was last hit, for the flash */
+  hitAt: number;
 }
 
 const defaultTelemetry: Telemetry = {
@@ -107,15 +131,21 @@ const defaultTelemetry: Telemetry = {
   fuseReady: 1,
   fuseWait: 0,
   soloTurret: 0,
+  turretMod: null,
   fused: false,
   fusionHp: 1,
   turbo: 0,
   rolling: false,
   incoming: 0,
   gunning: false,
+  gunKind: null,
+  gunLock: false,
+  lives: -1,
+  maxLives: 0,
   driftLevel: 0,
   popupUntil: 0,
   shortcutFlash: 0,
+  hitAt: 0,
 };
 
 export interface RaceResult {
@@ -232,6 +262,8 @@ interface GameState {
   setLang: (l: Lang) => void;
   modeId: ModeId;
   setMode: (m: ModeId) => void;
+  raceSetup: RaceSetup;
+  setRaceSetup: (p: Partial<RaceSetup>) => void;
   trackId: string;
   setTrackId: (id: string) => void;
   theme: ThemeId;
@@ -351,6 +383,8 @@ export const useGame = create<GameState>((set, get) => ({
   },
   modeId: "quick",
   setMode: (m) => set({ modeId: m }),
+  raceSetup: { bots: null, lives: 3, teams: false },
+  setRaceSetup: (p) => set((s) => ({ raceSetup: { ...s.raceSetup, ...p } })),
   trackId: TRACKS[0].id,
   setTrackId: (id) => set({ trackId: id }),
   theme: (loadPrefs<{ theme: ThemeId }>("tsc_theme", { theme: "frutiger" }).theme in THEMES

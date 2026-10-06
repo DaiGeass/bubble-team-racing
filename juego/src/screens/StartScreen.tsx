@@ -99,6 +99,7 @@ export default function StartScreen() {
               <PrimaryButton big onClick={() => goto("select")}>
                 ▶ {t("play")}
               </PrimaryButton>
+              <GlassButton onClick={() => goto("lobby")}>⇄ {t("multiplayer")}</GlassButton>
               <GlassButton onClick={() => goto("howto")}>? {t("howToPlayTitle")}</GlassButton>
               <GlassButton onClick={() => goto("options")}>{t("options")}</GlassButton>
             </div>
