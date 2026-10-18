@@ -1,6 +1,7 @@
+import { mapSegments } from "../mapSegments";
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { getActiveTrack, trackFrameAt, halfWidthAt, getPaths, getPads, ROUTE_COLOURS, F_SOLID } from "../trackCurve";
+import { getActiveTrack, trackFrameAt, halfWidthAt, getPaths, getPads, ROUTE_COLOURS } from "../trackCurve";
 import { THEMES } from "../data";
 import { raceSnapshot, ZONES } from "../data";
 
@@ -52,18 +53,15 @@ export default function Minimap() {
     let hMax = -Infinity;
     for (const path of getPaths()) {
       const every = Math.max(1, Math.round(9 / path.ds));
-      const last = path.closed ? path.n : path.n - 1;
-      for (let i = 0; i < last; i += every) {
-        const j = path.closed ? (i + every) % path.n : Math.min(path.n - 1, i + every);
-        if (!(path.flags[i] & F_SOLID) || !(path.flags[j] & F_SOLID)) continue;
+      for (const [i, j] of mapSegments(path.flags, path.closed, every)) {
         const t = path.prog[i];
         const zone = path.main ? ZONES.find((z) => t >= z.t0 && t <= z.t1) : undefined;
         const h = (path.py[i] + path.py[j]) / 2;
         segs.push({ ax: path.px[i], az: path.pz[i], bx: path.px[j], bz: path.pz[j], h, zone: zone?.type ?? null, route: !path.main, tint: path.main ? null : ROUTE_COLOURS[path.def?.kind ?? "side"] });
-        minX = Math.min(minX, path.px[i]);
-        maxX = Math.max(maxX, path.px[i]);
-        minZ = Math.min(minZ, path.pz[i]);
-        maxZ = Math.max(maxZ, path.pz[i]);
+        minX = Math.min(minX, path.px[i], path.px[j]);
+        maxX = Math.max(maxX, path.px[i], path.px[j]);
+        minZ = Math.min(minZ, path.pz[i], path.pz[j]);
+        maxZ = Math.max(maxZ, path.pz[i], path.pz[j]);
         hMin = Math.min(hMin, h);
         hMax = Math.max(hMax, h);
       }
@@ -88,12 +86,23 @@ export default function Minimap() {
 
   useEffect(() => {
     let raf = 0;
-    const draw = () => {
+    let lastDraw = -Infinity;
+    const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
+      if (document.hidden || now - lastDraw < 1000 / 20) return;
+      lastDraw = now;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
+      const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+      const pixels = Math.round(SIZE * dpr);
+      if (canvas.width !== pixels || canvas.height !== pixels) {
+        canvas.width = pixels;
+        canvas.height = pixels;
+      }
+      const ratio = pixels / SIZE;
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       const theme = raceSnapshot.theme;
       const { minX, maxX, minZ, maxZ } = boundsRef.current;
       const w = maxX - minX || 1;
@@ -105,12 +114,13 @@ export default function Minimap() {
       const toY = (z: number) => z * scale + oy;
       const { hMin, hSpan } = rangeRef.current;
 
-      const key = `${theme.road}|${theme.water}|${theme.glow}|${theme.barrierA}`;
+      const key = `${pixels}|${theme.road}|${theme.water}|${theme.glow}|${theme.barrierA}`;
       if (!layerRef.current || layerRef.current.key !== key) {
         const layer = document.createElement("canvas");
-        layer.width = SIZE;
-        layer.height = SIZE;
+        layer.width = pixels;
+        layer.height = pixels;
         const g = layer.getContext("2d")!;
+        g.setTransform(ratio, 0, 0, ratio, 0, 0);
         // plate
         g.fillStyle = "rgba(255,255,255,0.30)";
         g.beginPath();
@@ -123,20 +133,25 @@ export default function Minimap() {
 
         g.lineCap = "round";
         g.lineJoin = "round";
-        for (const s of segsRef.current) {
-          const u = (s.h - hMin) / hSpan;
-          const wide = s.route ? 4 : 6;
-          g.beginPath();
-          g.moveTo(toX(s.ax), toY(s.az));
-          g.lineTo(toX(s.bx), toY(s.bz));
-          g.strokeStyle = "rgba(10,40,70,0.55)";
-          g.lineWidth = wide + 3;
-          g.stroke();
-          // higher is lighter; zones keep their own colour
-          g.strokeStyle =
-            s.zone === "water" ? theme.water : s.zone === "sky" ? theme.glow : s.zone === "sub" ? "#3b82f6" : s.zone === "mag" ? "#e879f9" : s.tint ?? shade(theme.road, u);
-          g.lineWidth = wide;
-          g.stroke();
+        const segments = segsRef.current;
+        // Paint outlines before fills at similar heights. This joins the road
+        // cleanly, while higher ribbons still cover lower ones at bridges.
+        for (let first = 0; first < segments.length;) {
+          let end = first + 1;
+          while (end < segments.length && segments[end].h - segments[first].h < 3) end++;
+          for (let pass = 0; pass < 2; pass++) for (let i = first; i < end; i++) {
+            const s = segments[i];
+            const u = (s.h - hMin) / hSpan;
+            const wide = s.route ? 4 : 6;
+            g.beginPath();
+            g.moveTo(toX(s.ax), toY(s.az));
+            g.lineTo(toX(s.bx), toY(s.bz));
+            g.strokeStyle = pass === 0 ? "rgba(10,40,70,0.55)" :
+              s.zone === "water" ? theme.water : s.zone === "sky" ? theme.glow : s.zone === "sub" ? "#3b82f6" : s.zone === "mag" ? "#e879f9" : s.tint ?? shade(theme.road, u);
+            g.lineWidth = pass === 0 ? wide + 3 : wide;
+            g.stroke();
+          }
+          first = end;
         }
 
         // warps: entry ring on the side you have to aim at, dashed link to the exit
@@ -197,21 +212,21 @@ export default function Minimap() {
       }
 
       ctx.clearRect(0, 0, SIZE, SIZE);
-      ctx.drawImage(layerRef.current.canvas, 0, 0);
-      const pts = [{ x: startRef.current.x, y: startRef.current.z }];
-
+      ctx.drawImage(layerRef.current.canvas, 0, 0, SIZE, SIZE);
       // start line
-      const s = pts[0];
+      const s = startRef.current;
       ctx.fillStyle = "#ffffff";
       ctx.beginPath();
-      ctx.arc(toX(s.x), toY(s.y), 4, 0, Math.PI * 2);
+      ctx.arc(toX(s.x), toY(s.z), 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = "rgba(0,0,0,0.35)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
       // racers
-      for (const r of raceSnapshot.racers) {
+      // Draw the player last, even when the starting grid is crowded.
+      for (const playerPass of [false, true]) for (const r of raceSnapshot.racers) {
+        if (r.isPlayer !== playerPass) continue;
         const x = toX(r.x);
         const y = toY(r.z);
         if (r.isPlayer) {
@@ -228,6 +243,9 @@ export default function Minimap() {
           ctx.closePath();
           ctx.fillStyle = "#ffffff";
           ctx.fill();
+          ctx.strokeStyle = "#10334f";
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
         } else {
           ctx.beginPath();
           ctx.arc(x, y, 4.2, 0, Math.PI * 2);

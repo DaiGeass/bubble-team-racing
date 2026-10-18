@@ -41,6 +41,7 @@ function tone({ freq, duration, type = "sine", volume = 0.2, freqEnd, delay = 0 
   gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
   osc.connect(gain);
   gain.connect(c.destination);
+  osc.onended = () => { osc.disconnect(); gain.disconnect(); };
   osc.start(t0);
   osc.stop(t0 + duration + 0.02);
 }
@@ -71,6 +72,10 @@ function useMutedCheck() {
 }
 
 export const sfx = {
+  cleanLanding: () => {
+    tone({ freq: 660, freqEnd: 880, duration: 0.11, type: "triangle", volume: 0.12 });
+    tone({ freq: 990, duration: 0.14, type: "sine", volume: 0.10, delay: 0.06 });
+  },
   coin: () => tone({ freq: 880, freqEnd: 1320, duration: 0.12, type: "triangle", volume: 0.18 }),
   item: () => tone({ freq: 440, freqEnd: 900, duration: 0.18, type: "square", volume: 0.15 }),
   boost: () => {

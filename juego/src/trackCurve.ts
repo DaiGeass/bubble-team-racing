@@ -474,6 +474,22 @@ export interface PadRT {
   lift: number;
 }
 
+/** Land beyond the lip of a gap, with room behind and ahead of the vehicle. */
+function cannonLandingIndex(requested: number): number {
+  const p = paths[0];
+  const behind = Math.ceil(4 / p.ds);
+  const ahead = Math.ceil(12 / p.ds);
+  for (let offset = 0; offset < p.n; offset++) {
+    const i = (requested + offset) % p.n;
+    let clear = true;
+    for (let d = -behind; d <= ahead; d++) {
+      if (!(p.flags[(i + d + p.n) % p.n] & F_SOLID)) { clear = false; break; }
+    }
+    if (clear) return i;
+  }
+  throw new Error("The cannon needs a solid landing area");
+}
+
 /** Pads of the active circuit, placed on the ribbon they belong to. */
 export function getPads(): PadRT[] {
   const def = getActiveTrack();
@@ -486,7 +502,7 @@ export function getPads(): PadRT[] {
       heading: Math.atan2(p.tx[i], p.tz[i]),
       kind: pad.kind,
       power: pad.power,
-      toIdx: mainIndexAt(pad.toT ?? pad.t),
+      toIdx: pad.kind === "cannon" ? cannonLandingIndex(mainIndexAt(pad.toT ?? pad.t)) : mainIndexAt(pad.toT ?? pad.t),
       lift: pad.lift ?? 22,
     };
   });

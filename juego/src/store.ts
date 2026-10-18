@@ -1,7 +1,11 @@
+import { CAMERA_STYLES, type CameraStyle } from "./camera";
+import { mergePreferences, preferredLanguage } from "./preferences";
+import { GRAPHICS_QUALITIES, type GraphicsQuality } from "./graphics";
 import type { ModeId, AiSkillId } from "./data";
 import { create } from "zustand";
 import type { Lang } from "./i18n";
 import {
+  AI_PROFILES,
   BODY_COLORS,
   DECAL_COLORS,
   WHEEL_STYLES,
@@ -54,6 +58,8 @@ export interface RaceSetup {
 }
 
 export interface Telemetry {
+  drivingCue: "landing" | "drift" | null;
+  drivingValue: number;
   lap: number;
   totalLaps: number;
   position: number;
@@ -108,6 +114,8 @@ export interface Telemetry {
 }
 
 const defaultTelemetry: Telemetry = {
+  drivingCue: null,
+  drivingValue: 0,
   lap: 1,
   totalLaps: 3,
   position: 1,
@@ -230,6 +238,8 @@ export const DEFAULT_TOUCH: Record<TouchSlot, Action> = {
 };
 
 export interface Settings {
+  cameraStyle: CameraStyle;
+  graphicsQuality: GraphicsQuality;
   autoGas: boolean;
   steerAssist: boolean;
   bloom: boolean;
@@ -316,7 +326,7 @@ function loadPrefs<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
-    return { ...fallback, ...(JSON.parse(raw) as object) } as T;
+    return mergePreferences(fallback, JSON.parse(raw));
   } catch {
     return fallback;
   }
@@ -331,14 +341,11 @@ function savePrefs(key: string, value: unknown) {
 }
 
 function detectLang(): Lang {
+  let saved: unknown;
   try {
-    const nav = navigator.language?.slice(0, 2);
-    const supported = ["es", "en", "he", "ja", "zh", "ar", "fr", "ru"];
-    if (nav && supported.includes(nav)) return nav as Lang;
-  } catch {
-    /* ignore */
-  }
-  return "en";
+    saved = JSON.parse(localStorage.getItem("tsc_lang") ?? "null")?.lang;
+  } catch { /* use the browser language */ }
+  return preferredLanguage(saved, typeof navigator === "undefined" ? "en" : navigator.language);
 }
 
 const defaultVehicle: VehiclePrefs = {
@@ -352,12 +359,15 @@ const defaultVehicle: VehiclePrefs = {
   plane: "wing",
   sub: "classic",
   hover: "maglev",
-} as VehiclePrefs;
+  finish: "solid",
+};
 
 // Sensible defaults per device: touch screens get auto-throttle, small screens skip bloom.
 const isTouch = typeof window !== "undefined" && (window.matchMedia?.("(pointer: coarse)").matches || (navigator.maxTouchPoints ?? 0) > 0);
 const isSmall = typeof window !== "undefined" && Math.min(window.innerWidth, window.innerHeight) < 700;
 const defaultSettings: Settings = {
+  cameraStyle: "follow",
+  graphicsQuality: "auto",
   autoGas: isTouch,
   steerAssist: true,
   bloom: !isSmall,
@@ -373,6 +383,19 @@ const defaultSettings: Settings = {
   touchScale: 1,
   handed: "right",
 };
+
+function loadSettings(): Settings {
+  const settings = loadPrefs<Settings>("tsc_settings", defaultSettings);
+  if (!CAMERA_STYLES.includes(settings.cameraStyle)) settings.cameraStyle = "follow";
+  if (!GRAPHICS_QUALITIES.includes(settings.graphicsQuality)) settings.graphicsQuality = "auto";
+  if (!(settings.aiSkill in AI_PROFILES)) settings.aiSkill = "amateur";
+  if (settings.controlPreset !== "A" && settings.controlPreset !== "B") settings.controlPreset = "A";
+  for (const slot of TOUCH_SLOTS) {
+    if (!ACTIONS.includes(settings.touchLayout[slot])) settings.touchLayout[slot] = DEFAULT_TOUCH[slot];
+  }
+  for (const field of ["volume", "shake", "motionBlur"] as const) settings[field] = Math.max(0, Math.min(1, settings[field]));
+  return settings;
+}
 
 export const useGame = create<GameState>((set, get) => ({
   screen: "start",
@@ -406,7 +429,7 @@ export const useGame = create<GameState>((set, get) => ({
       savePrefs("tsc_vehicle", next);
       return { vehicle: next };
     }),
-  settings: loadPrefs<Settings>("tsc_settings", defaultSettings),
+  settings: loadSettings(),
   setSettings: (v) =>
     set((s) => {
       const next = { ...s.settings, ...v };

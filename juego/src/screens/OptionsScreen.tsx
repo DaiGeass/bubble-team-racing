@@ -1,3 +1,5 @@
+import { CAMERA_STYLES } from "../camera";
+import { GRAPHICS_QUALITIES } from "../graphics";
 import { useEffect, useState } from "react";
 import { useGame, ACTIONS, TOUCH_SLOTS, DEFAULT_KEYBINDS, DEFAULT_TOUCH, type Action, type TouchSlot } from "../store";
 import { AI_PROFILES, AI_SKILL_LIST, type AiSkillId } from "../data";
@@ -145,6 +147,16 @@ export default function OptionsScreen() {
               <Row label="Invertir dirección">
                 <Toggle on={settings.invertSteer} onClick={() => setSettings({ invertSteer: !settings.invertSteer })} />
               </Row>
+              <Row label="Estilo de cámara">
+                {CAMERA_STYLES.map((style) => (
+                  <button key={style} aria-pressed={settings.cameraStyle === style}
+                    onClick={() => setSettings({ cameraStyle: style })}
+                    className={`rounded-xl px-3 py-2 text-xs font-bold shadow-sm ${settings.cameraStyle === style ? "bg-sky-600 text-white" : "bg-white/70"}`}>
+                    {{ follow: "Seguimiento", immersive: "Inmersiva", stable: "Estable" }[style]}
+                  </button>
+                ))}
+              </Row>
+              <p className="px-1 text-xs text-sky-900/70">Inmersiva anticipa curvas y reacciona al turbo y los aterrizajes. Estable mantiene el campo de visión fijo y elimina las sacudidas.</p>
               <Row label={`Sacudida de cámara · ${Math.round(settings.shake * 100)}%`}>
                 <Slider value={settings.shake} onChange={(v) => setSettings({ shake: v })} />
               </Row>
@@ -155,6 +167,21 @@ export default function OptionsScreen() {
                 <Slider value={settings.volume} onChange={(v) => setSettings({ volume: v })} />
                 <Toggle on={!muted} onClick={toggleMuted} />
               </Row>
+              <Row label="Calidad gráfica">
+                {GRAPHICS_QUALITIES.map((quality) => (
+                  <button
+                    key={quality}
+                    aria-pressed={settings.graphicsQuality === quality}
+                    onClick={() => setSettings({ graphicsQuality: quality })}
+                    className={`rounded-xl px-3 py-2 text-xs font-bold shadow-sm ${settings.graphicsQuality === quality ? "bg-sky-600 text-white" : "bg-white/70"}`}
+                  >
+                    {{ auto: "Automática", low: "Baja", balanced: "Equilibrada", high: "Alta" }[quality]}
+                  </button>
+                ))}
+              </Row>
+              <p className="px-1 text-xs text-sky-900/70">
+                Automática ajusta la resolución durante la carrera. Baja reduce los efectos y desactiva sombras y bloom.
+              </p>
               <Row label="Bloom">
                 <Toggle on={settings.bloom} onClick={() => setSettings({ bloom: !settings.bloom })} />
               </Row>
@@ -183,11 +210,13 @@ export default function OptionsScreen() {
                       aiSkill: "amateur",
                       invertSteer: false,
                       shake: 1,
+                      cameraStyle: "follow",
                       motionBlur: 0,
                       volume: 0.8,
                       autoGas: false,
                       steerAssist: true,
                       bloom: true,
+                      graphicsQuality: "auto",
                       telemetry: false,
                     })
                   }

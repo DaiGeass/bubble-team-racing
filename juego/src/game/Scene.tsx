@@ -1,3 +1,8 @@
+import { zoneOnPath, modeOnPath, modeFromZone, resetModeState } from "../trackModes";
+import { LandingBonus } from "../landingBonus";
+import { frameBlend, coast, RaceCountdown } from "../motion";
+import { CameraFollow, CameraDynamics, curvePreview, CAMERA_PROFILES } from "../camera";
+import { graphicsProfile } from "../graphics";
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
@@ -37,9 +42,9 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, sectorMix, plainStretches, terrainY, FLY_BASE, FLIGHT, groundAt, makeGround, mainIndexAt, pathPoint } from "../trackCurve";
+import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, sectorMix, plainStretches, terrainY, FLY_BASE, FLIGHT, groundAt, makeGround, mainIndexAt, pathPoint, F_TUNNEL } from "../trackCurve";
 import { moveBody, makeResult, placeBody, respawnBody, aimAhead, bendAhead, collideBodies, progDelta, GRAVITY, type Body, type StepOpts } from "../physics";
-import { emitParticles, emitDebris, addShake, shakeState } from "../particles";
+import { drainParticleQueue, emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { setSkid, sfx } from "../sound";
 
 const TAG_COOLDOWN_MAX = 3.6;
@@ -66,6 +71,7 @@ interface Racer extends Body {
   vehicle: VehicleConfig;
   /** visual pitch in radians: the slope on the ground, the arc in the air */
   pitch: number;
+  landingBonus: LandingBonus;
   /** seconds spent wedged with the throttle open */
   pinnedFor: number;
   /** furthest it has got, and seconds since that last moved (AI only) */
@@ -349,6 +355,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const partnerId = useGame((s) => s.partnerId);
   const vehicleCfg = useGame((s) => s.vehicle);
   const settings = useGame((s) => s.settings);
+  const shadowSize = graphicsProfile(settings.graphicsQuality).shadowSize;
   // every circuit has the aesthetic it was designed for, and the map mutates on
   // top of it: the palette, the vegetation and the hazard patterns shift each lap
   const aestheticLap = useGame((s) => s.telemetry.lap);
@@ -432,6 +439,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         safePath: 0,
         safeIdx: 0,
         pitch: 0,
+        landingBonus: new LandingBonus(),
         pinnedFor: 0,
         bestTotal: 0,
         noProgressFor: 0,
@@ -523,6 +531,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       me.seen.hit = me.lastHit;
       me.bestTotal = me.total;
       me.t = me.prog;
+      me.mode = modeOnPath(me.path, me.prog);
+      me.visual.current.mode = me.mode;
       me.course = me.heading;
     }
     return list;
@@ -705,10 +715,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     } else {
       respawnBody(r);
     }
+    syncMode(r);
     r.speed = pace;
     r.respawnLock = 1;
     r.pinnedFor = 0;
     r.noProgressFor = 0;
+    r.landingBonus.reset();
     r.stunTimer = 0;
     r.isDrifting = false;
     r.driftCharge = 0;
@@ -740,8 +752,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
   const sun = useMemo(() => {
     const l = new THREE.DirectionalLight();
-    l.castShadow = true;
-    l.shadow.mapSize.set(2048, 2048);
+    l.castShadow = shadowSize > 0;
+    l.shadow.mapSize.set(Math.max(1, shadowSize), Math.max(1, shadowSize));
     const c = l.shadow.camera;
     c.left = -110;
     c.right = 110;
@@ -751,15 +763,25 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     c.updateProjectionMatrix();
     l.shadow.bias = -0.0008;
     return l;
-  }, []);
+  }, [shadowSize]);
+  useEffect(() => () => sun.shadow.dispose(), [sun]);
   useEffect(() => {
     sun.color.set(theme.sun);
     sun.intensity = theme.sunIntensity;
   }, [sun, theme]);
 
   const started = useRef(false);
+  const countdown = useRef(new RaceCountdown());
+  const countdownValue = useRef(3);
+  const drivingCue = useRef<{ kind: "landing" | "drift" | null; value: number; left: number }>({ kind: null, value: 0, left: 0 });
   const raceClock = useRef(0);
   const finishedOnce = useRef(false);
+  const resultsTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (resultsTimer.current !== null) window.clearTimeout(resultsTimer.current);
+    setSkid(0);
+    drainParticleQueue();
+  }, []);
   /** the little celebration after the flag: the kart hops and spins while the camera circles it */
   const victory = useRef<null | { t: number; podium: boolean; heading: number; y: number }>(null);
   const frame = useRef(0);
@@ -767,6 +789,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const clockRef = useRef(0);
   const camPos = useRef(new THREE.Vector3(0, 6, -14));
   const camLook = useRef(new THREE.Vector3());
+  const cameraScratch = useMemo(() => ({ forward: new THREE.Vector3(), desired: new THREE.Vector3(), look: new THREE.Vector3(), shake: new THREE.Vector3() }), []);
+  const cameraFollow = useRef(new CameraFollow());
+  const cameraDynamics = useRef(new CameraDynamics());
+  const camRoll = useRef(0);
   const camSlip = useRef(0);
   const camAim = useRef(0);
 
@@ -814,20 +840,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     hazardState.lap = 1;
     useGame.getState().resetTelemetry();
     useGame.getState().setTelemetry({ totalLaps: mode.laps, totalRacers: racers.length, countdown: 3 });
-    const timers: number[] = [];
+    countdown.current = new RaceCountdown();
+    countdownValue.current = 3;
+    started.current = false;
+    updateSnapshot();
     sfx.countdown();
-    [1000, 2000, 3000].forEach((ms, idx) => {
-      timers.push(
-        window.setTimeout(() => {
-          useGame.getState().setTelemetry({ countdown: 2 - idx });
-          if (idx < 2) sfx.countdown();
-          else sfx.go();
-        }, ms)
-      );
-    });
-    timers.push(window.setTimeout(() => (started.current = true), 3000));
-    timers.push(window.setTimeout(() => useGame.getState().setTelemetry({ countdown: -1 }), 3900));
-    return () => timers.forEach((t) => window.clearTimeout(t));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1265,7 +1282,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
 
     // it rides on top of the driver's kart, turned the way the turret points
-    r.visual.current.mode = d.mode === "plane" ? "plane" : "land";
+    r.visual.current.mode = d.mode;
     r.visual.current.gunning = true;
     r.visual.current.boosting = false;
     r.visual.current.shielded = false;
@@ -1668,6 +1685,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // jump a stretch further down the main road, onto a place it is safe to land
       emitParticles({ position: r.pos.clone().setY(r.y + 0.8), color: col, count: 28, speed: 5, spread: 1.4, size: 0.24, life: 0.6 });
       placeBody(r, 0, safeAhead(mainIndexAt(r.prog + 0.035)));
+      syncMode(r);
       r.t = r.prog;
       r.course = r.heading;
       r.speed = Math.max(r.speed, statsFor(activeChar(r), r.vehicle).maxSpeed * 0.9);
@@ -1700,6 +1718,29 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         sfx.boost();
       }
     }
+  }
+
+  function syncMode(r: Racer, announce = false) {
+    const zone = zoneOnPath(r.path, r.prog);
+    const newMode = modeFromZone(zone);
+    if (resetModeState(r, newMode)) {
+      r.landingBonus.reset();
+      r.visual.current.mode = newMode;
+      if (announce && r.isPlayer) {
+        addShake(0.18);
+        sfx.swap();
+        emitParticles({
+          position: r.pos.clone().setY(r.y + 0.6),
+          color: newMode === "boat" ? theme.water : theme.glow,
+          count: 26,
+          speed: 4,
+          spread: 1.2,
+          size: 0.22,
+          life: 0.7,
+        });
+      }
+    }
+    return zone;
   }
 
   function updateRacer(r: Racer, dt: number, controls: ReturnType<typeof poll> | null) {
@@ -1788,11 +1829,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       r.y = r.pos.y + Math.sin(L.e * Math.PI) * L.lift;
       r.pos.y = r.y;
       r.heading += wrapAngle(Math.atan2(L.to.x - L.from.x, L.to.z - L.from.z) - r.heading) * Math.min(1, dt * 6);
-      r.pitch = THREE.MathUtils.lerp(r.pitch, THREE.MathUtils.clamp((r.y - before) / Math.max(1e-3, dt) / 50, -0.7, 0.7), 0.2);
+      r.pitch = THREE.MathUtils.lerp(r.pitch, THREE.MathUtils.clamp((r.y - before) / Math.max(1e-3, dt) / 50, -0.7, 0.7), frameBlend(0.2, dt));
       if (frame.current % 2 === 0) emitParticles({ position: r.pos.clone(), color: theme.glow, count: 2, speed: 0.8, spread: 0.3, size: 0.22, life: 0.5, gravity: 0 });
       if (L.e >= 1) {
         r.launch = null;
         placeBody(r, 0, L.idx);
+        syncMode(r);
         r.t = r.prog;
         r.speed = st.maxSpeed;
         r.boostTimer = Math.max(r.boostTimer, 1.2);
@@ -1806,6 +1848,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       }
       r.visual.current.boosting = true;
       r.visual.current.speedFrac = 1;
+      r.visual.current.speed = r.speed;
+      r.visual.current.airborne = L.e < 1;
+      r.visual.current.vy = (r.y - before) / Math.max(dt, 1e-4);
       r.visual.current.steer = 0;
       if (r.group.current) {
         r.group.current.position.set(r.pos.x, r.y, r.pos.z);
@@ -1816,28 +1861,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       return;
     }
 
-    // ---- zone / mode ----
-    const zone = zoneAt(r.t);
-    const newMode: VehicleMode = !zone ? "land" : zone.type === "water" ? "boat" : zone.type === "sub" ? "sub" : zone.type === "mag" ? "hover" : "plane";
-    if (newMode !== r.mode) {
-      r.mode = newMode;
-      if (r.isPlayer) {
-        addShake(0.18);
-        sfx.swap();
-        emitParticles({
-          position: r.pos.clone().setY(r.y + 0.6),
-          color: newMode === "boat" ? theme.water : theme.glow,
-          count: 26,
-          speed: 4,
-          spread: 1.2,
-          size: 0.22,
-          life: 0.7,
-        });
-      }
-    }
+    // ---- zone / mode: use the actual ribbon, including solid alternatives ----
+    const zone = syncMode(r, true);
     // plane and submarine both move freely up and down inside their stretch
     const flight = r.mode === "plane" ? FLIGHT.sky : r.mode === "sub" ? FLIGHT.sub : null;
-    const inSky = flight && zone ? (r.t - zone.t0) / (zone.t1 - zone.t0) : 0;
+    const inSky = flight && zone ? THREE.MathUtils.clamp((r.prog - zone.t0) / (zone.t1 - zone.t0), 0, 1) : 0;
 
     // ---- input ----
     let steerIn = 0;
@@ -2022,7 +2050,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
     // ---- smoothed steering (comfortable, analog-like) ----
     const response = settings.steerAssist ? 9.5 : 7;
-    r.steerSmooth += (steerIn - r.steerSmooth) * Math.min(1, dt * response);
+    r.steerSmooth += (steerIn - r.steerSmooth) * frameBlend(response / 60, dt);
 
     // ---- drift ----
     // Holding drift into a bend commits the kart to that side with a hop. From
@@ -2090,6 +2118,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           r.turboMeter = Math.min(1, r.turboMeter + bar * st.turboRate);
           r.boostsUsed++;
           if (r.isPlayer) {
+            drivingCue.current.kind = "drift";
+            drivingCue.current.value = r.driftLevel;
+            drivingCue.current.left = 1.1;
             addShake(0.12 + r.driftLevel * 0.08);
             sfx.boost();
           }
@@ -2170,7 +2201,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (throttleIn > 0) r.speed += accelNow * dt;
     else if (throttleIn < 0) r.speed -= accelNow * 1.4 * dt;
     else {
-      r.speed -= Math.sign(r.speed) * 8 * dt;
+      r.speed = coast(r.speed, dt);
       if (Math.abs(r.speed) < 0.3) r.speed = 0;
     }
     r.speed = THREE.MathUtils.clamp(r.speed, -effMax * 0.35, effMax);
@@ -2200,7 +2231,6 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
 
     // ---- movement: ground, barriers, gravity and lap progress live in physics.ts ----
-    const fwd = new THREE.Vector3(Math.sin(r.heading), 0, Math.cos(r.heading));
     // a hull has no tyres: on water the boat keeps going the way it was going and
     // the bow leads it round, so a turn is a slide
     // A drifting kart does the same on tarmac: the nose is round the bend and the
@@ -2210,7 +2240,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // a levitating craft has nothing to grip with either: it glides round a bend
       const follow = r.mode === "boat" ? (r.isDrifting ? 2.1 : 3.6) : r.mode === "hover" ? (r.isDrifting ? 2.4 : 5) : r.isDrifting ? SLIP_RATE : 13;
       if (r.mode !== "boat" && r.mode !== "hover" && !r.isDrifting && Math.abs(wrapAngle(r.heading - r.course)) < 0.01) r.course = r.heading;
-      else r.course += wrapAngle(r.heading - r.course) * Math.min(1, dt * follow);
+      else r.course += wrapAngle(r.heading - r.course) * frameBlend(follow / 60, dt);
       const slip = wrapAngle(r.heading - r.course);
       if (Math.abs(slip) > SLIP_MAX) r.course = r.heading - Math.sign(slip) * SLIP_MAX;
     }
@@ -2230,6 +2260,19 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     stepOpts.rideOffset =
       r.mode === "boat" ? -0.12 + Math.sin(bob * 0.004 + r.aiPhase) * 0.09 : r.mode === "sub" ? 0.35 + Math.sin(bob * 0.003 + r.aiPhase) * 0.1 : r.mode === "hover" ? 0.55 + Math.sin(bob * 0.005 + r.aiPhase) * 0.12 : 0;
     moveBody(r, mx, mz, dt, stepOpts, stepRes);
+
+    const landingCharge = r.landingBonus.step(dt, r.airborne, stepRes.landed, r.speed,
+      !stepRes.fell && !r.touching && stepRes.wallImpact === 0 && r.stunTimer <= 0 && !r.exploding && r.respawnLock <= 0 && r.mode !== "plane" && r.mode !== "sub");
+    const landingGain = Math.min(landingCharge, Math.max(0, 1 - r.turboMeter));
+    if (landingGain > 0) {
+      r.turboMeter = Math.min(1, r.turboMeter + landingGain);
+      if (r.isPlayer) {
+        drivingCue.current.kind = "landing";
+        drivingCue.current.value = Math.round(landingGain * 1000) / 10;
+        drivingCue.current.left = 1.4;
+        sfx.cleanLanding();
+      }
+    }
 
     // run a drift into a barrier and the charge is gone
     if (r.isDrifting && stepRes.wallFirst && stepRes.wallImpact > 0.45) {
@@ -2273,6 +2316,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         if (r.group.current) r.group.current.visible = true;
         // back on its wheels in the middle of the road it was on
         placeBody(r, r.safePath, r.safeIdx);
+        syncMode(r);
         r.respawnLock = 1.1;
         r.speed = 5;
         r.stunTimer = 1.2;
@@ -2283,7 +2327,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
     // on the ground the nose follows the slope, in the air it follows the arc
     const nose = r.airborne ? THREE.MathUtils.clamp(Math.atan2(r.vy, Math.max(10, Math.abs(r.speed))), -0.6, 0.6) : Math.atan(r.slopeAlong);
-    r.pitch = THREE.MathUtils.lerp(r.pitch, nose, r.mode === "plane" ? 0.05 : r.airborne ? 0.1 : 0.25);
+    r.pitch = THREE.MathUtils.lerp(r.pitch, nose, frameBlend(r.mode === "plane" ? 0.05 : r.airborne ? 0.1 : 0.25, dt));
 
     // ---- pads painted on the road ----
     if (!r.airborne) {
@@ -2303,6 +2347,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           const main = getPaths()[0];
           const to = new THREE.Vector3(main.px[pad.toIdx], main.py[pad.toIdx], main.pz[pad.toIdx]);
           const from = r.pos.clone().setY(r.y);
+          r.landingBonus.reset();
           r.launch = { from, to, idx: pad.toIdx, e: 0, dur: THREE.MathUtils.clamp(from.distanceTo(to) / 62, 1, 2.8), lift: pad.lift };
           r.isDrifting = false;
           r.driftCharge = 0;
@@ -2584,6 +2629,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         const gateOff = Math.abs(lateralOffsetFrom(r.pos, pr.tIn) - pr.side * (halfWidthAt(pr.tIn) - 3.6));
         if (dIn < 0.012 && gateOff < 3) {
           placeBody(r, 0, mainIndexAt(pr.tOut), pr.side * (halfWidthAt(pr.tOut) - 3.6));
+          syncMode(r);
           r.t = r.prog;
           r.portalCd = pr.cd;
           r.boostTimer = Math.max(r.boostTimer, 0.8);
@@ -2600,7 +2646,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     r.particleAccum -= dt;
     if (r.particleAccum <= 0 && (r.boostTimer > 0 || r.isDrifting || r.mode === "boat" || r.mode === "plane" || r.mode === "sub")) {
       r.particleAccum = r.mode === "boat" ? 0.05 : 0.045;
-      const behind = r.pos.clone().addScaledVector(fwd, -1.3).setY(r.y + (r.mode === "plane" ? 0.4 : r.mode === "boat" ? 0.15 : 0.25));
+      const behind = new THREE.Vector3(r.pos.x - Math.sin(r.heading) * 1.3, r.y + (r.mode === "plane" ? 0.4 : r.mode === "boat" ? 0.15 : 0.25), r.pos.z - Math.cos(r.heading) * 1.3);
       const color =
         r.mode === "boat"
           ? "#ffffff"
@@ -2617,6 +2663,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     r.visual.current.shielded = protectedNow(r);
     r.visual.current.steer = r.steerSmooth;
     r.visual.current.speedFrac = speedFrac;
+    r.visual.current.speed = r.speed;
+    r.visual.current.airborne = r.airborne;
+    r.visual.current.vy = r.vy;
     r.visual.current.stunned = r.stunTimer > 0;
     r.visual.current.mode = r.mode;
     r.visual.current.drift = r.isDrifting;
@@ -2667,6 +2716,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     v.steer = 0;
     v.speedFrac = THREE.MathUtils.clamp(Math.abs(r.speed) / 26, 0, 1);
     v.mode = r.mode;
+    v.speed = r.speed;
+    v.airborne = r.airborne;
+    v.vy = r.vy;
     v.drift = r.isDrifting;
     v.activeIsPartner = r.activeIsPartner;
     v.fused = r.turretTimer > 0;
@@ -2775,6 +2827,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   function simulate(dt: number, controls: ReturnType<typeof poll>, over: boolean) {
     frame.current++;
     if (!over) raceClock.current += dt * 1000;
+    drivingCue.current.left = Math.max(0, drivingCue.current.left - dt);
+    if (drivingCue.current.left === 0) drivingCue.current.kind = null;
 
     for (const r of racers) {
       if (r.lifeCd > 0) r.lifeCd -= dt;
@@ -2968,12 +3022,23 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   }
 
   useFrame((_, deltaRaw) => {
-    const state = useGame.getState();
+    let state = useGame.getState();
     const dt = Math.min(deltaRaw, 1 / 30);
     clockRef.current = performance.now();
     const controls = poll();
 
-    if (controls.pausePressed && state.screen === "race" && !state.telemetry.finished) state.setPaused(!state.paused);
+    if (controls.pausePressed && state.screen === "race" && !state.telemetry.finished) {
+      state.setPaused(!state.paused);
+      state = useGame.getState();
+    }
+    const light = countdown.current.advance(deltaRaw, state.paused && !session);
+    if (light !== countdownValue.current) {
+      countdownValue.current = light;
+      state.setTelemetry({ countdown: light });
+      if (light > 0) sfx.countdown();
+      else if (light === 0) sfx.go();
+    }
+    started.current = countdown.current.started;
 
     // pickups animate
     for (const box of itemBoxes) {
@@ -3140,7 +3205,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         });
       }
       victory.current = { t: 0, podium: position <= 3, heading: player.heading, y: player.y };
-      window.setTimeout(() => useGame.getState().goto("results"), 3600);
+      resultsTimer.current = window.setTimeout(() => useGame.getState().goto("results"), 3600);
     }
 
     // The HUD is refreshed by the clock, twenty times a second. It used to be
@@ -3175,6 +3240,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         maxLives: battle ? setup.lives : 0,
         turbo: player.turboMeter,
         driftLevel: player.driftLevel,
+        drivingCue: drivingCue.current.kind,
+        drivingValue: drivingCue.current.value,
         rolling: player.rollTimer > 0,
         incoming: (() => {
           // how close the nearest thing aimed at the player is, 0 none .. 1 on top of it
@@ -3211,20 +3278,27 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       }
     }
 
-    // minimap snapshot
-    raceSnapshot.racers = racers.map((r) => ({
-      x: r.pos.x,
-      y: r.y,
-      z: r.pos.z,
-      color: r.isPlayer ? "#ffffff" : r.vehicle.body,
-      isPlayer: r.isPlayer,
-      mode: r.mode,
-      t: r.t,
-    }));
-    raceSnapshot.camAngle = player.heading;
+    updateSnapshot();
 
     updateCamera(Math.min(deltaRaw, 0.25), false);
   });
+
+  function updateSnapshot() {
+    raceSnapshot.racers.length = racers.length;
+    for (let i = 0; i < racers.length; i++) {
+      const r = racers[i];
+      const snapshot = raceSnapshot.racers[i] ?? (raceSnapshot.racers[i] = { x: 0, y: 0, z: 0, color: "", isPlayer: false, mode: "land", t: 0 });
+      snapshot.x = r.pos.x;
+      snapshot.y = r.y;
+      snapshot.z = r.pos.z;
+      snapshot.color = r.isPlayer ? "#ffffff" : r.vehicle.body;
+      snapshot.isPlayer = r.isPlayer;
+      snapshot.mode = r.mode;
+      snapshot.t = r.t;
+    }
+    raceSnapshot.camAngle = racers[0].heading;
+
+  }
 
   function updateCamera(dt: number, idle: boolean) {
     const player = racers[0];
@@ -3236,18 +3310,26 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // on the turret the camera looks where the barrel does: turning the gun turns the view
     const gun = player.pair && player.pair.gunner === player ? player.pair : null;
     camAim.current += wrapAngle((gun ? gun.aim : 0) - camAim.current) * (1 - Math.exp(-8 * dt));
-    const camDir = player.heading - camSlip.current * 0.72 + camAim.current;
-    const fwd = new THREE.Vector3(Math.sin(camDir), 0, Math.cos(camDir));
+    const profile = CAMERA_PROFILES[settings.cameraStyle];
+    const snap = cameraFollow.current.update(player.pos.x, player.y, player.pos.z, player.heading - camSlip.current * 0.72 + camAim.current, dt);
+    const path = getPaths()[player.path];
+    const motion = cameraDynamics.current;
+    const preview = path && !gun ? curvePreview(path, player.idx, player.heading, player.speed) : 0;
+    motion.update(dt, player.speed, player.steerSmooth, preview, player.boostTimer > 0, player.airborne || !!player.launch, player.launch ? player.visual.current.vy ?? 0 : player.vy, snap, idle || !!victory.current);
+    const dynamic = profile.dynamicFov;
+    const camDir = cameraFollow.current.angle + motion.curve * dynamic * 0.22;
+    const covered = trackDef.indoor || !!(path?.flags[player.idx] & F_TUNNEL);
+    const fwd = cameraScratch.forward.set(Math.sin(camDir), 0, Math.cos(camDir));
     const flying = player.mode === "plane";
     const wet = player.mode === "boat" || player.mode === "sub";
-    const dist = (flying ? 10.5 : wet ? 8 : 8.6) + Math.abs(camSlip.current) * 1.6;
-    const height = flying ? 4.6 : player.mode === "sub" ? 4.4 : wet ? 3.1 : 3.8;
+    const dist = covered ? 6.5 : ((flying ? 10.5 : wet ? 8 : 8.6) + Math.abs(camSlip.current) * 1.6) * profile.distance;
+    const height = covered ? 2.5 : (flying ? 4.6 : player.mode === "sub" ? 4.4 : wet ? 3.1 : 3.8) * profile.height;
     const speedKick = THREE.MathUtils.clamp(player.speed / 30, 0, 1);
-    const desired = player.pos
-      .clone()
-      .setY(player.y)
-      .addScaledVector(fwd, -dist - speedKick * 1.4)
-      .add(new THREE.Vector3(0, height + speedKick * 0.5, 0));
+    const desired = cameraScratch.desired.copy(player.pos)
+      .setY(player.y + height + speedKick * 0.5 + dynamic * (motion.landing.value - motion.acceleration * 0.12))
+      .addScaledVector(fwd, -dist - speedKick * (covered ? 0.35 : 1.4) - motion.boost * dynamic * (covered ? 0.25 : 0.9));
+    desired.x += Math.cos(camDir) * motion.side * dynamic * 0.28;
+    desired.z -= Math.sin(camDir) * motion.side * dynamic * 0.28;
     if (victory.current) {
       // swing round to the front of the kart and circle it
       const a = victory.current.heading + Math.PI * 0.75 + victory.current.t * 0.9;
@@ -3262,14 +3344,19 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (desired.y < floor) desired.y = floor;
     // look at the road ahead, not at the sky above a crest or into the ground on a descent
     const aheadY = !player.airborne && groundAt(player.pos.x + fwd.x * 10, player.pos.z + fwd.z * 10, player.y + 3, camG, 0) ? camG.y : player.y;
-    const look = player.pos.clone()
+    const look = cameraScratch.look.copy(player.pos)
       .setY(THREE.MathUtils.lerp(player.y, aheadY, 0.8) + 1.2)
-      .addScaledVector(fwd, 7);
+      .addScaledVector(fwd, (covered ? 5 : 7) + speedKick * dynamic * 2.5);
+    look.y += dynamic * (player.airborne ? THREE.MathUtils.clamp(player.vy * 0.06, -0.8, 1.1) : motion.landing.value * 0.3);
     if (victory.current) look.set(player.pos.x, victory.current.y + 1.2, player.pos.z);
     // Smoothing by elapsed time, not per frame: at 20 fps the camera used to
     // trail three times as far behind as at 60.
     const ease = (rate: number) => 1 - Math.exp(-rate * dt);
-    camPos.current.lerp(desired, ease(idle ? 3 : 7));
+    if (snap) {
+      camPos.current.copy(desired);
+      camLook.current.copy(look);
+      camRoll.current = 0;
+    } else camPos.current.lerp(desired, ease(idle ? 3 : profile.follow));
     // the smoothed camera lags on a fast descent, so clamp again once it is
     // settled: otherwise it dips through the road surface for a few frames
     const camGround = groundAt(camPos.current.x, camPos.current.z, player.y + 3, camG, 0) ? camG.y : -Infinity;
@@ -3278,6 +3365,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const hill = terrainY(camPos.current.x, camPos.current.z) + 1.5;
       if (camPos.current.y < hill) camPos.current.y = hill;
     }
+    // Indoor roofs sit 7.2 m above the road. Keep the eye below the roof,
+    // including while the filtered camera is catching up with a descent.
+    if (covered && !victory.current) camPos.current.y = Math.min(camPos.current.y, player.groundY + 6);
     // the light is the light of the aesthetic the player is driving through
     const mix = sectorMix(player.t);
     const la = themeOnLap(mix.a, aestheticLap - 1);
@@ -3292,15 +3382,18 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     camLook.current.lerp(look, ease(idle ? 3 : 8.4));
 
     shakeState.trauma = Math.max(0, shakeState.trauma - dt * 1.7);
-    const s = shakeState.trauma * shakeState.trauma;
+    const s = shakeState.trauma * shakeState.trauma * profile.shake;
     camera.position.copy(camPos.current).add(
-      new THREE.Vector3((Math.random() - 0.5) * s * 1.3, (Math.random() - 0.5) * s * 0.9, (Math.random() - 0.5) * s * 0.7)
+      cameraScratch.shake.set(Math.sin(motion.clock * 31) * s * 0.5, Math.sin(motion.clock * 43 + 1.4) * s * 0.35, Math.sin(motion.clock * 23 + 0.7) * s * 0.25)
     );
     camera.lookAt(camLook.current);
+    const bank = idle || victory.current ? 0 : -motion.side * profile.bank;
+    camRoll.current += (bank - camRoll.current) * ease(5);
+    camera.rotateZ(camRoll.current);
     const cam = camera as THREE.PerspectiveCamera;
     // the Options "speed blur" slider widens the lens as well, so the streaks
     // in the HUD and the camera pull together at high speed
-    const targetFov = 64 + speedKick * (9 + settings.motionBlur * 14) + s * 10 + (player.boostTimer > 0 ? 5 : 0);
+    const targetFov = 64 + profile.dynamicFov * (speedKick * (9 + settings.motionBlur * 14) + s * 6 + motion.boost * 5);
     if (Math.abs(cam.fov - targetFov) > 0.05) {
       cam.fov = THREE.MathUtils.lerp(cam.fov, targetFov, ease(7.7));
       cam.updateProjectionMatrix();

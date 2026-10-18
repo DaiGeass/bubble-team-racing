@@ -1,6 +1,10 @@
-import { useRef } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import type { Group } from "three";
+import { useGame } from "../store";
+import { graphicsProfile } from "../graphics";
+import { useEffect, useMemo, useRef } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import * as THREE from "three";
+import { previewDistance } from "../modelDetail";
+import { visibleModelBounds } from "./previewBounds";
 import Vehicle, { type KartVisualState, type VehicleConfig } from "./Vehicle";
 import type { CharacterDef, ThemeDef, VehicleMode } from "../data";
 
@@ -15,7 +19,14 @@ function Spinner({
   theme: ThemeDef;
   mode: VehicleMode;
 }) {
-  const ref = useRef<Group>(null);
+  const ref = useRef<THREE.Group>(null);
+  const size = useThree((s) => s.size);
+  const fit = useRef(3);
+  const bounds = useMemo(() => new THREE.Box3(), []);
+  const center = useMemo(() => new THREE.Vector3(), []);
+  const half = useMemo(() => new THREE.Vector3(), []);
+  const direction = useMemo(() => new THREE.Vector3(3.4, 2.3, 5.6).normalize(), []);
+  useEffect(() => { fit.current = 3; }, [character, vehicle, mode, size.width, size.height]);
   const visual = useRef<KartVisualState>({
     boosting: true,
     shielded: false,
@@ -29,6 +40,17 @@ function Spinner({
     if (ref.current) ref.current.rotation.y += dt * 0.75;
     visual.current.boosting = Math.sin(state.clock.elapsedTime * 2) > -0.4;
     visual.current.mode = mode;
+    if (ref.current && fit.current > 0 && --fit.current === 0) {
+      visibleModelBounds(ref.current, bounds);
+      if (!bounds.isEmpty()) {
+        bounds.getCenter(center); bounds.getSize(half).multiplyScalar(0.5);
+        const radius = Math.hypot(half.x + Math.abs(center.x), half.y, half.z + Math.abs(center.z));
+        center.set(0, center.y, 0);
+        const camera = state.camera as THREE.PerspectiveCamera;
+        camera.position.copy(center).addScaledVector(direction, previewDistance(radius, camera.fov, size.width / Math.max(1, size.height)));
+        camera.lookAt(center); camera.updateProjectionMatrix();
+      }
+    }
   });
   return (
     <group ref={ref} position={[0, mode === "sub" ? -0.1 : -0.55, 0]}>
@@ -48,10 +70,14 @@ export default function CharacterPreview({
   theme: ThemeDef;
   mode?: VehicleMode;
 }) {
+  const quality = useGame((s) => s.settings.graphicsQuality);
+  const profile = graphicsProfile(quality);
   return (
     <Canvas
+      key={quality}
+      gl={{ antialias: profile.antialias, powerPreference: "high-performance" }}
       camera={{ position: [3.4, 2.3, 5.6], fov: 42 }}
-      dpr={[1, 1.6]}
+      dpr={[0.65, Math.min(1.6, profile.maxDpr)]}
       style={{ background: `linear-gradient(160deg, ${theme.skyTop}, ${theme.skyBottom} 60%, ${theme.ground})`, borderRadius: 24 }}
     >
       <ambientLight intensity={1} color={theme.ambientColor} />

@@ -1,3 +1,5 @@
+import { frameBlend } from "../motion";
+import { EmissionBudget } from "../particleBudget";
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -87,6 +89,7 @@ export function Corridor({ themes }: { themes: ThemeDef[] }) {
     if (!el) return;
     mats.forEach((m, i) => el.setMatrixAt(i, m));
     el.instanceMatrix.needsUpdate = true;
+    el.computeBoundingSphere();
   };
   return (
     <group>
@@ -94,12 +97,12 @@ export function Corridor({ themes }: { themes: ThemeDef[] }) {
         <meshStandardMaterial vertexColors roughness={1} side={THREE.DoubleSide} />
       </mesh>
       {built.steady.length > 0 && (
-        <instancedMesh ref={place(built.steady)} args={[lamp, undefined, built.steady.length]} frustumCulled={false}>
+        <instancedMesh ref={place(built.steady)} args={[lamp, undefined, built.steady.length]}>
           <meshStandardMaterial color="#ffffff" emissive={glow} emissiveIntensity={2.6} toneMapped={false} />
         </instancedMesh>
       )}
       {built.dying.length > 0 && (
-        <instancedMesh ref={place(built.dying)} args={[lamp, undefined, built.dying.length]} frustumCulled={false}>
+        <instancedMesh ref={place(built.dying)} args={[lamp, undefined, built.dying.length]}>
           <meshStandardMaterial ref={dyingMat} color="#ffffff" emissive={glow} emissiveIntensity={2.6} toneMapped={false} />
         </instancedMesh>
       )}
@@ -671,7 +674,8 @@ export function Motes({ themes }: { themes: ThemeDef[] }) {
     const m = ref.current;
     if (!m) return;
     const theme = themes[sectorIndexAt(raceSnapshot.racers[0]?.t ?? 0)] ?? themes[0];
-    const kind = MOTE_OF[theme.id] ?? "dust";
+    const mode = raceSnapshot.racers[0]?.mode;
+    const kind = mode === "sub" ? "bubble" : getActiveTrack().indoor ? "dust" : MOTE_OF[theme.id] ?? "dust";
     const [vy, sway, size] = MOTE_STYLE[kind];
     const cam = s.camera.position;
     const t = s.clock.elapsedTime;
@@ -692,7 +696,7 @@ export function Motes({ themes }: { themes: ThemeDef[] }) {
     m.instanceMatrix.needsUpdate = true;
     if (mat.current) {
       tint.set(kind === "ember" ? "#ffb347" : kind === "petal" ? theme.barrierA : kind === "bit" ? theme.glow : "#ffffff");
-      mat.current.color.lerp(tint, 0.05);
+      mat.current.color.lerp(tint, frameBlend(0.05, step));
       mat.current.opacity = kind === "dust" ? 0.45 : kind === "rain" ? 0.4 : 0.8;
     }
   });
@@ -1223,7 +1227,7 @@ const VENT_OF: Record<string, Vent> = {
 export function Vents({ themes }: { themes: ThemeDef[] }) {
   const spots = useMemo(() => {
     const main = getPaths()[0];
-    const out: { p: THREE.Vector3; theme: ThemeDef; next: number; left: number }[] = [];
+    const out: { p: THREE.Vector3; theme: ThemeDef; next: number; left: number; budget: EmissionBudget }[] = [];
     if (!main) return out;
     const probe = makeGround();
     for (let k = 0; k < 12; k++) {
@@ -1232,25 +1236,34 @@ export function Vents({ themes }: { themes: ThemeDef[] }) {
       const x = main.px[i] - main.tz[i] * lat;
       const z = main.pz[i] + main.tx[i] * lat;
       if (groundAt(x, z, 1e6, probe, 0)) continue;
-      out.push({ p: new THREE.Vector3(x, main.py[i] - 0.5, z), theme: themes[sectorIndexAt(main.prog[i])] ?? themes[0], next: 1 + k * 0.7, left: 0 });
+      out.push({ p: new THREE.Vector3(x, main.py[i] - 0.5, z), theme: themes[sectorIndexAt(main.prog[i])] ?? themes[0], next: 1 + k * 0.7, left: 0, budget: new EmissionBudget() });
     }
     return out;
   }, [themes]);
+  const view = useMemo(() => ({ frustum: new THREE.Frustum(), matrix: new THREE.Matrix4(), sphere: new THREE.Sphere(new THREE.Vector3(), 96) }), []);
   useFrame((s, dt) => {
     const t = s.clock.elapsedTime;
+    view.matrix.multiplyMatrices(s.camera.projectionMatrix, s.camera.matrixWorldInverse);
+    view.frustum.setFromProjectionMatrix(view.matrix);
     for (const v of spots) {
       if (t > v.next) {
         v.next = t + 3.5 + Math.random() * 4;
         v.left = 1.1;
+        v.budget.reset();
       }
       if (v.left <= 0) continue;
+      const activeDelta = Math.min(dt, v.left);
       v.left -= dt;
+      // Bounds include the full possible plume arc, not just its emitter.
+      view.sphere.center.copy(v.p).y += 64;
+      const count = v.budget.take(activeDelta, view.frustum.intersectsSphere(view.sphere));
+      if (count === 0) continue;
       const kind = VENT_OF[v.theme.id] ?? "glitter";
       const colour = kind === "fire" ? (Math.random() < 0.5 ? "#ffb347" : "#ff5f3a") : kind === "spray" ? "#e8fbff" : kind === "spark" ? v.theme.glow : kind === "bubble" ? v.theme.barrierB : v.theme.particles[Math.floor(Math.random() * v.theme.particles.length)];
       emitParticles({
         position: v.p,
         color: colour,
-        count: 3,
+        count,
         speed: kind === "bubble" ? 4 : 11,
         spread: kind === "spark" || kind === "glitter" ? 0.9 : 0.28,
         size: kind === "spray" || kind === "bubble" ? 0.34 : 0.24,

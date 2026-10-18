@@ -68,16 +68,22 @@ export function useControls() {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (useGame.getState().screen !== "race") return;
       keys.current[e.code] = true;
-      taps.current[e.code] = true;
+      if (!e.repeat) taps.current[e.code] = true;
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab"].includes(e.code)) e.preventDefault();
-      if (e.code === "Escape" || e.code === "KeyP") state.current.pausePressed = true;
+      if (!e.repeat && (e.code === "Escape" || e.code === "KeyP")) state.current.pausePressed = true;
     };
     const up = (e: KeyboardEvent) => {
       keys.current[e.code] = false;
     };
     const blur = () => {
       keys.current = {};
+      taps.current = {};
+      touchTaps.current = {};
+      for (const key of Object.keys(touch.current) as (keyof typeof touch.current)[]) touch.current[key] = false;
+      prevItem.current = prevSwap.current = prevFuse.current = prevTurbo.current = false;
+      state.current.pausePressed = false;
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);

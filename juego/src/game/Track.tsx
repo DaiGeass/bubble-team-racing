@@ -1,4 +1,8 @@
-import { useMemo, useRef } from "react";
+import WaterMaterial from "./WaterMaterial";
+import { zoneOnPath } from "../trackModes";
+import { TrackLife } from "./TrackLife";
+import { spatialInstances } from "./spatialInstances";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -32,6 +36,7 @@ function makeRoadTexture(theme: ThemeDef) {
     }
   }
   const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.anisotropy = 4;
@@ -490,6 +495,7 @@ function makeFloorTexture(theme: ThemeDef) {
     g.stroke();
   }
   const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(60, 60);
@@ -501,6 +507,7 @@ function makeFloorTexture(theme: ThemeDef) {
 function Pads({ theme }: { theme: ThemeDef }) {
   const pads = useMemo(() => getPads(), []);
   const tex = useMemo(() => padTexture(), []);
+  useEffect(() => () => tex.dispose(), [tex]);
   if (!pads.length) return null;
   return (
     <group>
@@ -1114,6 +1121,7 @@ function buildRibbon(halfWidth: number, y: number, pad: number, kind: ZoneKind =
   const t0 = z.t0 - pad;
   const span = z.t1 - z.t0 + pad * 2;
   const positions: number[] = [];
+  const uvs: number[] = [];
   const indices: number[] = [];
   for (let i = 0; i <= N; i++) {
     const t = ((t0 + (span * i) / N) % 1 + 1) % 1;
@@ -1123,6 +1131,7 @@ function buildRibbon(halfWidth: number, y: number, pad: number, kind: ZoneKind =
     const l = c.clone().addScaledVector(n, halfWidth);
     const r = c.clone().addScaledVector(n, -halfWidth);
     positions.push(l.x, c.y + y, l.z, r.x, c.y + y, r.z);
+    uvs.push(l.x / 14, l.z / 14, r.x / 14, r.z / 14);
   }
   for (let i = 0; i < N; i++) {
     const a = i * 2;
@@ -1130,6 +1139,7 @@ function buildRibbon(halfWidth: number, y: number, pad: number, kind: ZoneKind =
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   g.setIndex(indices);
   g.computeVertexNormals();
   return g;
@@ -1138,13 +1148,17 @@ function buildRibbon(halfWidth: number, y: number, pad: number, kind: ZoneKind =
 function Lake({ theme }: { theme: ThemeDef }) {
   // indoors the water is a pool: it lies over the tiles from wall to wall
   const indoor = !!getActiveTrack().indoor;
-  const shore = useMemo(() => (indoor ? null : buildRibbon(TRACK_WIDTH / 2 + 12, -0.42, 0.02, "water")), [indoor]);
-  const water = useMemo(() => {
-    if (!indoor) return buildRibbon(TRACK_WIDTH / 2 + 9, -0.3, 0.012, "water");
-    // every pool of the circuit, not only the first
-    const pools = ZONES.filter((z) => z.type === "water").map((z) => buildRibbon(TRACK_WIDTH / 2 - 0.2, 0.09, 0.004, "water", z));
-    return pools.length ? mergeGeometries(pools) ?? pools[0] : new THREE.BufferGeometry();
-  }, [indoor]);
+  const buildRuns = (half: number, height: number, pad: number) => {
+    const runs = ZONES.filter((zone) => zone.type === "water").map((zone) => buildRibbon(half, height, pad, "water", zone));
+    if (!runs.length) return new THREE.BufferGeometry();
+    const merged = mergeGeometries(runs) ?? runs[0];
+    runs.forEach((run) => { if (run !== merged) run.dispose(); });
+    return merged;
+  };
+  const shore = useMemo(() => indoor ? null : buildRuns(TRACK_WIDTH / 2 + 12, -0.42, 0.02), [indoor]);
+  const water = useMemo(() => buildRuns(indoor ? TRACK_WIDTH / 2 - 0.2 : TRACK_WIDTH / 2 + 9, indoor ? 0.09 : -0.3, indoor ? 0.004 : 0.012), [indoor]);
+  useEffect(() => () => { shore?.dispose(); water.dispose(); }, [shore, water]);
+  if (!water.getAttribute("position")?.count) return null;
   return (
     <group>
       {shore && (
@@ -1153,7 +1167,7 @@ function Lake({ theme }: { theme: ThemeDef }) {
         </mesh>
       )}
       <mesh geometry={water} receiveShadow>
-        <meshStandardMaterial color={theme.water} transparent opacity={0.9} roughness={0.05} metalness={0.45} side={THREE.DoubleSide} />
+        <WaterMaterial color={theme.water} indoor={indoor} />
       </mesh>
     </group>
   );
@@ -1418,7 +1432,7 @@ function SubZone({ theme }: { theme: ThemeDef }) {
       const every = Math.max(1, Math.round(10 / path.ds));
       for (let i = 0; i < path.n; i += every) {
         const t = path.prog[i];
-        const inside = ZONES.some((z) => z.type === "sub" && t >= z.t0 && t <= z.t1);
+        const inside = zoneOnPath(path.id, t)?.type === "sub";
         if (!inside) {
           flush();
           continue;
@@ -1758,6 +1772,7 @@ function Scatter() {
     []
   );
 
+  useEffect(() => () => Object.values(geo).forEach((g) => g.dispose()), [geo]);
   const kinds = ["rock", "tuft", "crystal", "tree", "pine", "cactus", "coral", "tower"] as const;
 
   const buckets = useMemo(() => {
@@ -1828,24 +1843,11 @@ function InstancedProp({
   geometry: THREE.BufferGeometry;
   list: { m: THREE.Matrix4; colour: THREE.Color }[];
 }) {
-  return (
-    <instancedMesh
-      ref={(el) => {
-        if (!el) return;
-        list.forEach((x, i) => {
-          el.setMatrixAt(i, x.m);
-          el.setColorAt(i, x.colour);
-        });
-        el.instanceMatrix.needsUpdate = true;
-        if (el.instanceColor) el.instanceColor.needsUpdate = true;
-        el.computeBoundingSphere();
-      }}
-      args={[geometry, undefined, list.length]}
-      receiveShadow
-    >
-      <meshStandardMaterial roughness={0.92} flatShading />
-    </instancedMesh>
-  );
+  const material = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.92, flatShading: true }), []);
+  const batches = useMemo(() => spatialInstances(geometry, material, list), [geometry, material, list]);
+  useEffect(() => () => batches.forEach((mesh) => mesh.dispose()), [batches]);
+  useEffect(() => () => material.dispose(), [material]);
+  return <group dispose={null}>{batches.map((mesh) => <primitive key={mesh.uuid} object={mesh} />)}</group>;
 }
 
 /** Tint of a route's tarmac, so the way over, the way under and the risky cut read apart from the main road. */
@@ -1868,6 +1870,7 @@ function boardTexture(draw: (g: CanvasRenderingContext2D) => void, bg = "rgba(8,
   g.fillRect(0, 0, 128, 128);
   draw(g);
   const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
   return t;
 }
@@ -1930,6 +1933,7 @@ function RouteSigns() {
       };
     });
   }, []);
+  useEffect(() => () => signs.forEach((sign) => sign.tex.dispose()), [signs]);
   return (
     <group>
       {signs.map((s, i) => (
@@ -2000,6 +2004,7 @@ function BendChevrons({ theme }: { theme: ThemeDef }) {
     }
     return out;
   }, []);
+  useEffect(() => () => tex.dispose(), [tex]);
   if (!mats.length) return null;
   return (
     <instancedMesh
@@ -2053,6 +2058,7 @@ function JumpMarks({ theme }: { theme: ThemeDef }) {
     }
     return out;
   }, []);
+  useEffect(() => () => tex.dispose(), [tex]);
   return (
     <group>
       {lips.map((l, i) => (
@@ -2135,10 +2141,13 @@ function SectorGates({ themes }: { themes: ThemeDef[] }) {
         g.textAlign = "center";
         g.textBaseline = "middle";
         g.fillText(th.name, 256, 52);
-        return new THREE.CanvasTexture(c);
+        const texture = new THREE.CanvasTexture(c);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        return texture;
       }),
     [gates, themes]
   );
+  useEffect(() => () => plates.forEach((texture) => texture.dispose()), [plates]);
   return (
     <group>
       {gates.map((gt, i) => {
@@ -2221,7 +2230,6 @@ function Placed({ geometry, mats, children }: { geometry: THREE.BufferGeometry; 
         el.computeBoundingSphere();
       }}
       args={[geometry, undefined, mats.length]}
-      frustumCulled={false}
     >
       {children}
     </instancedMesh>
@@ -2317,6 +2325,7 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
   // the aesthetics of the lap, as they look on this lap
   const themes = useMemo(() => (def.sectors ?? [{ t0: 0, theme: def.theme }]).map((s) => themeOnLap(s.theme, lap)), [def, lap]);
   const roadTextures = useMemo(() => themes.map((t) => makeRoadTexture(t)), [themes]);
+  useEffect(() => () => roadTextures.forEach((texture) => texture.dispose()), [roadTextures]);
   const barriers = useMemo(() => buildBarriers(), []);
   const rails = useMemo(() => buildRails(themes), [themes]);
   const banks = useMemo(() => (def.floor !== undefined && def.sea === undefined ? buildBanks(def.floor) : null), [def]);
@@ -2325,6 +2334,7 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
   const ground = useMemo(() => (voidCircuit ? null : buildGround()), [voidCircuit]);
   const techno = theme.id === "techno";
   const floorTexture = useMemo(() => (def.floor !== undefined && def.sea === undefined ? makeFloorTexture(theme) : null), [theme, def]);
+  useEffect(() => () => floorTexture?.dispose(), [floorTexture]);
 
   return (
     <group>
@@ -2360,7 +2370,7 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
       {def.sea !== undefined ? (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, def.sea, 0]}>
           <circleGeometry args={[1500, 72]} />
-          <meshStandardMaterial color={theme.water} transparent opacity={0.72} roughness={0.06} metalness={0.4} side={THREE.DoubleSide} depthWrite={false} />
+          <WaterMaterial color={theme.water} sea />
         </mesh>
       ) : (
         <Lake theme={theme} />
@@ -2434,6 +2444,7 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
           {def.theme === "eden" && <Eden theme={theme} />}
         </>
       )}
+      <TrackLife themes={themes} />
       <Motes themes={themes} />
     </group>
   );

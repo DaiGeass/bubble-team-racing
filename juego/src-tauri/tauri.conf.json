@@ -31,7 +31,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi", "deb", "appimage"],
+    "targets": [
+      "nsis",
+      "msi",
+      "deb",
+      "appimage"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -40,15 +45,18 @@
       "icons/icon.ico"
     ],
     "category": "Game",
-    "shortDescription": "Aero kart racing with 14 circuits, gaps, shortcuts and fusion turrets",
-    "longDescription": "Bubble Team Racing: pick a character, a chassis and one of six finishes, then race fourteen circuits that climb, fall through gaps and split into stacked shortcuts while your partner mans the fusion turret.",
+    "shortDescription": "Aero kart racing with 41 circuits, shortcuts and fusion turrets",
+    "longDescription": "Bubble Team Racing: pick a character, a chassis and one of six finishes, then race 41 circuits that climb, fall through gaps and split into stacked shortcuts while your partner mans the fusion turret.",
     "copyright": "Copyright (c) 2026 Bubble Team. Licensed under the GPL-3.0-or-later.",
     "licenseFile": "../../LICENSE",
     "publisher": "Bubble Team",
     "homepage": "https://github.com/DaiGeass/bubble-team-racing",
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1"]
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0"
+        ]
       },
       "appimage": {
         "bundleMediaFramework": false
@@ -60,11 +68,17 @@
       },
       "nsis": {
         "installMode": "perMachine",
-        "languages": ["English", "Spanish"],
+        "languages": [
+          "English",
+          "Spanish"
+        ],
         "displayLanguageSelector": true
       },
       "wix": {
-        "language": ["en-US", "es-ES"]
+        "language": [
+          "en-US",
+          "es-ES"
+        ]
       }
     }
   }

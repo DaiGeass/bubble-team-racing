@@ -1,7 +1,14 @@
-import { useMemo, useRef } from "react";
+import VehicleDetails from "./VehicleDetails";
+import { characterPhase, eyeOpen } from "../modelDetail";
+import { Paint } from "./Models";
+import { createWheelResources, hasRoadWheels } from "./wheelResources";
+import { VehicleMotion } from "./vehicleMotion";
+import { VehicleEffects } from "./vehicleEffects";
+import { useLayoutEffect, useMemo, useRef } from "react";
+import { frameBlend } from "../motion";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import type { BoatId, BoosterId, CharacterDef, PlaneId, ShapeId, SpoilerId, SubId, VehicleMode, WheelStyle } from "../data";
+import type { BoatId, BoosterId, CharacterDef, FinishId, PlaneId, ShapeId, SpoilerId, SubId, VehicleMode, WheelStyle } from "../data";
 import { BoatAlt, ExtraShapes, PlaneAlt, SubModel } from "./Models";
 import { ModeModels } from "./Models2";
 import { Boat3, Hover3, Land3, Plane3, Sub3, SUB3 } from "./Models3";
@@ -11,6 +18,9 @@ export interface KartVisualState {
   shielded: boolean;
   steer: number;
   speedFrac: number;
+  speed?: number;
+  airborne?: boolean;
+  vy?: number;
   stunned: boolean;
   mode: VehicleMode;
   drift: boolean;
@@ -30,6 +40,7 @@ export interface VehicleConfig {
   decal: string;
   wheel: WheelStyle;
   shape: ShapeId;
+  finish?: FinishId;
   spoiler?: SpoilerId;
   booster?: BoosterId;
   boat?: BoatId;
@@ -48,45 +59,11 @@ interface Props {
   glow?: string;
 }
 
-function Wheel({ style, position, spin }: { style: WheelStyle; position: [number, number, number]; spin: React.MutableRefObject<number> }) {
-  const ref = useRef<THREE.Group>(null);
-  useFrame(() => {
-    if (ref.current) ref.current.rotation.x = spin.current;
-  });
-  const rim =
-    style === "sporty" ? "#ff3b6b" : style === "glow" ? "#7dffea" : style === "chrome" ? "#e8f1ff" : style === "spike" ? "#ffb347" : "#3a3f55";
-  return (
-    <group ref={ref} position={position}>
-      <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[0.48, 0.48, style === "spike" ? 0.44 : 0.36, 14]} />
-        <meshStandardMaterial color={style === "spike" ? "#242018" : "#15161d"} roughness={style === "spike" ? 0.95 : 0.7} />
-      </mesh>
-      {style === "spike" ? (
-        <mesh rotation={[0, 0, Math.PI / 2]}>
-          <icosahedronGeometry args={[0.3, 0]} />
-          <meshStandardMaterial color={rim} emissive={rim} emissiveIntensity={0.4} roughness={0.4} metalness={0.5} />
-        </mesh>
-      ) : (
-        <mesh rotation={[0, 0, Math.PI / 2]}>
-          <cylinderGeometry args={[0.26, 0.26, 0.38, style === "chrome" ? 16 : 10]} />
-          <meshStandardMaterial
-            color={rim}
-            emissive={rim}
-            emissiveIntensity={style === "glow" ? 2.4 : style === "sporty" ? 0.6 : style === "chrome" ? 0.15 : 0.1}
-            roughness={style === "chrome" ? 0.05 : 0.25}
-            metalness={style === "chrome" ? 1 : 0.7}
-            toneMapped={style !== "chrome"}
-          />
-        </mesh>
-      )}
-    </group>
-  );
-}
-
 /** Shared kawaii face used by every Frutiger life-form. */
-function Face({ char, glow, z = 0.3, y = 0 }: { char: CharacterDef; glow?: string; z?: number; y?: number }) {
+function Face({ char, glow, eyes, z = 0.3, y = 0 }: { char: CharacterDef; glow?: string; eyes: React.RefObject<THREE.Group | null>; z?: number; y?: number }) {
   return (
     <group position={[0, y, z]}>
+      <group ref={eyes}>
       {char.eye === "visor" ? (
         <mesh position={[0, 0.06, 0.02]}>
           <boxGeometry args={[0.42, 0.13, 0.08]} />
@@ -131,6 +108,7 @@ function Face({ char, glow, z = 0.3, y = 0 }: { char: CharacterDef; glow?: strin
           </mesh>
         </>
       )}
+      </group>
       {/* smile */}
       <mesh position={[0, -0.09, 0.02]} rotation={[0.3, 0, 0]}>
         <torusGeometry args={[0.07, 0.016, 6, 10, Math.PI]} />
@@ -150,12 +128,19 @@ function Face({ char, glow, z = 0.3, y = 0 }: { char: CharacterDef; glow?: strin
 }
 
 /** Frutiger Aero life-form pilot: droplet, bubble, leaf, crystal, holo, cloud, star or flame. */
-function Pilot({ char, glow, gunner }: { char: CharacterDef; glow?: string; gunner?: boolean }) {
-  const bob = useRef(Math.random() * 6);
+function Pilot({ char, glow, gunner, stateRef }: { char: CharacterDef; glow?: string; gunner?: boolean; stateRef?: React.MutableRefObject<KartVisualState> }) {
+  const personality = useMemo(() => characterPhase(char.id), [char.id]);
+  const bob = useRef(personality * 6);
+  const eyes = useRef<THREE.Group>(null);
   const root = useRef<THREE.Group>(null);
   const aura = useRef<THREE.Mesh>(null);
   useFrame((_, dt) => {
-    bob.current += dt;
+    if (!root.current?.parent?.visible || !root.current.parent.parent?.visible) return;
+    bob.current += Math.min(dt, 0.1);
+    if (eyes.current) {
+      eyes.current.scale.y = eyeOpen(bob.current, personality, !!stateRef?.current.stunned);
+      eyes.current.position.x = (stateRef?.current.steer ?? 0) * 0.02;
+    }
     if (root.current) {
       root.current.position.y = 0.78 + Math.sin(bob.current * 3.4) * 0.05;
       root.current.rotation.z = Math.sin(bob.current * 2.1) * 0.06;
@@ -194,6 +179,12 @@ function Pilot({ char, glow, gunner }: { char: CharacterDef; glow?: string; gunn
   return (
     <group position={[0, gunner ? 0.2 : 0.3, gunner ? 0 : -0.15]} scale={gunner ? 0.85 : 1}>
       <group ref={root} position={[0, 0.78, 0]}>
+        {!gunner && [-1, 1].map((side) => (
+          <mesh key={side} position={[side * 0.27, -0.25, 0.43]} scale={[1, 0.8, 1.2]}>
+            <sphereGeometry args={[0.085, 8, 6]} />
+            <meshStandardMaterial color={char.secondary} roughness={0.3} metalness={0.1} />
+          </mesh>
+        ))}
         {/* inner luminous core + soft halo makes every life-form glow like wet glass */}
         <mesh scale={0.34}>
           <sphereGeometry args={[1, 12, 12]} />
@@ -218,7 +209,7 @@ function Pilot({ char, glow, gunner }: { char: CharacterDef; glow?: string; gunn
               <sphereGeometry args={[0.09, 10, 10]} />
               <meshBasicMaterial color="#ffffff" transparent opacity={0.85} toneMapped={false} />
             </mesh>
-            <Face char={char} glow={glow} z={0.36} />
+            <Face char={char} glow={glow} eyes={eyes} z={0.36} />
           </group>
         )}
         {char.form === "bubble" && (
@@ -244,7 +235,7 @@ function Pilot({ char, glow, gunner }: { char: CharacterDef; glow?: string; gunn
               <sphereGeometry args={[0.055, 8, 8]} />
               {glassy(char.primary, 0.5)}
             </mesh>
-            <Face char={char} glow={glow} z={0.3} />
+            <Face char={char} glow={glow} eyes={eyes} z={0.3} />
           </group>
         )}
         {char.form === "leaf" && (
@@ -266,7 +257,7 @@ function Pilot({ char, glow, gunner }: { char: CharacterDef; glow?: string; gunn
               <sphereGeometry args={[0.18, 10, 10]} />
               {glassy(char.secondary)}
             </mesh>
-            <Face char={char} glow={glow} z={0.33} />
+            <Face char={char} glow={glow} eyes={eyes} z={0.33} />
           </group>
         )}
         {char.form === "crystal" && (
@@ -289,7 +280,7 @@ function Pilot({ char, glow, gunner }: { char: CharacterDef; glow?: string; gunn
               <octahedronGeometry args={[0.48, 0]} />
               <meshBasicMaterial color={char.secondary} transparent opacity={0.5} toneMapped={false} />
             </mesh>
-            <Face char={char} glow={glow} z={0.3} y={0.02} />
+            <Face char={char} glow={glow} eyes={eyes} z={0.3} y={0.02} />
           </group>
         )}
         {char.form === "holo" && (
@@ -306,7 +297,7 @@ function Pilot({ char, glow, gunner }: { char: CharacterDef; glow?: string; gunn
               <sphereGeometry args={[0.07, 8, 8]} />
               <meshStandardMaterial color={glow ?? "#7dffea"} emissive={glow ?? "#7dffea"} emissiveIntensity={3} toneMapped={false} />
             </mesh>
-            <Face char={char} glow={glow} z={0.32} />
+            <Face char={char} glow={glow} eyes={eyes} z={0.32} />
           </group>
         )}
         {char.form === "cloud" && (
@@ -327,7 +318,7 @@ function Pilot({ char, glow, gunner }: { char: CharacterDef; glow?: string; gunn
               <sphereGeometry args={[0.4, 14, 14]} />
               {glassy(char.primary)}
             </mesh>
-            <Face char={char} glow={glow} z={0.38} />
+            <Face char={char} glow={glow} eyes={eyes} z={0.38} />
           </group>
         )}
         {char.form === "star" && (
@@ -349,7 +340,7 @@ function Pilot({ char, glow, gunner }: { char: CharacterDef; glow?: string; gunn
                 {glassy(char.secondary, 1, char.primary, 0.5)}
               </mesh>
             ))}
-            <Face char={char} glow={glow} z={0.32} />
+            <Face char={char} glow={glow} eyes={eyes} z={0.32} />
           </group>
         )}
         {char.form === "flame" && (
@@ -366,7 +357,7 @@ function Pilot({ char, glow, gunner }: { char: CharacterDef; glow?: string; gunn
               <coneGeometry args={[0.26, 0.5, 10]} />
               {glassy(char.secondary, 0.9, char.primary, 0.9)}
             </mesh>
-            <Face char={char} glow={glow} z={0.33} />
+            <Face char={char} glow={glow} eyes={eyes} z={0.33} />
           </group>
         )}
       </group>
@@ -374,14 +365,14 @@ function Pilot({ char, glow, gunner }: { char: CharacterDef; glow?: string; gunn
   );
 }
 
-function Spoiler({ kind, decal, glow }: { kind: SpoilerId; decal: string; glow?: string }) {
+function Spoiler({ kind, decal, glow, finish }: { kind: SpoilerId; decal: string; glow?: string; finish?: FinishId }) {
   if (kind === "none") return null;
   if (kind === "wing")
     return (
       <group position={[0, 0.95, -1.05]}>
         <mesh>
           <boxGeometry args={[1.5, 0.08, 0.4]} />
-          <meshStandardMaterial color={decal} roughness={0.2} metalness={0.5} />
+          <Paint color={decal} rough={0.2} metal={0.5} finish={finish} />
         </mesh>
         <mesh position={[-0.6, -0.18, 0]}>
           <boxGeometry args={[0.08, 0.3, 0.3]} />
@@ -434,20 +425,20 @@ function Boosters({ kind, glow }: { kind: BoosterId; glow?: string }) {
 function Chassis({
   vehicle,
   glow,
-  spin,
   hullRef,
   wingRef,
   wheelRef,
 }: {
   vehicle: VehicleConfig;
   glow?: string;
-  spin: React.MutableRefObject<number>;
   hullRef: React.MutableRefObject<THREE.Group | null>;
   wingRef: React.MutableRefObject<THREE.Group | null>;
   wheelRef: React.MutableRefObject<THREE.Group | null>;
 }) {
-  const { body, decal, shape } = vehicle as any; const finish = (vehicle as any).finish as import("../data").FinishId | undefined;
+  const { body, decal, shape, finish } = vehicle;
   const propRef = useRef<THREE.Mesh>(null);
+  const wheels = useMemo(() => hasRoadWheels(vehicle.shape) ? createWheelResources(vehicle.wheel) : null, [vehicle.shape, vehicle.wheel]);
+  useLayoutEffect(() => () => wheels?.dispose(), [wheels]);
   useFrame((_, dt) => {
     if (propRef.current && wingRef.current?.visible) propRef.current.rotation.z += dt * 30;
   });
@@ -458,15 +449,15 @@ function Chassis({
         <>
           <mesh position={[0, 0.4, 0]} castShadow receiveShadow>
             <boxGeometry args={[1.2, 0.34, 2.15]} />
-            <meshStandardMaterial color={body} roughness={0.22} metalness={0.4} />
+            <Paint color={body} rough={0.22} metal={0.4} finish={finish} />
           </mesh>
           <mesh position={[0, 0.62, -0.2]}>
             <boxGeometry args={[1.0, 0.16, 1.2]} />
-            <meshStandardMaterial color={decal} roughness={0.25} metalness={0.25} />
+            <Paint color={decal} rough={0.25} metal={0.25} finish={finish} />
           </mesh>
           <mesh position={[0, 0.4, 1.2]} rotation={[Math.PI / 2, 0, 0]} castShadow>
             <coneGeometry args={[0.58, 0.85, 4]} />
-            <meshStandardMaterial color={body} roughness={0.22} metalness={0.4} />
+            <Paint color={body} rough={0.22} metal={0.4} finish={finish} />
           </mesh>
           <mesh position={[0, 0.62, 0.62]} rotation={[-0.5, 0, 0]}>
             <boxGeometry args={[0.8, 0.45, 0.06]} />
@@ -478,7 +469,7 @@ function Chassis({
         <>
           <mesh position={[0, 0.62, 0]} castShadow>
             <sphereGeometry args={[1.05, 20, 14]} />
-            <meshStandardMaterial color={body} roughness={0.1} metalness={0.65} />
+            <Paint color={body} rough={0.1} metal={0.65} finish={finish} />
           </mesh>
           <mesh position={[0, 0.34, 0]} rotation={[Math.PI / 2, 0, 0]}>
             <torusGeometry args={[1.0, 0.17, 10, 26]} />
@@ -490,7 +481,7 @@ function Chassis({
         <>
           <mesh position={[0, 0.58, 0]} castShadow>
             <boxGeometry args={[1.5, 0.62, 2.2]} />
-            <meshStandardMaterial color={body} roughness={0.45} metalness={0.2} />
+            <Paint color={body} rough={0.45} metal={0.2} finish={finish} />
           </mesh>
           <mesh position={[0, 1.0, -0.5]} castShadow>
             <boxGeometry args={[1.15, 0.32, 0.95]} />
@@ -506,7 +497,7 @@ function Chassis({
         <>
           <mesh position={[0, 0.55, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
             <coneGeometry args={[0.6, 3.0, 12]} />
-            <meshStandardMaterial color={body} roughness={0.12} metalness={0.8} />
+            <Paint color={body} rough={0.12} metal={0.8} finish={finish} />
           </mesh>
           <mesh position={[0, 0.62, -0.95]}>
             <boxGeometry args={[2.0, 0.09, 0.55]} />
@@ -518,11 +509,11 @@ function Chassis({
         <>
           <mesh position={[0, 0.5, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
             <capsuleGeometry args={[0.62, 1.6, 6, 14]} />
-            <meshStandardMaterial color={body} roughness={0.18} metalness={0.5} />
+            <Paint color={body} rough={0.18} metal={0.5} finish={finish} />
           </mesh>
           <mesh position={[0, 0.78, -0.15]}>
             <boxGeometry args={[1.0, 0.14, 1.5]} />
-            <meshStandardMaterial color={decal} roughness={0.3} metalness={0.3} />
+            <Paint color={decal} rough={0.3} metal={0.3} finish={finish} />
           </mesh>
         </>
       )}
@@ -530,7 +521,7 @@ function Chassis({
         <>
           <mesh position={[0, 0.55, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
             <capsuleGeometry args={[0.36, 1.9, 6, 12]} />
-            <meshStandardMaterial color={body} roughness={0.15} metalness={0.6} />
+            <Paint color={body} rough={0.15} metal={0.6} finish={finish} />
           </mesh>
           <mesh position={[0, 0.85, 0.75]} rotation={[-0.6, 0, 0]}>
             <boxGeometry args={[0.65, 0.4, 0.07]} />
@@ -546,7 +537,7 @@ function Chassis({
         <>
           <mesh position={[0, 0.5, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
             <cylinderGeometry args={[1.15, 1.15, 0.34, 20]} />
-            <meshStandardMaterial color={body} roughness={0.1} metalness={0.7} />
+            <Paint color={body} rough={0.1} metal={0.7} finish={finish} />
           </mesh>
           <mesh position={[0, 0.5, 0]} rotation={[Math.PI / 2, 0, 0]}>
             <torusGeometry args={[1.15, 0.12, 10, 26]} />
@@ -561,11 +552,11 @@ function Chassis({
 
       <ExtraShapes shape={shape} body={body} decal={decal} glow={glow} finish={finish} />
       <Land3 shape={shape} body={body} decal={decal} glow={glow} finish={finish} />
-      <Spoiler kind={vehicle.spoiler ?? "none"} decal={decal} glow={glow} />
+      <Spoiler kind={vehicle.spoiler ?? "none"} decal={decal} glow={glow} finish={finish} />
       <Boosters kind={vehicle.booster ?? "single"} glow={glow} />
 
       {/* boat hull */}
-      <group ref={hullRef} visible={false}>
+      {(vehicle.boat ?? "cat") === "cat" && <group ref={hullRef} visible={false}>
         <mesh position={[0, 0.02, 0.1]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <capsuleGeometry args={[0.9, 2.2, 6, 14]} />
           <meshStandardMaterial color="#ffffff" roughness={0.15} metalness={0.25} />
@@ -583,13 +574,13 @@ function Chassis({
           <coneGeometry args={[0.32, 0.7, 4]} />
           <meshStandardMaterial color="#ffffff" roughness={0.2} />
         </mesh>
-      </group>
+      </group>}
 
       {/* plane wings + propeller */}
-      <group ref={wingRef} visible={false}>
+      {(vehicle.plane ?? "wing") === "wing" && <group ref={wingRef} visible={false}>
         <mesh position={[0, 0.78, -0.25]} castShadow>
           <boxGeometry args={[3.6, 0.1, 0.8]} />
-          <meshStandardMaterial color={decal} roughness={0.15} metalness={0.55} />
+          <Paint color={decal} rough={0.15} metal={0.55} finish={finish} />
         </mesh>
         <mesh position={[-1.75, 1.05, -0.25]}>
           <boxGeometry args={[0.1, 0.62, 0.5]} />
@@ -601,20 +592,24 @@ function Chassis({
         </mesh>
         <mesh position={[0, 0.95, -1.2]}>
           <boxGeometry args={[0.14, 1.05, 0.4]} />
-          <meshStandardMaterial color={body} roughness={0.25} metalness={0.4} />
+          <Paint color={body} rough={0.25} metal={0.4} finish={finish} />
         </mesh>
         <mesh ref={propRef} position={[0, 0.72, 1.45]}>
           <boxGeometry args={[1.8, 0.08, 0.12]} />
           <meshStandardMaterial color="#eaf6ff" transparent opacity={0.6} toneMapped={false} />
         </mesh>
-      </group>
+      </group>}
 
-      <group ref={wheelRef}>
-        <Wheel style={vehicle.wheel} position={[-0.72, 0.46, 0.85]} spin={spin} />
-        <Wheel style={vehicle.wheel} position={[0.72, 0.46, 0.85]} spin={spin} />
-        <Wheel style={vehicle.wheel} position={[-0.72, 0.46, -0.85]} spin={spin} />
-        <Wheel style={vehicle.wheel} position={[0.72, 0.46, -0.85]} spin={spin} />
-      </group>
+      {wheels && <group ref={wheelRef} dispose={null}>
+        {([-0.72, 0.72, -0.72, 0.72] as const).map((x, i) => (
+          <group key={i} position={[x, 0.46, i < 2 ? 0.85 : -0.85]}>
+            <group>
+              <mesh geometry={wheels.tireGeometry} material={wheels.tireMaterial} rotation={[0, 0, Math.PI / 2]} castShadow />
+              <mesh geometry={wheels.rimGeometry} material={wheels.rimMaterial} rotation={[0, 0, Math.PI / 2]} />
+            </group>
+          </group>
+        ))}
+      </group>}
     </group>
   );
 }
@@ -640,17 +635,34 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
   const gunBarrel = useRef<THREE.Group>(null);
   const t = useRef(Math.random() * 10);
   const spin = useRef(0);
-  const ghostApplied = useRef(false);
+  const motion = useRef(new VehicleMotion());
+  const effects = useRef<VehicleEffects | null>(null);
   const magnetRing = useRef<THREE.Mesh>(null);
 
   const altChar = useMemo(() => partner ?? null, [partner]);
+  useLayoutEffect(() => {
+    if (!body.current) return;
+    const current = new VehicleEffects(body.current);
+    effects.current = current;
+    return () => {
+      current.restore();
+      effects.current = null;
+    };
+  }, [vehicle, character, altChar, glow]);
 
   useFrame((_, delta) => {
     t.current += delta;
     const st = stateRef?.current;
     const mode = st?.mode ?? "land";
     const speedFrac = st?.speedFrac ?? 0;
-    spin.current += delta * (6 + speedFrac * 45);
+    const speed = st?.speed ?? speedFrac * 30;
+    const pose = motion.current;
+    pose.update(delta, speed, st?.steer ?? 0, !!st?.airborne, st?.vy ?? 0, st?.activeIsPartner && altChar ? altChar.weight : character.weight);
+    spin.current += Math.min(delta, 0.1) * speed / 0.48;
+    if (wheelRef.current?.visible) wheelRef.current.children.forEach((wheel, i) => {
+      wheel.rotation.y = i < 2 ? (st?.steer ?? 0) * 0.4 : 0;
+      wheel.children[0].rotation.x = spin.current;
+    });
 
     const boatKind = vehicle.boat ?? "cat";
     const planeKind = vehicle.plane ?? "wing";
@@ -669,19 +681,14 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
     if (hoverRef.current) hoverRef.current.visible = mode === "hover";
     if (wheelRef.current)
       wheelRef.current.visible =
-        mode === "land" &&
-        vehicle.shape !== "hover" &&
-        vehicle.shape !== "ufo" &&
-        vehicle.shape !== "tank" &&
-        vehicle.shape !== "orbit" &&
-        vehicle.shape !== "phantom" &&
-        vehicle.shape !== "board" &&
-        vehicle.shape !== "pod";
+        mode === "land" && hasRoadWheels(vehicle.shape);
 
     const usePartner = !!(st?.activeIsPartner && altChar);
     const fused = !!(st?.fused && altChar);
     if (mainPilot.current) mainPilot.current.visible = !usePartner;
     if (altPilot.current) altPilot.current.visible = usePartner;
+    if (mainPilot.current) { mainPilot.current.rotation.z = pose.lean; mainPilot.current.rotation.x = pose.pitch * 0.6; }
+    if (altPilot.current) { altPilot.current.rotation.z = pose.lean; altPilot.current.rotation.x = pose.pitch * 0.6; }
     if (gunBarrel.current) gunBarrel.current.visible = !!st?.gunning;
     if (turret.current) {
       turret.current.visible = fused;
@@ -690,20 +697,18 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
     if (gunnerMain.current) gunnerMain.current.visible = fused && usePartner;
     if (gunnerAlt.current) gunnerAlt.current.visible = fused && !usePartner;
 
-    if (body.current && st?.exploding) {
-      const f = Math.abs(Math.sin(t.current * 40));
-      (body.current as any).traverse((ch: any) => { if (ch.isMesh && ch.material) { const m = ch.material; if (Array.isArray(m)) m.forEach((mm:any)=>mm.emissive?.setHex?.(f>0.5?0xff4d6d:0xffffff)); else m.emissive?.setHex?.(f>0.5?0xff4d6d:0xffffff); } });
-    }
     if (body.current) {
       const bobAmp = mode === "boat" ? 0.08 : mode === "plane" ? 0.06 : 0.02;
-      body.current.position.y = Math.sin(t.current * (mode === "boat" ? 3.2 : 6)) * bobAmp;
+      body.current.position.y = Math.sin(t.current * (mode === "boat" ? 3.2 : 6)) * bobAmp + pose.suspension.value;
+      const squash = THREE.MathUtils.clamp(1 + pose.suspension.value * 0.45 + (st?.airborne ? 0.025 : 0), 0.94, 1.04);
+      body.current.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
       // lean INTO the turn (steer > 0 = turning right on screen)
       const tilt = (st?.steer ?? 0) * (mode === "plane" ? 0.55 : 0.17) * -1;
-      body.current.rotation.z = THREE.MathUtils.lerp(body.current.rotation.z, tilt, 0.16);
-      const pitch = mode === "plane" ? -0.14 - speedFrac * 0.1 : mode === "boat" ? 0.07 : -speedFrac * 0.05;
-      body.current.rotation.x = THREE.MathUtils.lerp(body.current.rotation.x, pitch, 0.12);
+      body.current.rotation.z = THREE.MathUtils.lerp(body.current.rotation.z, tilt, frameBlend(0.16, Math.min(delta, 0.1)));
+      const pitch = mode === "plane" ? -0.14 - speedFrac * 0.1 : (mode === "boat" ? 0.07 : -speedFrac * 0.05) + pose.pitch;
+      body.current.rotation.x = THREE.MathUtils.lerp(body.current.rotation.x, pitch, frameBlend(0.12, Math.min(delta, 0.1)));
       if (st?.stunned) body.current.rotation.y = Math.sin(t.current * 34) * 0.4;
-      else body.current.rotation.y = THREE.MathUtils.lerp(body.current.rotation.y, 0, 0.2);
+      else body.current.rotation.y = THREE.MathUtils.lerp(body.current.rotation.y, 0, frameBlend(0.2, Math.min(delta, 0.1)));
     }
     if (flame.current) {
       const on = !!st?.boosting;
@@ -718,33 +723,7 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
       shield.current.rotation.x += delta;
       (shield.current.material as THREE.MeshStandardMaterial).opacity = 0.3 + Math.sin(t.current * 7) * 0.12;
     }
-    // GHOST: the whole vehicle turns into translucent glass
-    if (body.current && st?.exploding) {
-      const f = Math.abs(Math.sin(t.current * 40));
-      (body.current as any).traverse((ch: any) => { if (ch.isMesh && ch.material) { const m = ch.material; if (Array.isArray(m)) m.forEach((mm:any)=>mm.emissive?.setHex?.(f>0.5?0xff4d6d:0xffffff)); else m.emissive?.setHex?.(f>0.5?0xff4d6d:0xffffff); } });
-    }
-    if (body.current) {
-      const ghost = !!st?.ghost;
-      if (ghost !== ghostApplied.current) {
-        ghostApplied.current = ghost;
-        body.current.traverse((o) => {
-          const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
-          if (!m) return;
-          const list = Array.isArray(m) ? m : [m];
-          for (const mat of list) {
-            const anyMat = mat as THREE.Material & { opacity: number; transparent: boolean; userData: Record<string, number> };
-            if (ghost) {
-              if (anyMat.userData.baseOpacity === undefined) anyMat.userData.baseOpacity = anyMat.opacity;
-              anyMat.transparent = true;
-              anyMat.opacity = Math.min(anyMat.userData.baseOpacity ?? 1, 0.34);
-            } else if (anyMat.userData.baseOpacity !== undefined) {
-              anyMat.opacity = anyMat.userData.baseOpacity;
-              anyMat.transparent = anyMat.userData.baseOpacity < 1;
-            }
-          }
-        });
-      }
-    }
+    effects.current?.update(!!st?.ghost, !!st?.exploding, t.current);
     if (magnetRing.current) {
       const on = !!st?.magnet;
       magnetRing.current.visible = on;
@@ -761,40 +740,41 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
   return (
     <group scale={scale}>
       {isPlayer && (
-        <mesh ref={pad} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+        <mesh userData={{ previewIgnore: true }} ref={pad} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
           <ringGeometry args={[1.4, 1.85, 30]} />
           <meshBasicMaterial color={glow ?? "#ffffff"} transparent opacity={0.45} toneMapped={false} side={THREE.DoubleSide} />
         </mesh>
       )}
       <group ref={body}>
         <group ref={chassisRef}>
-          <Chassis vehicle={vehicle} glow={glow} spin={spin} hullRef={hullRef} wingRef={wingRef} wheelRef={wheelRef} />
+          <Chassis vehicle={vehicle} glow={glow} hullRef={hullRef} wingRef={wingRef} wheelRef={wheelRef} />
         </group>
         <group ref={boatAltRef} visible={false}>
-          <BoatAlt kind={vehicle.boat ?? "cat"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
-          <Boat3 kind={vehicle.boat ?? "cat"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
+          <BoatAlt kind={vehicle.boat ?? "cat"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
+          <Boat3 kind={vehicle.boat ?? "cat"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
         </group>
         <group ref={planeAltRef} visible={false}>
-          <PlaneAlt kind={vehicle.plane ?? "wing"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
-          <Plane3 kind={vehicle.plane ?? "wing"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
+          <PlaneAlt kind={vehicle.plane ?? "wing"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
+          <Plane3 kind={vehicle.plane ?? "wing"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
         </group>
         <group ref={subRef} visible={false}>
           {SUB3.includes(vehicle.sub ?? "classic") ? (
-            <Sub3 kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
+            <Sub3 kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
           ) : (
-            <SubModel kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
+            <SubModel kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
           )}
         </group>
         <group ref={hoverRef} visible={false}>
-          <Hover3 kind={vehicle.hover ?? "maglev"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={(vehicle as any).finish} />
+          <Hover3 kind={vehicle.hover ?? "maglev"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
         </group>
         <ModeModels vehicle={vehicle} stateRef={stateRef} glow={glow} />
+        <VehicleDetails stateRef={stateRef} decal={vehicle.decal} narrow={vehicle.shape === "moto" || vehicle.shape === "board"} />
         <group ref={mainPilot}>
-          <Pilot char={character} glow={glow} />
+          <Pilot char={character} glow={glow} stateRef={stateRef} />
         </group>
         {altChar && (
           <group ref={altPilot} visible={false}>
-            <Pilot char={altChar} glow={glow} />
+            <Pilot char={altChar} glow={glow} stateRef={stateRef} />
           </group>
         )}
         {/* riding on another kart as its gunner: this kart is the turret, and this is its barrel */}
@@ -824,22 +804,22 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
               <meshStandardMaterial color={glow ?? "#7de1ff"} emissive={glow ?? "#7de1ff"} emissiveIntensity={1.8} toneMapped={false} />
             </mesh>
             <group ref={gunnerAlt} visible={false}>
-              <Pilot char={altChar} glow={glow} gunner />
+              <Pilot char={altChar} glow={glow} stateRef={stateRef} gunner />
             </group>
             <group ref={gunnerMain} visible={false}>
-              <Pilot char={character} glow={glow} gunner />
+              <Pilot char={character} glow={glow} stateRef={stateRef} gunner />
             </group>
           </group>
         )}
-        <mesh ref={flame} position={[0, 0.5, -1.6]} rotation={[Math.PI / 2, 0, 0]}>
+        <mesh userData={{ previewIgnore: true }} ref={flame} position={[0, 0.5, -1.6]} rotation={[Math.PI / 2, 0, 0]}>
           <coneGeometry args={[0.36, 1.3, 8]} />
           <meshStandardMaterial color={glow ?? "#7de1ff"} emissive={glow ?? "#7de1ff"} emissiveIntensity={4} transparent opacity={0} toneMapped={false} />
         </mesh>
-        <mesh ref={magnetRing} position={[0, 0.35, 0]} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <mesh userData={{ previewIgnore: true }} ref={magnetRing} position={[0, 0.35, 0]} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
           <torusGeometry args={[2.4, 0.09, 8, 36]} />
           <meshBasicMaterial color="#fb923c" transparent opacity={0.55} toneMapped={false} />
         </mesh>
-        <mesh ref={shield} position={[0, 0.8, 0]} visible={false}>
+        <mesh userData={{ previewIgnore: true }} ref={shield} position={[0, 0.8, 0]} visible={false}>
           <icosahedronGeometry args={[1.8, 1]} />
           <meshStandardMaterial color="#8be9ff" transparent opacity={0.3} emissive="#8be9ff" emissiveIntensity={1.6} wireframe toneMapped={false} />
         </mesh>

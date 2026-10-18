@@ -31,7 +31,7 @@ export function Land3({ shape, body, decal, glow, finish }: C & { shape: ShapeId
         {/* the shell: a dome of plates over a pale belly */}
         <mesh position={[0, 0.5, -0.05]} scale={[1, 0.62, 1.25]} castShadow>
           <sphereGeometry args={[1.0, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2]} />
-          <meshStandardMaterial color={body} roughness={0.25} metalness={0.4} flatShading />
+          <Paint color={body} rough={0.25} metal={0.4} finish={finish} flatShading />
         </mesh>
         <mesh position={[0, 0.44, -0.05]} scale={[1.08, 0.2, 1.33]}>
           <cylinderGeometry args={[1, 0.9, 1, 10]} />

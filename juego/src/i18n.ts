@@ -16,6 +16,8 @@ export const LANGS: { code: Lang; label: string; flag: string; rtl?: boolean }[]
 export type Dict = Record<string, string>;
 
 const en: Dict = {
+  cleanLanding: "Clean landing!",
+  driftRelease: "Drift turbo!",
   appTitle: "Turbo Splash Circuit",
   appSubtitle: "Aero Kart Racing",
   tagline: "Shiny karts. Fluffy heroes. Pure speed.",
@@ -151,6 +153,8 @@ const en: Dict = {
 };
 
 const es: Dict = {
+  cleanLanding: "¡Aterrizaje limpio!",
+  driftRelease: "¡Turbo de derrape!",
   appTitle: "Turbo Splash Circuit",
   appSubtitle: "Carreras Aero Kart",
   tagline: "Karts brillantes. Héroes tiernos. Pura velocidad.",
@@ -286,6 +290,8 @@ const es: Dict = {
 };
 
 const fr: Dict = {
+  cleanLanding: "Atterrissage parfait !",
+  driftRelease: "Turbo de dérapage !",
   appTitle: "Turbo Splash Circuit",
   appSubtitle: "Course Aero Kart",
   tagline: "Karts brillants. Héros mignons. Pure vitesse.",
@@ -421,6 +427,8 @@ const fr: Dict = {
 };
 
 const ru: Dict = {
+  cleanLanding: "Чистое приземление!",
+  driftRelease: "Турбо дрифта!",
   appTitle: "Turbo Splash Circuit",
   appSubtitle: "Аэро-картинг",
   tagline: "Блестящие карты. Милые герои. Чистая скорость.",
@@ -556,6 +564,8 @@ const ru: Dict = {
 };
 
 const ja: Dict = {
+  cleanLanding: "ナイス着地！",
+  driftRelease: "ドリフトターボ！",
   appTitle: "ターボスプラッシュ・サーキット",
   appSubtitle: "エアロカートレース",
   tagline: "ピカピカのカート。かわいい仲間。純粋なスピード。",
@@ -691,6 +701,8 @@ const ja: Dict = {
 };
 
 const zh: Dict = {
+  cleanLanding: "完美落地！",
+  driftRelease: "漂移加速！",
   appTitle: "涡轮飞溅赛道",
   appSubtitle: "空气动感卡丁车竞速",
   tagline: "闪亮卡丁车，可爱英雄，纯粹速度。",
@@ -826,6 +838,8 @@ const zh: Dict = {
 };
 
 const ar: Dict = {
+  cleanLanding: "هبوط متقن!",
+  driftRelease: "توربو الانجراف!",
   appTitle: "تيربو سبلاش سيركت",
   appSubtitle: "سباق كارتينغ هوائي",
   tagline: "عربات لامعة، أبطال ظرفاء، سرعة خالصة.",
@@ -961,6 +975,8 @@ const ar: Dict = {
 };
 
 const he: Dict = {
+  cleanLanding: "נחיתה נקייה!",
+  driftRelease: "טורבו דריפט!",
   appTitle: "טורבו ספלאש סירקיט",
   appSubtitle: "מירוץ קארטים אוורירי",
   tagline: "קארטים נוצצים, גיבורים חמודים, מהירות טהורה.",

@@ -17,6 +17,7 @@ export interface ParticleBurstRequest {
 }
 
 const queue: ParticleBurstRequest[] = [];
+const emptyQueue: ParticleBurstRequest[] = [];
 
 export function emitParticles(req: ParticleBurstRequest) {
   queue.push(req);
@@ -28,7 +29,7 @@ export function emitDebris(req: Omit<ParticleBurstRequest, "ground">) {
 }
 
 export function drainParticleQueue(): ParticleBurstRequest[] {
-  if (queue.length === 0) return [];
+  if (queue.length === 0) return emptyQueue;
   const copy = queue.splice(0, queue.length);
   return copy;
 }

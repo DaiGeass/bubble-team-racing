@@ -87,7 +87,8 @@ jobs:
       - name: Type check and build the web bundle
         working-directory: juego
         run: |
-          npx tsc --noEmit
+          npm test
+          npm run typecheck
           npm run build
 
       - uses: tauri-apps/tauri-action@v0

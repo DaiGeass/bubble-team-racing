@@ -28,6 +28,7 @@ export default function App() {
   const raceRunId = useGame((s) => s.raceRunId);
   const themeId = useGame((s) => s.theme);
   const controls = useControls();
+  const graphicsQuality = useGame((s) => s.settings.graphicsQuality);
   const theme = THEMES[themeId] ?? THEMES.frutiger;
 
   const isRtl = LANGS.find((l) => l.code === lang)?.rtl;
@@ -80,7 +81,7 @@ export default function App() {
 
   return (
     <I18nContext.Provider value={i18nValue}>
-      <div className={`theme-${themeId} h-screen w-screen overflow-hidden text-sky-900`} style={vars}>
+      <div data-graphics-quality={graphicsQuality} className={`theme-${themeId} h-screen w-screen overflow-hidden text-sky-900`} style={vars}>
         {screen === "start" && <StartScreen />}
         {screen === "select" && <SelectScreen />}
         {screen === "lobby" && <LobbyScreen />}

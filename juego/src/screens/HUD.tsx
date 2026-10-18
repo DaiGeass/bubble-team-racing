@@ -181,6 +181,12 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         </div>
       )}
 
+      {telemetry.drivingCue && !telemetry.finished && telemetry.countdown < 0 && (
+        <div className="absolute left-1/2 top-[20%] -translate-x-1/2 rounded-2xl border border-white/70 bg-sky-950/75 px-5 py-2 text-center font-bold text-white shadow-lg" role="status">
+          <div className="text-sm tracking-wide">{t(telemetry.drivingCue === "landing" ? "cleanLanding" : "driftRelease")}</div>
+          <div className="text-xs text-cyan-200">{telemetry.drivingCue === "landing" ? `+${telemetry.drivingValue}% ${t("turboBtn")}` : ["", "I", "II", "III"][telemetry.drivingValue]}</div>
+        </div>
+      )}
       {/* ---------- drift: one light per mini-turbo level reached ---------- */}
       {telemetry.driftLevel > 0 && (
         <div className={`absolute left-1/2 flex -translate-x-1/2 gap-2 ${touch ? "bottom-28" : "bottom-24"}`}>

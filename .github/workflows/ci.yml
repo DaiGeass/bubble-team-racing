@@ -24,7 +24,9 @@ jobs:
       - working-directory: juego
         run: npm ci
       - working-directory: juego
-        run: npx tsc --noEmit
+        run: npm test
+      - working-directory: juego
+        run: npm run typecheck
       - working-directory: juego
         run: npm run build
       - name: the web build must be a single self contained file

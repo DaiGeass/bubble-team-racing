@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { frameBlend } from "./motion";
 import { groundAt, locate, makeGround, getPaths, mainIndexAt, pathPoint, safeSpot, F_WALL_POS, F_WALL_NEG, type Ground } from "./trackCurve";
 
 // ---------------------------------------------------------------------------
@@ -191,7 +192,7 @@ export function moveBody(b: Body, dx: number, dz: number, dt: number, opts: Step
   if (opts.fly) {
     // planes hold their altitude profile over whatever road is below them
     const base = found ? G.y : b.groundY;
-    b.y = THREE.MathUtils.lerp(b.y, base + opts.flyAlt, 0.12);
+    b.y = THREE.MathUtils.lerp(b.y, base + opts.flyAlt, frameBlend(0.12, dt));
     b.vy = 0;
     b.airborne = false;
     if (found) stand(b, G, res);
