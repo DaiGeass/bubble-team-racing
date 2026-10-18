@@ -229,3 +229,39 @@ superficies de desvíos con física real, vuelo/buceo de crucero, colocación de
 ambientación, encuadre de modelos y datos de agua. No equivale a completar
 manualmente 41 carreras. Los FPS, controladores e instaladores nativos requieren
 validación en los equipos Linux/Windows de destino.
+
+## Sexta pasada: ritmo, diez vehículos y actividad cercana
+
+Se añaden dos modelos de cada modo: Rally Aero y Roadster de Cristal; Hidroala y
+Trimarán Solar; Ala Canard y Convertiplano VTOL; Nautilus y Explorador Raya;
+Tríada Magnética y Anillos Flux. Usan siluetas propias y piezas de geometría
+compartida dentro de cada modelo seleccionado, con cinco materiales privados por
+modelo como máximo. Hélices, rotores, campos y aletas tienen animación. Los nombres
+están traducidos a los ocho idiomas. No se agregan dependencias ni texturas.
+
+Las 41 pistas reciben actores locales cerca de la ambientación: mariposas, peces
+y drones. Hay como máximo 24 actores exteriores o 12 interiores, con dos dibujos
+instanciados y actualización a 30 Hz; sólo los actores dentro de cámara se envían
+al renderer. Su movimiento usa tiempo absoluto y evita invadir carreteras desde
+los márgenes. La decoración y los trazados anteriores se conservan.
+
+La aceleración aumenta un 8%. La velocidad de crucero puede aumentar hasta 26%
+en rectas despejadas, o 14% en interiores. El perfil se calcula una vez por pista,
+con límites continuos. Se retira antes de curvas cerradas, rampas pronunciadas,
+agujeros, cruces, saltos/cañones y cambios de modo; se inhibe al derrapar, sufrir
+daño, ir marcha atrás, volar sobre un salto o apuntar fuera del trazado. Se aplica
+a jugador y rivales. El turbo manual conserva su función y los vehículos nuevos
+quedan dentro de los rangos de estadísticas de los anteriores.
+
+El bonus de tiempo deja de usar 55 segundos por vuelta para cualquier circuito.
+Ahora su referencia depende de la distancia del recorrido principal y su perfil
+de ritmo, manteniendo una referencia común para todos los corredores del mapa.
+Los desvíos siguen pudiendo ahorrar tiempo. No se borran puntuaciones guardadas.
+
+Validación: 60 pruebas, TypeScript y compilación web. Auditoría automatizada de
+las 41 pistas: dos vueltas por el recorrido principal y dos tomando desvíos, con
+física, reglas de vuelo/buceo y ritmo. Sin caídas ni casos sin terminar en esta
+simulación simplificada. No reproduce objetos, combate ni todos los controles de
+Scene. Se puede repetir con `cd juego` y `npm run audit:tracks`; el argumento
+`all baseline` omite el ritmo de crucero para la comparación. Las ganancias de
+FPS, instaladores y controladores requieren validación nativa en equipos destino.

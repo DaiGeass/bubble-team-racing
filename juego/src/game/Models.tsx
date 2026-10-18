@@ -1,3 +1,4 @@
+import { paintOptions } from "./paint";
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -31,46 +32,8 @@ export function Glass({ color = "#dff6ff", opacity = 0.38 }: { color?: string; o
  * same chassis can be matte, chromed or turned to glass without touching geometry.
  */
 export function Paint({ color, metal = 0.55, rough = 0.14, finish = "solid", flatShading = false }: { color: string; metal?: number; rough?: number; finish?: FinishId; flatShading?: boolean }) {
-  const f = finish === "gloss" ? { rough: 0.04, metal: 0.6 }
-    : finish === "matte" ? { rough: 0.92, metal: 0.05 }
-    : finish === "chrome" ? { rough: 0.03, metal: 1 }
-    : finish === "holo" ? { rough: 0.08, metal: 0.75 }
-    : finish === "glass" ? { rough: 0.02, metal: 0.1 }
-    : { rough, metal };
-  if (finish === "holo") {
-    return (
-      <meshPhysicalMaterial
-        color={color}
-        roughness={f.rough}
-        metalness={f.metal}
-        flatShading={flatShading}
-        clearcoat={1}
-        iridescence={1}
-        iridescenceIOR={1.9}
-        iridescenceThicknessRange={[140, 780]}
-        sheen={1}
-        sheenColor="#ffffff"
-      />
-    );
-  }
-  if (finish === "glass") {
-    return (
-      <meshPhysicalMaterial
-        color={color}
-        roughness={f.rough}
-        metalness={f.metal}
-        flatShading={flatShading}
-        clearcoat={1}
-        clearcoatRoughness={0.02}
-        transmission={0.72}
-        thickness={0.9}
-        ior={1.45}
-        transparent
-        opacity={0.86}
-      />
-    );
-  }
-  return <meshStandardMaterial color={color} roughness={f.rough} metalness={f.metal} flatShading={flatShading} />;
+  const props = paintOptions(color, finish, metal, rough, flatShading);
+  return finish === "holo" || finish === "glass" ? <meshPhysicalMaterial {...props} /> : <meshStandardMaterial {...props} />;
 }
 
 export function Neon({ color, i = 2.4 }: { color: string; i?: number }) {

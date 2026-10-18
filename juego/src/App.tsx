@@ -1,3 +1,4 @@
+import { MODEL_NAMES } from "./i18n9";
 import { useEffect, useMemo } from "react";
 import { DICTS, I18nContext, LANGS, type Lang } from "./i18n";
 import { EXTRA } from "./i18n2";
@@ -54,6 +55,7 @@ export default function App() {
       ...EXTRA4.en,
       ...EXTRA5.en,
       ...EXTRA6.en,
+      ...MODEL_NAMES.en,
       ...DICTS[lang],
       ...EXTRA[lang],
       ...EXTRA_WORDS2[lang],
@@ -62,6 +64,7 @@ export default function App() {
       ...EXTRA4[lang],
       ...EXTRA5[lang],
       ...EXTRA6[lang],
+      ...MODEL_NAMES[lang],
     };
     return {
       lang,

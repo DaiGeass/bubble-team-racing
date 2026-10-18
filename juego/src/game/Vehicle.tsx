@@ -1,3 +1,5 @@
+import Craft4 from "./Models4";
+import { NEW_CRAFT, type NewCraftId } from "../craftModels";
 import VehicleDetails from "./VehicleDetails";
 import { characterPhase, eyeOpen } from "../modelDetail";
 import { Paint } from "./Models";
@@ -551,6 +553,7 @@ function Chassis({
       )}
 
       <ExtraShapes shape={shape} body={body} decal={decal} glow={glow} finish={finish} />
+      {(NEW_CRAFT.land as readonly string[]).includes(shape) && <Craft4 kind={shape as NewCraftId} body={body} decal={decal} glow={glow} finish={finish} />}
       <Land3 shape={shape} body={body} decal={decal} glow={glow} finish={finish} />
       <Spoiler kind={vehicle.spoiler ?? "none"} decal={decal} glow={glow} finish={finish} />
       <Boosters kind={vehicle.booster ?? "single"} glow={glow} />
@@ -750,22 +753,36 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
           <Chassis vehicle={vehicle} glow={glow} hullRef={hullRef} wingRef={wingRef} wheelRef={wheelRef} />
         </group>
         <group ref={boatAltRef} visible={false}>
+          {(NEW_CRAFT.boat as readonly string[]).includes(vehicle.boat ?? "cat") ? (
+            <Craft4 kind={vehicle.boat as NewCraftId} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} stateRef={stateRef} />
+          ) : (<>
           <BoatAlt kind={vehicle.boat ?? "cat"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
           <Boat3 kind={vehicle.boat ?? "cat"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
+
+          </>)}
         </group>
         <group ref={planeAltRef} visible={false}>
+          {(NEW_CRAFT.plane as readonly string[]).includes(vehicle.plane ?? "wing") ? (
+            <Craft4 kind={vehicle.plane as NewCraftId} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} stateRef={stateRef} />
+          ) : (<>
           <PlaneAlt kind={vehicle.plane ?? "wing"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
           <Plane3 kind={vehicle.plane ?? "wing"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
+
+          </>)}
         </group>
         <group ref={subRef} visible={false}>
-          {SUB3.includes(vehicle.sub ?? "classic") ? (
+          {(NEW_CRAFT.sub as readonly string[]).includes(vehicle.sub ?? "classic") ? (
+            <Craft4 kind={vehicle.sub as NewCraftId} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} stateRef={stateRef} />
+          ) : SUB3.includes(vehicle.sub ?? "classic") ? (
             <Sub3 kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
           ) : (
             <SubModel kind={vehicle.sub ?? "classic"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
           )}
         </group>
         <group ref={hoverRef} visible={false}>
-          <Hover3 kind={vehicle.hover ?? "maglev"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />
+          {(NEW_CRAFT.hover as readonly string[]).includes(vehicle.hover ?? "maglev") ? (
+            <Craft4 kind={vehicle.hover as NewCraftId} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} stateRef={stateRef} />
+          ) : <Hover3 kind={vehicle.hover ?? "maglev"} body={vehicle.body} decal={vehicle.decal} glow={glow} finish={vehicle.finish} />}
         </group>
         <ModeModels vehicle={vehicle} stateRef={stateRef} glow={glow} />
         <VehicleDetails stateRef={stateRef} decal={vehicle.decal} narrow={vehicle.shape === "moto" || vehicle.shape === "board"} />

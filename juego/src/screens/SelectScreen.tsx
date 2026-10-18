@@ -60,7 +60,7 @@ const SHAPE_GLYPH: Record<string, string> = {
   kart: "⛟", hover: "◎", buggy: "⛝", jet: "➤", cruiser: "⛴", moto: "⚑", ufo: "⏣",
   coupe: "◢", van: "▣", formula: "⏵", bubble: "◉", rocket: "▲", mono: "◆",
   tank: "◼", wedge: "▼", sled: "⩕", orbit: "◍", dune: "⬢", phantom: "◇",
-  shell: "⬣", board: "▬", winglet: "⋎", pod: "⫴",
+  shell: "⬣", board: "▬", winglet: "⋎", pod: "⫴", rally: "▦", roadster: "◒",
 };
 
 /** Tiny SVG preview of a circuit built from its control points. */

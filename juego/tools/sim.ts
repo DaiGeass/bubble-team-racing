@@ -1,6 +1,8 @@
+import { trackPace, cruisePace } from "../src/trackPace";
+import { zoneOnPath } from "../src/trackModes";
 import * as THREE from "three";
 import { TRACKS } from "../src/data";
-import { getPads, setActiveTrack, getPaths, groundAt, makeGround, trackCurve, F_SOLID, F_WALL_POS, F_WALL_NEG } from "../src/trackCurve";
+import { getPads, setActiveTrack, getPaths, groundAt, makeGround, trackCurve, FLIGHT, F_SOLID, F_WALL_POS, F_WALL_NEG } from "../src/trackCurve";
 import { DESIGN_REPORT } from "../src/trackDesign";
 import { moveBody, makeResult, placeBody, respawnBody, aimAhead, type Body } from "../src/physics";
 
@@ -59,6 +61,7 @@ if (arg === "check" || arg === "dump") {
   process.exit(0);
 }
 
+let failures = 0;
 const ids = arg === "all" ? TRACKS.map(t => t.id) : arg.split(",");
 for (const id of ids) {
   for (const takeRoutes of [false, true]) {
@@ -76,10 +79,17 @@ for (const id of ids) {
       const desired = Math.atan2(aim.x - b.pos.x, aim.z - b.pos.z);
       const diff = wrap(desired - b.heading);
       const steer = Math.max(-1, Math.min(1, diff * 2.5));
-      const maxS = 27; b.speed += (14 - 14 * b.slopeAlong) * dt; b.speed = Math.min(b.speed, maxS * (Math.abs(diff) > 0.55 ? 0.7 : 1));
+      const p = paths[b.path] ?? paths[0]; const i = Math.max(0,Math.min(p.n-1,b.idx));
+      const cruise = cruisePace(trackPace(b.path,b.idx),b.speed,steer,b.airborne,false,b.touching,Math.sin(b.heading)*p.tx[i]+Math.cos(b.heading)*p.tz[i]);
+      const maxS = 27 * (process.argv[3] !== "baseline" ? cruise : 1); b.speed += (14 - 14 * b.slopeAlong) * (process.argv[3] !== "baseline" ? 1.08 : 1) * dt; b.speed = Math.min(b.speed, maxS * (Math.abs(diff) > 0.55 ? 0.7 : 1));
       const sf = Math.min(1, b.speed / maxS);
       if (!b.airborne) b.heading += steer * 2.6 * (0.4 + sf * 0.6) * (1 - sf * 0.18) * dt;
-      moveBody(b, Math.sin(b.heading) * b.speed * dt, Math.cos(b.heading) * b.speed * dt, dt, { rideOffset: 0, bobbing: false, fly: false, flyAlt: 0, flyMargin: 4, ghost: false }, res);
+      const zone = zoneOnPath(b.path,b.prog); const flying = zone?.type === "sky" || zone?.type === "sub";
+      const flight = zone?.type === "sub" ? FLIGHT.sub : FLIGHT.sky;
+      const u = zone ? Math.max(0,Math.min(1,(b.prog-zone.t0)/(zone.t1-zone.t0))) : 0;
+      const smooth = (x:number)=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
+      const lift = smooth(u/0.1)*(1-smooth((u-0.9)/0.1));
+      moveBody(b, Math.sin(b.heading) * b.speed * dt, Math.cos(b.heading) * b.speed * dt, dt, { rideOffset: 0, bobbing: false, fly: flying, flyAlt: flying ? flight.base*lift : 0, flyMargin: zone?.type === "sub" ? -2.6 : 4, ghost: false }, res);
       for (const pad of pads) { if (pad.kind !== 'cannon' || b.airborne) continue; const px = pad.pos.x - b.pos.x, pz = pad.pos.z - b.pos.z; if (Math.abs(pad.pos.y - b.y) < 2 && Math.abs(px * Math.sin(pad.heading) + pz * Math.cos(pad.heading)) < 3.5 && px * px + pz * pz < 200) { placeBody(b, 0, pad.toIdx); cannons++; } }
       if (res.fell) { if (process.env.DBG) console.log("FELL t", time.toFixed(1), "pos", b.pos.x.toFixed(0), b.y.toFixed(1), b.pos.z.toFixed(0), "prog", b.prog.toFixed(3), "path", b.path, "groundY", b.groundY.toFixed(1), "air", b.airborne, "vy", b.vy.toFixed(1)); falls++; fallAt.push(`${b.prog.toFixed(3)}@${time.toFixed(0)}s`); respawnBody(b); b.speed = 15; route = 0; }
       if (res.wallImpact > 0) { hits++; maxImpact = Math.max(maxImpact, res.wallImpact); }
@@ -91,6 +101,9 @@ for (const id of ids) {
       if (b.speed < 2 && time > 5) stuck++;
       if (Math.floor(b.total) > laps.length) { laps.push(time - lapStart); lapStart = time; seen = -1; }
     }
+    if (laps.length < 2 || falls > 0 || stuck > 60) failures++;
     console.log(`${id.padEnd(9)} ${takeRoutes ? "routes" : "main  "} laps ${laps.map(l => l.toFixed(1)).join("/") || "DNF@" + b.total.toFixed(2)} falls ${falls}${fallAt.length ? " [" + fallAt.slice(0, 4).join(" ") + "]" : ""} wallFrames ${hits} firstHits ${firstHits} maxImpact ${maxImpact.toFixed(2)} airFrames ${air} minSpeed ${minSpeed.toFixed(1)} stuckFrames ${stuck} routesUsed ${[...used].join(",")} cannons ${cannons}`);
   }
 }
+
+process.exitCode = failures ? 1 : 0;

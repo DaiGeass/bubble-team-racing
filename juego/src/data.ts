@@ -14,7 +14,7 @@ export type WeaponId =
 export type ShapeId =
   | "kart" | "hover" | "buggy" | "jet" | "cruiser" | "moto" | "ufo"
   | "coupe" | "van" | "formula" | "bubble" | "rocket" | "mono"
-  | "tank" | "wedge" | "sled" | "orbit" | "dune" | "phantom" | "mech" | "board" | "shell" | "winglet" | "pod";
+  | "tank" | "wedge" | "sled" | "orbit" | "dune" | "phantom" | "mech" | "board" | "shell" | "winglet" | "pod" | "rally" | "roadster";
 export type ThemeId =
   | "frutiger" | "aero" | "techno" | "eco" | "aqua" | "sunset"
   | "y2k" | "liquid" | "win98" | "vapor" | "dreamcore" | "cyberpunk" | "noir" | "backrooms" | "liminal" | "eden"
@@ -23,10 +23,10 @@ export type WheelStyle = "classic" | "sporty" | "glow" | "chrome" | "spike";
 export type SpoilerId = "none" | "wing" | "fin";
 export type FinishId = "solid" | "gloss" | "matte" | "chrome" | "glass" | "holo";
 export type BoosterId = "single" | "twin" | "neon";
-export type BoatId = "cat" | "speed" | "ski" | "yacht" | "tug" | "raft" | "hovercraft" | "airboat" | "viking" | "duck";
-export type PlaneId = "wing" | "bi" | "delta" | "stealth" | "jetliner" | "twinprop" | "nimbus" | "heli" | "blimp" | "saucer";
-export type SubId = "classic" | "pod" | "shark" | "diver" | "dredger" | "sleuth" | "leviathan" | "manta" | "squid" | "bathy" | "torpedo";
-export type HoverId = "maglev" | "disc" | "nacelle" | "magboard" | "gyro";
+export type BoatId = "cat" | "speed" | "ski" | "yacht" | "tug" | "raft" | "hovercraft" | "airboat" | "viking" | "duck" | "hydrofoil" | "outrigger";
+export type PlaneId = "wing" | "bi" | "delta" | "stealth" | "jetliner" | "twinprop" | "nimbus" | "heli" | "blimp" | "saucer" | "canard" | "vtol";
+export type SubId = "classic" | "pod" | "shark" | "diver" | "dredger" | "sleuth" | "leviathan" | "manta" | "squid" | "bathy" | "torpedo" | "nautilus" | "raypod";
+export type HoverId = "maglev" | "disc" | "nacelle" | "magboard" | "gyro" | "triad" | "flux";
 export type VehicleMode = "land" | "boat" | "plane" | "sub" | "hover";
 
 export interface CharacterDef {
@@ -438,8 +438,8 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
 export const THEME_LIST: ThemeId[] = ["frutiger", "eco", "aero", "liquid", "y2k", "win98", "vapor", "techno", "aqua", "sunset", "dreamcore", "cyberpunk", "noir"];
 
 // ---------------------------------------------------------------------------
-// Vehicle customization: 23 shapes, 5 wheels, 3 spoilers, 3 boosters,
-// 10 boats, 10 aircraft and 11 submarines
+// Vehicle customization: 25 chassis, 5 wheels, 3 spoilers, 3 boosters,
+// 12 boats, 12 aircraft, 13 submarines and 7 magnetic craft
 // ---------------------------------------------------------------------------
 
 export const SHAPES: { id: ShapeId; bonus: { speed: number; handling: number } }[] = [
@@ -466,6 +466,8 @@ export const SHAPES: { id: ShapeId; bonus: { speed: number; handling: number } }
   { id: "board", bonus: { speed: 0.7, handling: 1.2 } },
   { id: "winglet", bonus: { speed: 1.5, handling: 0.0 } },
   { id: "pod", bonus: { speed: 1.7, handling: -0.9 } },
+  { id: "rally", bonus: { speed: 0.5, handling: 1.1 } },
+  { id: "roadster", bonus: { speed: 1.1, handling: 0.5 } },
 ];
 
 export const BODY_COLORS = ["#ff4d6d", "#ff9f1c", "#fde047", "#4ade80", "#22d3ee", "#6366f1", "#f472b6", "#ffffff", "#111827", "#a855f7", "#14b8a6"];
@@ -482,10 +484,10 @@ export const FINISH_META: Record<FinishId, { swatch: string; labelKey: string }>
   holo: { swatch: "#ff9ee0", labelKey: "fin_holo" },
 };
 export const BOOSTERS: BoosterId[] = ["single", "twin", "neon"];
-export const BOATS: BoatId[] = ["cat", "speed", "ski", "yacht", "tug", "raft", "hovercraft", "airboat", "viking", "duck"];
-export const PLANES: PlaneId[] = ["wing", "bi", "delta", "stealth", "jetliner", "twinprop", "nimbus", "heli", "blimp", "saucer"];
-export const HOVERS: HoverId[] = ["maglev", "disc", "nacelle", "magboard", "gyro"];
-export const SUBS: SubId[] = ["classic", "pod", "shark", "diver", "dredger", "sleuth", "leviathan", "manta", "squid", "bathy", "torpedo"];
+export const BOATS: BoatId[] = ["cat", "speed", "ski", "yacht", "tug", "raft", "hovercraft", "airboat", "viking", "duck", "hydrofoil", "outrigger"];
+export const PLANES: PlaneId[] = ["wing", "bi", "delta", "stealth", "jetliner", "twinprop", "nimbus", "heli", "blimp", "saucer", "canard", "vtol"];
+export const HOVERS: HoverId[] = ["maglev", "disc", "nacelle", "magboard", "gyro", "triad", "flux"];
+export const SUBS: SubId[] = ["classic", "pod", "shark", "diver", "dredger", "sleuth", "leviathan", "manta", "squid", "bathy", "torpedo", "nautilus", "raypod"];
 
 /**
  * Per-craft speed and handling, taken from the second lineage and extended to every
@@ -508,6 +510,8 @@ export const BOAT_STATS: CraftStat[] = [
   { id: "airboat", speed: 1.26, handling: 0.84 },
   { id: "viking", speed: 0.88, handling: 1.08 },
   { id: "duck", speed: 0.9, handling: 1.32 },
+  { id: "hydrofoil", speed: 1.18, handling: 1.04 },
+  { id: "outrigger", speed: 1.02, handling: 1.23 },
 ];
 
 export const PLANE_STATS: CraftStat[] = [
@@ -521,6 +525,8 @@ export const PLANE_STATS: CraftStat[] = [
   { id: "heli", speed: 0.88, handling: 1.36 },
   { id: "blimp", speed: 0.8, handling: 1.12 },
   { id: "saucer", speed: 1.08, handling: 1.26 },
+  { id: "canard", speed: 1.16, handling: 1.08 },
+  { id: "vtol", speed: 0.98, handling: 1.3 },
 ];
 
 export const SUB_STATS: CraftStat[] = [
@@ -535,6 +541,8 @@ export const SUB_STATS: CraftStat[] = [
   { id: "squid", speed: 1.14, handling: 1.1 },
   { id: "bathy", speed: 0.84, handling: 1.2 },
   { id: "torpedo", speed: 1.36, handling: 0.76 },
+  { id: "nautilus", speed: 0.98, handling: 1.2 },
+  { id: "raypod", speed: 1.16, handling: 1.16 },
 ];
 
 export const HOVER_STATS: CraftStat[] = [
@@ -543,6 +551,8 @@ export const HOVER_STATS: CraftStat[] = [
   { id: "nacelle", speed: 1.2, handling: 0.82 },
   { id: "magboard", speed: 1.08, handling: 1.15 },
   { id: "gyro", speed: 0.96, handling: 1.22 },
+  { id: "triad", speed: 1.06, handling: 1.2 },
+  { id: "flux", speed: 1.17, handling: 0.98 },
 ];
 
 const CRAFT_SPEEDS: Record<string, number> = {};

@@ -1,3 +1,4 @@
+import { trackPace, cruisePace, lapTimeBudget } from "../trackPace";
 import { zoneOnPath, modeOnPath, modeFromZone, resetModeState } from "../trackModes";
 import { LandingBonus } from "../landingBonus";
 import { frameBlend, coast, RaceCountdown } from "../motion";
@@ -2139,7 +2140,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // ---- speed ----
     // the skill tier sets how fast and how eager an opponent is, on top of the catch-up
     const tier = r.isPlayer ? null : AI_PROFILES[settings.aiSkill];
-    let effMax = st.maxSpeed * r.boostMult * (tier ? r.aiMult * tier.pace : 1);
+    const pacePath = getPaths()[r.path];
+    const paceIndex = pacePath ? Math.max(0, Math.min(pacePath.n - 1, r.idx)) : 0;
+    const alignment = pacePath ? Math.sin(r.course) * pacePath.tx[paceIndex] + Math.cos(r.course) * pacePath.tz[paceIndex] : 0;
+    const cruise = cruisePace(trackPace(r.path, r.idx), r.speed, steerIn, r.airborne, r.isDrifting,
+      r.stunTimer > 0 || r.slowTimer > 0 || r.burnTimer > 0 || r.touching, alignment);
+    let effMax = st.maxSpeed * cruise * r.boostMult * (tier ? r.aiMult * tier.pace : 1);
     if (r.mode === "boat") effMax *= st.boatBonus * 0.94 * craftSpeed(r.vehicle.boat, 1);
     if (r.mode === "sub") effMax *= st.boatBonus * 0.9 * craftSpeed(r.vehicle.sub, 1);
     if (r.mode === "plane") effMax *= st.planeBonus * 1.12 * craftSpeed(r.vehicle.plane, 1);
@@ -2197,7 +2203,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     effMax *= 1 - hill * (r.speed >= 0 ? 0.55 : -0.55);
     if (hill !== 0) r.speed -= GRAVITY * 0.4 * hill * dt;
 
-    const accelNow = st.accel * (r.mode === "plane" ? 1.25 : 1) * (tier ? tier.accel : 1);
+    const accelNow = st.accel * 1.08 * (r.mode === "plane" ? 1.25 : 1) * (tier ? tier.accel : 1);
     if (throttleIn > 0) r.speed += accelNow * dt;
     else if (throttleIn < 0) r.speed -= accelNow * 1.4 * dt;
     else {
@@ -3177,7 +3183,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       finishedOnce.current = true;
       if (player.pair) split(player.pair, false);
       player.finished = true;
-      const timeBonus = battle ? player.lives * 400 : Math.max(0, Math.round((mode.laps * 55000 - raceClock.current) / 18));
+      const timeBonus = battle ? player.lives * 400 : Math.max(0, Math.round((mode.laps * lapTimeBudget() - raceClock.current) / 18));
       const positionBonus = (racers.length - position + 1) * 180;
       const running = player.coins * 12 + player.boostsUsed * 25 + player.tagSwaps * 40 + player.rings * 120;
       const finalScore = Math.round(running + timeBonus + positionBonus);

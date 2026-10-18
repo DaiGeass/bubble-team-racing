@@ -14,7 +14,8 @@
     "dist:windows": "tauri build --bundles nsis,msi",
     "red": "node servidor/servidor.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node tools/test-graphics.mjs"
+    "test": "node tools/test-graphics.mjs",
+    "audit:tracks": "node tools/audit-tracks.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

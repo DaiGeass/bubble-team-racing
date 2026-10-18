@@ -1,3 +1,5 @@
+import TrackActors from "./TrackActors";
+import { getActiveTrack } from "../trackCurve";
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -8,9 +10,10 @@ import type { ThemeDef } from "../data";
 export function TrackLife({ themes }: { themes: ThemeDef[] }) {
   const assets = useMemo(() => ({ base: new THREE.ConeGeometry(0.24, 1.4, 8), head: new THREE.SphereGeometry(1, 10, 6), blade: new THREE.BoxGeometry(1, 1, 1),
     body: new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.3 }), light: new THREE.MeshBasicMaterial({ toneMapped: false }) }), []);
+  const spots = useMemo(() => lifeSpots(themes), [themes]);
   const cells = useMemo(() => {
     const grouped = new Map<string, ReturnType<typeof lifeSpots>>();
-    for (const spot of lifeSpots(themes)) {
+    for (const spot of spots) {
       const key = `${Math.floor(spot.x / 128)},${Math.floor(spot.z / 128)}`;
       const list = grouped.get(key) ?? []; list.push(spot); grouped.set(key, list);
     }
@@ -36,7 +39,7 @@ export function TrackLife({ themes }: { themes: ThemeDef[] }) {
       head.count = 0; blade.count = 0;
       return { spots, base, head, blade, bounds };
     });
-  }, [assets, themes]);
+  }, [assets, spots]);
   const scratch = useMemo(() => ({ d: new THREE.Object3D(), frustum: new THREE.Frustum(), matrix: new THREE.Matrix4() }), []);
   const elapsed = useRef(1);
   useEffect(() => () => cells.forEach((c) => { c.base.dispose(); c.head.dispose(); c.blade.dispose(); }), [cells]);
@@ -67,5 +70,5 @@ export function TrackLife({ themes }: { themes: ThemeDef[] }) {
       cell.head.instanceMatrix.needsUpdate = true; cell.blade.instanceMatrix.needsUpdate = true;
     }
   });
-  return <group dispose={null}>{cells.map((cell) => <group key={cell.base.uuid}><primitive object={cell.base} /><primitive object={cell.head} /><primitive object={cell.blade} /></group>)}</group>;
+  return <group dispose={null}><TrackActors spots={spots} indoor={!!getActiveTrack().indoor} />{cells.map((cell) => <group key={cell.base.uuid}><primitive object={cell.base} /><primitive object={cell.head} /><primitive object={cell.blade} /></group>)}</group>;
 }
