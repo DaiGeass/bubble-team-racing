@@ -1,7 +1,7 @@
 [package]
 name = "bubble-team-racing"
 version = "1.0.0"
-description = "Aero kart racing with 14 circuits, gaps, shortcuts and fusion turrets"
+description = "Aero kart racing with 41 circuits, gaps, shortcuts and fusion turrets"
 authors = ["Bubble Team"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/DaiGeass/bubble-team-racing"

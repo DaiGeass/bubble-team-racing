@@ -1,3 +1,4 @@
+import { expandTracks } from "./trackExpansion";
 import type { TrackDef } from "./data";
 import { design, BYPASS } from "./trackDesign";
 
@@ -9,7 +10,7 @@ import { design, BYPASS } from "./trackDesign";
 // and the headroom wherever one road passes over another.
 // ---------------------------------------------------------------------------
 
-export const DESIGNED_TRACKS: TrackDef[] = [
+export const DESIGNED_TRACKS: TrackDef[] = expandTracks([
   // FRUTIGER AERO — the gentle one. A hill with a hairpin on top, a jump on the
   // way down, a run across the open sea and a long home straight with a ramp lane.
   design({
@@ -1167,4 +1168,4 @@ export const DESIGNED_TRACKS: TrackDef[] = [
     traffic: 2,
     pads: [["go", "boost"], ["m0", "boost", 1.4], ["br", "boost", 1.6, 30]],
   }),
-];
+]);

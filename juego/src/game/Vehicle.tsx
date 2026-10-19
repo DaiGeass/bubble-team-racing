@@ -23,6 +23,8 @@ export interface KartVisualState {
   speed?: number;
   airborne?: boolean;
   vy?: number;
+  maneuverRoll?:number;
+  maneuverPitch?:number;
   stunned: boolean;
   mode: VehicleMode;
   drift: boolean;
@@ -707,9 +709,9 @@ export default function Vehicle({ character, partner, vehicle, stateRef, scale =
       body.current.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
       // lean INTO the turn (steer > 0 = turning right on screen)
       const tilt = (st?.steer ?? 0) * (mode === "plane" ? 0.55 : 0.17) * -1;
-      body.current.rotation.z = THREE.MathUtils.lerp(body.current.rotation.z, tilt, frameBlend(0.16, Math.min(delta, 0.1)));
+      body.current.rotation.z = tilt + (st?.maneuverRoll??0);
       const pitch = mode === "plane" ? -0.14 - speedFrac * 0.1 : (mode === "boat" ? 0.07 : -speedFrac * 0.05) + pose.pitch;
-      body.current.rotation.x = THREE.MathUtils.lerp(body.current.rotation.x, pitch, frameBlend(0.12, Math.min(delta, 0.1)));
+      body.current.rotation.x = THREE.MathUtils.lerp(body.current.rotation.x, pitch+(st?.maneuverPitch??0), frameBlend(0.12, Math.min(delta, 0.1)));
       if (st?.stunned) body.current.rotation.y = Math.sin(t.current * 34) * 0.4;
       else body.current.rotation.y = THREE.MathUtils.lerp(body.current.rotation.y, 0, frameBlend(0.2, Math.min(delta, 0.1)));
     }

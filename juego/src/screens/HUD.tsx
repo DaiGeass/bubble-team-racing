@@ -1,3 +1,4 @@
+import { isFinalLap } from "../adrenaline";
 import { useEffect, useState } from "react";
 import { useI18n, ordinal } from "../i18n";
 import { useGame, DEFAULT_TOUCH, type Action, type TouchSlot } from "../store";
@@ -100,10 +101,14 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
   const lapTheme = mutateTheme(THEMES[getActiveTrack().theme], telemetry.lap - 1);
   const [cdKey, setCdKey] = useState(0);
   // the last lap is announced once, as the line is crossed into it
-  const [finalLapAt, setFinalLapAt] = useState(0);
+  const modeId=useGame(s=>s.modeId);
+  const paused=useGame(s=>s.paused);
+  const cameraStyle=useGame(s=>s.settings.cameraStyle);
+  const finalLap=isFinalLap(telemetry.lap,telemetry.totalLaps,modeId==="battle",telemetry.finished)&&telemetry.countdown<0;
+  const [finalLapAt, setFinalLapAt] = useState<number|null>(null);
   useEffect(() => {
-    if (telemetry.totalLaps > 1 && telemetry.lap === telemetry.totalLaps) setFinalLapAt(Date.now());
-  }, [telemetry.lap, telemetry.totalLaps]);
+    setFinalLapAt(finalLap?telemetry.timeMs:null);
+  }, [finalLap]);
   const w2 = telemetry.weapon2 ? WEAPON_META[telemetry.weapon2 as WeaponId] : null;
   // select the primitives separately: a fresh object from the selector would
   // re-render forever under zustand's Object.is comparison
@@ -138,6 +143,7 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
           style={{ background: "repeating-conic-gradient(from 0deg at 50% 46%, rgba(255,255,255,0) 0deg, rgba(255,255,255,0.5) 0.6deg, rgba(255,255,255,0) 1.4deg, rgba(255,255,255,0) 7deg)" }}
         />
       )}
+      {finalLap && <div aria-hidden="true" className={`final-lap-edge absolute inset-0 ${paused||cameraStyle==="stable"?"final-lap-still":""}`} />}
       {/* ---------- a hit: the edges of the screen go red for a moment ---------- */}
       {telemetry.hitAt > 0 && Date.now() - telemetry.hitAt < 600 && <div key={telemetry.hitAt} className="hit-flash absolute inset-0" />}
       {motionBlur > 0 && (
@@ -183,8 +189,16 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
 
       {telemetry.drivingCue && !telemetry.finished && telemetry.countdown < 0 && (
         <div className="absolute left-1/2 top-[20%] -translate-x-1/2 rounded-2xl border border-white/70 bg-sky-950/75 px-5 py-2 text-center font-bold text-white shadow-lg" role="status">
-          <div className="text-sm tracking-wide">{t(telemetry.drivingCue === "landing" ? "cleanLanding" : "driftRelease")}</div>
-          <div className="text-xs text-cyan-200">{telemetry.drivingCue === "landing" ? `+${telemetry.drivingValue}% ${t("turboBtn")}` : ["", "I", "II", "III"][telemetry.drivingValue]}</div>
+          <div className="text-sm tracking-wide">{t(telemetry.drivingCue === "maneuver" ? "cleanManeuver" : telemetry.drivingCue === "landing" ? "cleanLanding" : telemetry.drivingCue === "near" ? "nearMiss" : telemetry.drivingCue === "route" ? "riskRoute" : telemetry.drivingCue === "sling" ? "slingShot" : telemetry.drivingCue === "pass" ? "cleanPass" : "driftRelease")}</div>
+          <div className="text-xs text-cyan-200">{telemetry.drivingCue === "drift" ? ["", "I", "II", "III"][telemetry.drivingValue] : telemetry.drivingValue > 0 ? `+${telemetry.drivingValue}% ${t("turboBtn")}` : t("skillChain")}</div>
+        </div>
+      )}
+      {telemetry.comboCount>=2 && telemetry.comboLeft>0 && !telemetry.finished && telemetry.countdown<0 && (
+        <div className="absolute right-3 top-[42%] w-40 rounded-2xl border border-amber-200/70 bg-sky-950/85 px-3 py-2 text-white shadow-lg" aria-label={t("skillChain")}>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-amber-200">{t("skillChain")}</div>
+          <div className="flex items-baseline justify-between font-black"><span className="text-2xl">×{telemetry.comboMultiplier.toFixed(2)}</span><span className="text-[10px]">{telemetry.comboCount} {t("chainMoves")}</span></div>
+          <div className="text-xs text-cyan-100">{t(telemetry.comboKind==="maneuver"?"cleanManeuver":telemetry.comboKind==="landing"?"cleanLanding":telemetry.comboKind==="near"?"nearMiss":telemetry.comboKind==="pass"?"cleanPass":telemetry.comboKind==="route"?"riskRoute":telemetry.comboKind==="sling"?"slingShot":"driftRelease")}</div>
+          <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/20"><div className="h-full bg-amber-200" style={{width:`${Math.max(0,Math.min(1,telemetry.comboLeft))*100}%`}} /></div>
         </div>
       )}
       {/* ---------- drift: one light per mini-turbo level reached ---------- */}
@@ -411,8 +425,8 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
       )}
 
       {/* ---------- last lap ---------- */}
-      {finalLapAt > 0 && Date.now() - finalLapAt < 2600 && !telemetry.finished && (
-        <div key={finalLapAt} className="pointer-events-none absolute left-1/2 top-[24%] -translate-x-1/2">
+      {finalLapAt !== null && telemetry.timeMs - finalLapAt < 2600 && !telemetry.finished && (
+        <div key={finalLapAt??0} className="pointer-events-none absolute left-1/2 top-[24%] -translate-x-1/2">
           <div className="pop-in font-display whitespace-nowrap text-4xl font-extrabold text-white sm:text-6xl" style={{ WebkitTextStroke: "2px rgba(160,20,40,0.6)", textShadow: "0 0 30px #ff4d6d" }}>
             {t("finalLap")}
           </div>
@@ -421,10 +435,10 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
 
       {/* ---------- slipstream: the bar fills while you sit in the tow ---------- */}
       {telemetry.draft > 0.05 && (
-        <div className={`pointer-events-none absolute left-1/2 w-40 -translate-x-1/2 ${touch ? "top-[10.6rem]" : "bottom-[7.6rem]"}`}>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-extrabold uppercase tracking-wide text-white" style={{ textShadow: "0 1px 4px rgba(0,40,80,0.8)" }}>{t("draft")}</span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/30">
+        <div className={`pointer-events-none absolute left-1/2 w-48 -translate-x-1/2 ${touch ? "top-[10.6rem]" : "bottom-[7.6rem]"}`}>
+          <div className="flex flex-col items-stretch gap-1.5">
+            <span className="text-[10px] font-extrabold uppercase tracking-wide text-white" style={{ textShadow: "0 1px 4px rgba(0,40,80,0.8)" }}>{t(telemetry.draft>=0.95?"draftReady":"draft")}</span>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-white/30">
               <div className="h-full rounded-full bg-white" style={{ width: `${telemetry.draft * 100}%`, boxShadow: telemetry.draft > 0.95 ? "0 0 12px #ffffff" : undefined }} />
             </div>
           </div>
@@ -590,11 +604,12 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
       {!touch && (
         <div key={telemetry.gunning ? "g" : telemetry.fused ? "f" : "d"} className="hint-fade pointer-events-none absolute bottom-4 left-4 max-w-[calc(50vw-190px)]">
           <div className="glass-panel rounded-2xl px-3 py-1.5 text-[11px] font-semibold leading-relaxed text-sky-900/80">
-          {telemetry.gunning
+          {controls.hasGamepad()?t("padControls"):telemetry.gunning
             ? `←→ ⟳ · SPACE ● · Q ⇄ · F ✕ · ESC ${t("pauseGame")}`
             : telemetry.fused
               ? `↑↓←→ / WASD · SHIFT ${t("drift")} · SPACE ${t("useItem")} · K ${t("turboBtn")} · Q ⇄ · F ✕ · ESC ${t("pauseGame")}`
               : `↑↓←→ / WASD · SHIFT ${t("drift")} · SPACE ${t("useItem")} · K ${t("turboBtn")} · Q ${t("swapRacer")} · F ${t("fuse")} · ESC ${t("pauseGame")}`}
+          <div className="text-sky-700">{t("maneuverHelp")}</div>
           </div>
         </div>
       )}

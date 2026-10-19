@@ -1,3 +1,4 @@
+import { RACE_SPEED_SCALE, RACE_ACCEL_SCALE } from "../src/raceTuning";
 import { trackPace, cruisePace } from "../src/trackPace";
 import { zoneOnPath } from "../src/trackModes";
 import * as THREE from "three";
@@ -81,7 +82,7 @@ for (const id of ids) {
       const steer = Math.max(-1, Math.min(1, diff * 2.5));
       const p = paths[b.path] ?? paths[0]; const i = Math.max(0,Math.min(p.n-1,b.idx));
       const cruise = cruisePace(trackPace(b.path,b.idx),b.speed,steer,b.airborne,false,b.touching,Math.sin(b.heading)*p.tx[i]+Math.cos(b.heading)*p.tz[i]);
-      const maxS = 27 * (process.argv[3] !== "baseline" ? cruise : 1); b.speed += (14 - 14 * b.slopeAlong) * (process.argv[3] !== "baseline" ? 1.08 : 1) * dt; b.speed = Math.min(b.speed, maxS * (Math.abs(diff) > 0.55 ? 0.7 : 1));
+      const maxS = 27 * RACE_SPEED_SCALE * (process.argv[3] !== "baseline" ? cruise : 1); b.speed += (14 - 14 * b.slopeAlong) * RACE_ACCEL_SCALE * (process.argv[3] !== "baseline" ? 1.08 : 1) * dt; b.speed = Math.min(b.speed, maxS * (Math.abs(diff) > 0.55 ? 0.7 : 1));
       const sf = Math.min(1, b.speed / maxS);
       if (!b.airborne) b.heading += steer * 2.6 * (0.4 + sf * 0.6) * (1 - sf * 0.18) * dt;
       const zone = zoneOnPath(b.path,b.prog); const flying = zone?.type === "sky" || zone?.type === "sub";

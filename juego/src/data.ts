@@ -1270,7 +1270,8 @@ export function zoneProgress(t: number, z: Zone) {
 
 // Live snapshot consumed by the minimap (written by the sim each frame).
 export const raceSnapshot: {
+  clockMs: number;
   racers: { x: number; y: number; z: number; color: string; isPlayer: boolean; mode: VehicleMode; t: number }[];
   camAngle: number;
   theme: ThemeDef;
-} = { racers: [], camAngle: 0, theme: THEMES.frutiger };
+} = { clockMs: 0, racers: [], camAngle: 0, theme: THEMES.frutiger };

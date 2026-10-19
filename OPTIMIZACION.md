@@ -265,3 +265,244 @@ simulación simplificada. No reproduce objetos, combate ni todos los controles d
 Scene. Se puede repetir con `cd juego` y `npm run audit:tracks`; el argumento
 `all baseline` omite el ritmo de crucero para la comparación. Las ganancias de
 FPS, instaladores y controladores requieren validación nativa en equipos destino.
+
+## Séptima pasada: rutas, cámara y trampas con interacción
+
+La velocidad máxima general aumenta un 15% y la aceleración un 12% respecto a
+la sexta pasada, aplicando factores comunes a las estadísticas existentes. Se
+conservan las diferencias de personajes, piezas y modos, además del crucero
+selectivo y el turbo manual. La referencia de tiempos y los récords anteriores
+no equivalen a los de esta nueva versión del ritmo.
+
+Hay una ruta adicional en cada uno de los 41 mapas, con dos zonas de impulso.
+35 son más cortas que el tramo principal sustituido; las otras seis ofrecen un
+carril alternativo con impulso. Incluyen conexiones terrestres, de agua, vuelo,
+buceo y levitación. Se guardan coordenadas ya verificadas: el juego no busca ni
+genera candidatos durante la carrera. Las incorporaciones elevadas mantienen
+el nivel del acceso hasta separarse de la carretera original.
+
+La cámara transporta su posición y su objetivo con el coche antes de suavizar
+su desplazamiento relativo. Así no añade distancia proporcional a la velocidad.
+Se acerca y baja en carretera, agua, buceo y vuelo; anticipa más las curvas,
+acompaña derrapes de barcos y levitadores, y limita el campo de visión dinámico.
+Se mantiene dentro de los laterales de los pasillos. El buceo/vuelo mira a la
+altura del vehículo. Estable conserva FOV fijo e inclinación nula.
+
+Las pistas tienen entre uno y cuatro eventos locales señalizados: surtidores,
+corrientes, pistones, barridos o brotes, según el modo y el entorno. Tienen
+preaviso amarillo de 1.4 segundos, una fase peligrosa roja breve y una mitad de
+carretera libre. Un golpe reduce velocidad de forma moderada, respetando el
+agarre/peso; no quita monedas ni vidas. Pasar cerca de un evento activo puede
+recargar hasta 4% de turbo, una vez por obstáculo y vuelta, sin repetir vueltas
+anteriores ni reclamarlo marcha atrás. Jugador y rivales interactúan con ellos;
+los rivales anticipan su señal y los esquivan. Se suprime el crucero automático
+al aproximarse a un evento activo o con aviso.
+
+Correcciones: las barreras de vuelo permiten incorporarse a un corredor
+adyacente real; antes podían impedir entrar a un desvío submarino. Los canales
+alternativos de piscina reciben su superficie de agua. Las trampas antiguas
+respetan active=false, tienen un tamaño acotado y golpean por distancia física,
+no por una fracción de la vuelta. Los obstáculos usan el reloj de carrera y
+permanecen quietos durante la pausa. Se respetan mapas que declaran cero obstáculos
+clásicos, se cachean posiciones/normales y se reutiliza el estado de colisión.
+Las reapariciones de objetos y monedas usan tiempo transcurrido coherente con la
+simulación a 20/30/60/144 FPS y se congelan al pausar una partida local.
+
+Validación: 75 pruebas, TypeScript y build web. Auditoría general de 82 recorridos
+y prueba específica de entrada, recorrido y salida de las 41 rutas nuevas a
+30 y 60 Hz. Son simulaciones de superficies/conducción, no de todo el combate.
+Los instaladores y controladores nativos siguen requiriendo pruebas en destino.
+
+## Ajuste de adrenalina: activación sin aviso
+
+Se elimina la fase de preaviso ambiental, junto con las luces amarillas, los
+anillos y las balizas de espera. Las trampas irrumpen directamente, con subida
+visual de 50 ms y destello al activarse. El pedestal queda como pieza neutra del
+entorno. La IA solo reacciona al obstáculo ya activo. También se elimina la
+supresión automática del crucero al acercarse a estos eventos: el jugador
+conserva su velocidad y decide cómo esquivarlos.
+
+Se mantienen los límites de colisión, el tiempo de pausa y la recompensa por
+pasar cerca. La velocidad y las estadísticas conservan el ajuste de la séptima
+pasada. Este cambio sustituye su descripción anterior de aviso amarillo.
+
+## Adrenalina, parte 1: combos, rebufo y sonido de carrera
+
+Las maniobras limpias alimentan una cadena de seis segundos: derrapes con
+mini-turbo, aterrizajes válidos, esquivas ambientales, adelantamientos y salida
+de rebufo. Se exige avance real de al menos 12 metros y separación temporal
+entre recompensas. La cadena llega a ocho acciones y multiplicador de puntos
+x2; la recompensa por acción añade entre 1.4% y 4% de turbo, acotada al depósito.
+Los puntos de combo se conservan al romper la cadena y se incluyen en el resultado.
+Choques, caídas, golpes y marcha atrás cortan la cadena. El contador usa tiempo
+de simulación y queda congelado durante la pausa local.
+
+El rebufo conserva el llenado de 1.3 segundos, pero ahora sigue a un rival
+concreto del mismo corredor, modo, altura y sentido. Solo suelta el impulso
+cargado al abrirse lateralmente junto a ese rival. Frenar, saltar, perder el
+objetivo o cambiar de rival no concede un impulso gratuito. El impulso dura
+0.85 veces la estadística de duración y usa 0.27 veces la potencia de turbo.
+Los rivales locales tienen la misma mecánica y economía de combos.
+
+Los adelantamientos exigen aproximación y cruce limpios, proximidad, continuidad
+y el mismo trazado/sentido. Solo se premia una vez a cada rival por vuelta; los
+saltos de posición, el contacto y volver a vueltas anteriores invalidan el premio.
+
+Se añade una base musical procedural de carrera, voz de motor distinta para
+carretera/barco/avión/submarino/levitación y viento según velocidad. La última
+vuelta añade melodía, percusión y ritmo, junto a un acento suave en el borde de
+pantalla. El HUD muestra el combo, multiplicador y tiempo restante. Los textos
+nuevos están traducidos a los ocho idiomas. Estable y movimiento reducido
+mantienen fijo el acento del borde; al pausar se detiene su animación.
+
+El audio comparte cuatro osciladores y un búfer de ruido, sin nuevos archivos,
+dependencias, temporizadores ni nodos por golpe de percusión. Respeta silencio,
+volumen, pausa, final de carrera y desmontaje de la escena. La animación del borde
+modifica opacidad, sin recalcular sombras en cada fotograma.
+
+Validación: 85 pruebas automatizadas, TypeScript y build web. Las nuevas pruebas
+cubren cadencia 20/30/60/144 Hz, repetición de premios, adelantamientos, rebufo y
+silencio/reutilización de voces. La revisión visual usa una copia separada con
+escenario preparado para el HUD y una carrera normal. No sustituye escucha y
+ajuste en distintos equipos, partidas de red ni pruebas de instaladores nativos.
+
+Parte posterior prevista: atajos con riesgo, transformaciones por vuelta,
+maniobras específicas por vehículo y personalidades de rivales más marcadas.
+Las trampas ambientales siguen sin preaviso.
+
+## Adrenalina, parte 2: atajos de riesgo y evolución de las pistas
+
+Cada uno de los 41 mapas incorpora tres zonas de desafío: una en el desvío nuevo
+y dos en la ruta principal, 123 en total. La carretera usa compuertas deslizantes;
+barcos/submarinos reciben corrientes, los aviones ráfagas y los levitadores campos
+magnéticos. Las compuertas dejan una abertura móvil de al menos cinco metros, que obliga a
+cambiar de línea en parte de su ciclo.
+Los campos dejan un canal sin empuje; fuera de él aplican deriva lateral acotada
+según estadísticas. Las compuertas bloquean el avance, pero permiten deslizarse
+lateralmente para alcanzar el hueco. El modo fantasma atraviesa la compuerta sin
+obtener el premio de un recorrido limpio.
+
+Los desvíos tienen su desafío desde el inicio. En la ruta principal las máquinas
+se activan en la segunda vuelta de cabeza de carrera; en la tercera cambian el
+hueco, la amplitud o la fuerza. Cada zona espera a estar libre de corredores en
+un radio de 35 metros antes de cambiar de fase. La fase es compartida por todos
+los cuerpos y el dibujo en cada instancia local. En batalla no se progresa por
+vueltas ni se otorga la bonificación de ruta. No se elimina suelo ni se modifican
+los apoyos estáticos del circuito.
+
+Superar el desvío completo, cruzar su desafío y salir por la conexión real sin
+golpes permite ganar 180 puntos y hasta 6% de turbo, más la contribución de combo
+si corresponde. Se concede una vez por vuelta. Entrar a mitad de camino, ir hacia
+atrás, saltar posiciones, caer o usar fantasma invalida el premio. Un salto limpio
+sobre una compuerta puede contar como cruce válido. Todo usa el reloj de carrera
+y queda congelado durante la pausa local. El cambio de paleta conserva ese reloj;
+al transformar el vehículo se limpia la deriva residual. No hay preaviso amarillo
+ni cuenta atrás de obstáculos; se ve su geometría y estado actuales.
+
+La IA sigue las aberturas y canales reales. Al elegir un desvío deja de apuntar
+a un desafío de la carretera principal que ese desvío sustituye. La selección
+comprueba la distancia a lo largo del trazado para no confundir secciones cercanas
+en una curva cerrada.
+
+Se corrigió el acceso al desvío de Tux: sus primeros puntos no coincidían con la
+altura del suelo compartido y podía recorrerse la principal tras rozar solo la
+salida. La entrada ahora conserva esa altura y la bajada es continua. La prueba
+exige cruzar el desafío del desvío, además de entrar y salir.
+
+Se comparten geometrías/materiales y se ocultan las máquinas lejanas; las ubicaciones
+se calculan una sola vez al cargar cada circuito. Sin nuevas dependencias, texturas,
+luces puntuales ni efectos de posprocesado.
+
+Validación: 101 pruebas, TypeScript y compilación web. Auditoría específica de 246
+recorridos: 41 desvíos por tres fases a 30/60 Hz, con entrada, cruce de desafío y
+salida completados sin caídas. Auditoría adicional de los 82 recorridos generales
+del proyecto. Las simulaciones de desvíos comparten challengeMotion con Scene;
+la auditoría general comprueba el trazado existente, sin combate ni todas las
+mecánicas nuevas. La revisión visual usa otra copia con posición/fase/reloj
+preparados y excluida del proyecto y HTML finales. La red y los instaladores
+nativos requieren validación específica en destino.
+
+Quedan para la parte siguiente maniobras propias de cada vehículo y personalidades
+más diferenciadas de los rivales. Esta entrega no añade derrumbes ni inundaciones
+de suelo físico.
+
+
+## Adrenalina: maniobras, rivales, terreno y mandos
+
+El botón de derrape también activa una maniobra según el modo: tonel del avión,
+inmersión rápida del submarino, desplazamiento magnético lateral, salto del barco
+al ir recto y acrobacia del coche en el aire. Hay enfriamiento y requisitos de
+velocidad, avance real y ejecución limpia. Las acrobacias de coche y barco se
+premian tras aterrizar. Golpes, caídas, transformación, fusión y cañones cancelan
+la maniobra pendiente y devuelven el modelo a su orientación normal.
+
+La IA tiene cuatro estrategias según el papel del personaje: atacantes, exploradores
+de atajos, velocistas que reservan turbo para adelantar o la última parte de carrera,
+y especialistas en derrape. Se modifican decisiones, distancias y tiempos de uso;
+se conservan las estadísticas del vehículo y los perfiles de dificultad.
+
+Hay derrumbes reales de media plataforma en 37 circuitos y agua creciente sobre
+la carretera en 40. La selección exige tramos sólidos, rectos, sin túneles ni
+intersecciones con otra carretera. El carril conservado tiene al menos 5,5 m de
+ancho. Plataforma, borde y barandilla caen juntos; la física retira ese mismo suelo.
+El agua es una inundación somera (hasta 32 cm), afecta rodadura/inercia y sonido;
+no transforma un coche en barco. Estas ubicaciones son adicionales a las máquinas,
+rutas y peligros ya presentes en los 41 circuitos.
+
+Los cambios de suelo se activan por vuelta cuando la zona está libre, sin aviso
+previo. Se mantienen en carreras locales: en batalla y en partidas en red el suelo
+permanece estable. La sincronización de cambios físicos del mundo por red necesita
+un protocolo específico; así se evitan suelos distintos entre clientes. La IA
+centra la mirada al pasar por el carril conservado y las compuertas se sitúan lejos
+del derrumbe. Se amplió también el margen de entrada/salida junto a huecos existentes.
+
+Se añadió sonido de rodadura, agua, aire y magnetismo al mezclador procedural. La
+capa de superficie comparte el generador de ruido existente; no carga muestras de
+audio. Los aterrizajes dependen de su impacto y los adelantamientos tienen posición
+estéreo. Se respetan volumen, silencio y pausa. El modelo muestra el giro o la
+inclinación de la maniobra sin trasladar ese tonel a la cámara.
+
+El mando estándar usa RT/LT para acelerar/frenar, palanca izquierda para girar
+(y controlar altura), A para objeto, B para derrape/maniobra, X para turbo, LB para
+cambiar, RB para fusión y Start para pausa. Hay zona muerta de 18 %, gatillos
+analógicos y bloqueo hasta soltar controles tras conectar o recuperar foco. Se
+mantienen teclado y controles táctiles. Las indicaciones y recompensas están
+traducidas a los ocho idiomas existentes. La disponibilidad del mando depende de
+la API Gamepad del navegador/WebView y de los controladores del sistema; faltan
+pruebas con dispositivos físicos en Linux y Windows.
+
+### Construcción y validación
+
+`npm run build` usa el cargador runner de Vite para evitar escribir una configuración
+temporal dentro de node_modules. `npm run dist:linux` construye con Tauri, obtiene
+el directorio de salida con Cargo y calcula los requisitos GLIBC del ejecutable con
+readelf. El .deb declara esa versión y evita duplicar las dependencias GTK/WebKit.
+La fase GTK del AppImage recibe solo los archivos directos de las bibliotecas
+correspondientes de pkg-config, sin explorar bibliotecas privadas de otros programas.
+Los módulos, temas y dependencias transitivas conservan su resolución habitual.
+No se añadieron dependencias de npm o Cargo.
+
+Se comprobaron 131 pruebas automatizadas, TypeScript y compilación web, 246
+recorridos de desvíos (41 pistas por tres fases a 30/60 Hz) y los 82 recorridos
+generales existentes. Las simulaciones usan moveBody/challengeMotion y verifican
+entrada, desafío y salida; no sustituyen una carrera con todo el combate ni pruebas
+reales de GPU. Los eventos de suelo tienen además pruebas de soporte físico,
+carril conservado, pausa, reinicio y filtrado de biblioteca/ABI de los paquetes.
+
+El informe de esta entrega registra los tamaños y resultados nativos concretos.
+La compilación local requiere GLIBC 2.39 para su ejecutable; un paquete creado en
+este equipo no demuestra compatibilidad con distribuciones más antiguas. Para
+distribuir a más sistemas conviene construir desde la base Linux más antigua que
+se pretenda soportar. Windows conserva los destinos NSIS/MSI y necesita validación
+nativa de instalación, mandos y GPU. Las capturas de escenarios proceden de una
+copia de revisión con posición/vuelta/reloj preparados; esa instrumentación está
+excluida del proyecto y del HTML entregados.
+
+
+Resultado nativo de esta entrega: construcción optimizada y empaquetado Linux
+completados. El .deb ocupa 2.403.624 bytes y el AppImage 108.046.840 bytes; el
+proceso de cada formato permaneció activo durante la prueba de 20 segundos bajo
+Xvfb y terminó por el límite programado. El .deb mostró el aviso DRI3 de la
+pantalla virtual; el AppImage no registró errores. Esto comprueba el arranque
+básico, no la aceleración gráfica ni una instalación administrativa. El .deb
+local requiere GLIBC 2.39 y las bibliotecas del AppImage local GLIBC 2.44.

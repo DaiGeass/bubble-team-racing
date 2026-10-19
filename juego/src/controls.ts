@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import {PadReader,emptyPad} from "./gamepad";
 import { useGame, DEFAULT_KEYBINDS, type Action } from "./store";
 
 export interface ControlState {
@@ -54,6 +55,8 @@ export function useControls() {
     pausePressed: false,
   });
 
+  const padReader = useRef(new PadReader());
+  const blurred = useRef(false);
   const keys = useRef<Record<string, boolean>>({});
   // A key or button pressed and let go between two frames would never be seen
   // as held. Every press is remembered here until the next poll has read it,
@@ -77,7 +80,9 @@ export function useControls() {
     const up = (e: KeyboardEvent) => {
       keys.current[e.code] = false;
     };
+    const focus = () => { blurred.current=false; };
     const blur = () => {
+      blurred.current=true;padReader.current.suspend();
       keys.current = {};
       taps.current = {};
       touchTaps.current = {};
@@ -88,10 +93,12 @@ export function useControls() {
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", blur);
+    window.addEventListener("focus", focus);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
+      window.removeEventListener("focus", focus);
     };
   }, []);
 
@@ -101,6 +108,8 @@ export function useControls() {
   }
 
   function poll(): ControlState {
+    let pad=emptyPad();
+    try { if(!blurred.current&&typeof navigator.getGamepads==="function")pad=padReader.current.read(navigator.getGamepads()); } catch { padReader.current.suspend(); }
     const k = keys.current;
     const t = touch.current;
     const st = useGame.getState().settings;
@@ -115,19 +124,20 @@ export function useControls() {
     let right = on("right");
     const fwd = on("gas");
     const back = on("brake");
-    const item = on("item");
-    const swap = on("swap");
-    const fuse = on("fuse");
-    const turbo = on("turbo");
-    const drift = on("drift");
+    const item = on("item") || pad.item;
+    const swap = on("swap") || pad.swap;
+    const fuse = on("fuse") || pad.fuse;
+    const turbo = on("turbo") || pad.turbo;
+    const drift = on("drift") || pad.drift;
     if (st.invertSteer) {
       const flip = left;
       left = right;
       right = flip;
     }
 
-    state.current.steer = (left ? -1 : 0) + (right ? 1 : 0);
-    state.current.throttle = (fwd ? 1 : 0) + (back ? -1 : 0);
+    const digitalSteer=(left ? -1 : 0) + (right ? 1 : 0);
+    state.current.steer = digitalSteer || pad.steer * (st.invertSteer?-1:1);
+    state.current.throttle = ((fwd ? 1 : 0) + (back ? -1 : 0)) || pad.throttle;
     state.current.item = item;
     state.current.itemPressed = item && !prevItem.current;
     state.current.swap = swap;
@@ -139,7 +149,7 @@ export function useControls() {
     state.current.drift = drift;
     taps.current = {};
     touchTaps.current = {};
-    const pausePressed = state.current.pausePressed;
+    const pausePressed = state.current.pausePressed || pad.pause;
     state.current.pausePressed = false;
     prevItem.current = item;
     prevSwap.current = swap;
@@ -153,7 +163,7 @@ export function useControls() {
     setTouch(TOUCH_KEY[action] ?? "item", val);
   }
 
-  return { poll, setTouch, setAction };
+  return { poll, setTouch, setAction,hasGamepad:()=>padReader.current.connected };
 }
 
 export type UseControlsReturn = ReturnType<typeof useControls>;

@@ -2,8 +2,8 @@ import { Spring } from "./spring";
 export const CAMERA_STYLES = ["follow", "immersive", "stable"] as const;
 export type CameraStyle = typeof CAMERA_STYLES[number];
 export const CAMERA_PROFILES = {
-  follow: { distance: 1, height: 1, follow: 7, bank: 0, dynamicFov: 1, shake: 1 },
-  immersive: { distance: 0.88, height: 0.86, follow: 8, bank: 0.025, dynamicFov: 0.8, shake: 0.65 },
+  follow: { distance: 1, height: 1, follow: 9, bank: 0.012, dynamicFov: 1, shake: 0.8 },
+  immersive: { distance: 0.88, height: 0.86, follow: 10, bank: 0.035, dynamicFov: 0.85, shake: 0.55 },
   stable: { distance: 1.08, height: 1.08, follow: 9, bank: 0, dynamicFov: 0, shake: 0 },
 } satisfies Record<CameraStyle, { distance: number; height: number; follow: number; bank: number; dynamicFov: number; shake: number }>;
 
@@ -14,14 +14,26 @@ export class CameraFollow {
   private y = 0;
   private z = 0;
   angle = 0;
+  dx = 0;
+  dy = 0;
+  dz = 0;
   update(x: number, y: number, z: number, target: number, dt: number): boolean {
     const snap = !this.ready || Math.hypot(x - this.x, y - this.y, z - this.z) > 45;
+    this.dx = snap ? 0 : x - this.x;
+    this.dy = snap ? 0 : y - this.y;
+    this.dz = snap ? 0 : z - this.z;
     const turn = Math.atan2(Math.sin(target - this.angle), Math.cos(target - this.angle));
     this.angle = snap ? target : this.angle + turn * (1 - Math.exp(-10 * Math.max(0, dt)));
     this.ready = true;
     this.x = x; this.y = y; this.z = z;
     return snap;
   }
+}
+
+/** Keep the kart large enough to read; opening the lens never swallows the scene. */
+export function chaseLens(speed: number, boost: number, motionBlur: number, dynamic: number, covered: boolean): number {
+  const amount = Math.max(0, Math.min(1, Math.abs(speed) / 48));
+  return 64 + dynamic * (amount * (covered ? 5 : 6 + Math.max(0, Math.min(1, motionBlur)) * 5) + Math.max(0, Math.min(1, boost)) * 3.5);
 }
 
 const clamp = (x: number, limit: number) => Math.max(-limit, Math.min(limit, x));

@@ -1,3 +1,10 @@
+import SurfaceChanges from "./SurfaceChanges";
+import {replacedDeck} from "../surfaceEvents";
+import TrackChallenges from "./TrackChallenges";
+import { ambientHazardCount } from "../environment";
+import { characterPhase } from "../modelDetail";
+import { waterRibbon } from "./waterRibbon";
+import EnvironmentTraps from "./EnvironmentTraps";
 import WaterMaterial from "./WaterMaterial";
 import { zoneOnPath } from "../trackModes";
 import { TrackLife } from "./TrackLife";
@@ -6,7 +13,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { trackCurve, halfWidthAt, getActiveTrack, nearestT, surfaceYAt, trapTransform, portalTransform, getPaths, getPads, getSkyRings, getSkyBlocks, plainRoadAt, sectorIndexAt, sectorMix, trackBounds, terrainAt, terrainY, FLY_BASE, ROUTE_COLOURS, groundAt, makeGround, F_SOLID, F_WALL_POS, F_WALL_NEG, F_TUNNEL, type PathRT } from "../trackCurve";
+import { trackCurve, halfWidthAt, getActiveTrack, nearestT, surfaceYAt, trapTransform, trapScale, portalTransform, getPaths, getPads, getSkyRings, getSkyBlocks, plainRoadAt, sectorIndexAt, sectorMix, trackBounds, terrainAt, terrainY, FLY_BASE, ROUTE_COLOURS, groundAt, makeGround, F_SOLID, F_WALL_POS, F_WALL_NEG, F_TUNNEL, type PathRT } from "../trackCurve";
 import { Airships, Corridor, Eden, Fans, Fireworks, SkyBeasts, Vents, Flocks, Grandstand, Landmarks, Motes, Pennants } from "./Ambience";
 import { TRACK_WIDTH, ZONES, hazardState, zoneAt, zoneOfKind, raceSnapshot, biomeMix, themeOnLap, type ThemeDef, type Zone, type ZoneKind } from "../data";
 
@@ -102,7 +109,7 @@ function buildRibbonGeometry(path: PathRT) {
     if (k === count - 1) break;
     const j = (k + 1) % path.n;
     if (!(path.flags[i] & F_SOLID) || !(path.flags[j] & F_SOLID)) continue;
-    if (deckless(path, i) || deckless(path, j)) continue;
+    if (deckless(path, i) || deckless(path, j) || replacedDeck(path.id,i)) continue;
     const a = k * 2;
     bySector[sectorIndexAt(path.prog[i])].push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     const b = k * 4;
@@ -160,7 +167,7 @@ function buildRails(themes: ThemeDef[]) {
     for (let i = 0; i < count; i++) {
       const j = (i + 1) % path.n;
       if (!(path.flags[i] & F_SOLID) || !(path.flags[j] & F_SOLID)) continue;
-      if (railless(path, i) || railless(path, j)) continue;
+      if (railless(path, i) || railless(path, j) || replacedDeck(path.id,i)) continue;
       const sector = sectorIndexAt(path.prog[i]);
       // stripes five units long
       const colour = (Math.floor((i * path.ds) / 5) % 2 ? colB : colA)[sector] ?? colA[0];
@@ -589,43 +596,38 @@ const HAZARDS_PER_LAP = 2;
 
 function MovingHazards({ theme }: { theme: ThemeDef }) {
   // the lap mutates: lap one has the circuit's own hazards, every lap after adds two more
-  const first = Math.max(2, getActiveTrack().hazards);
-  const count = first + HAZARDS_PER_LAP * 3;
+  const first = Math.max(0, getActiveTrack().hazards);
+  const count = ambientHazardCount(first, 4, HAZARDS_PER_LAP);
   const refs = useRef<(THREE.Group | null)[]>([]);
   const bases = useMemo(() => {
-    const out: { t: number; phase: number; dir: number }[] = [];
+    const out: { t: number; phase: number; dir: number; pos: THREE.Vector3; normal: THREE.Vector3 }[] = [];
     for (let i = 0; i < count; i++) {
       // spread by the golden ratio so the late ones land between the early ones
       let ht = (0.11 + i * 0.6180339887) % 1;
       // on plain dry road only: never on a jump, a cannon line, a flight or the sea
       for (let guard = 0; guard < 40 && (zoneAt(ht) || !plainRoadAt(ht, 60)); guard++) ht = (ht + 0.023) % 1;
-      out.push({ t: ht, phase: Math.random() * Math.PI * 2, dir: i % 2 === 0 ? 1 : -1 });
+      const pos = trackCurve.getPointAt(ht), tan = trackCurve.getTangentAt(ht);
+      out.push({t:ht, phase:characterPhase(getActiveTrack().id+":"+i)*Math.PI*2, dir:i%2===0?1:-1, pos, normal:new THREE.Vector3(-tan.z,0,tan.x).normalize()});
     }
     return out;
   }, [count]);
 
-  useFrame((state) => {
-    const time = state.clock.elapsedTime;
+  const positions = useMemo(() => bases.map(b => ({x:b.pos.x,y:b.pos.y,z:b.pos.z,t:b.t})), [bases]);
+  useFrame(() => {
+    const time = raceSnapshot.clockMs * 0.001;
     const lap = Math.max(1, hazardState.lap);
-    const active = first + HAZARDS_PER_LAP * (lap - 1);
+    const active = ambientHazardCount(first, lap, HAZARDS_PER_LAP);
     const lapPhase = lap * 1.7;
-    hazardState.positions.length = 0;
+    hazardState.positions.length = active;
     refs.current.forEach((g, i) => {
       if (!g) return;
-      g.visible = i < active;
-      if (!g.visible) return;
-      const b = bases[i];
-      const t = b.t;
-      const c = trackCurve.getPointAt(t);
-      const tan = trackCurve.getTangentAt(t);
-      const n = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-      const spread = halfWidthAt(t) - 2.4;
-      const speed = 0.7 + (lap % 3) * 0.22;
-      const off = Math.sin(time * speed + b.phase + lapPhase) * spread * b.dir;
-      g.position.copy(c).addScaledVector(n, off);
-      g.position.y = c.y + 1.15 + Math.sin(time * 2 + b.phase) * 0.15;
-      g.rotation.y = time * 1.4 + b.phase;
-      hazardState.positions.push({ x: g.position.x, y: c.y, z: g.position.z, t });
+      g.visible = i < active; if (!g.visible) return;
+      const b=bases[i],spread=halfWidthAt(b.t)-2.4,speed=0.7+(lap%3)*0.22;
+      const off=Math.sin(time*speed+b.phase+lapPhase)*spread*b.dir;
+      g.position.copy(b.pos).addScaledVector(b.normal,off);
+      g.position.y=b.pos.y+1.15+Math.sin(time*2+b.phase)*0.15;
+      g.rotation.y=time*1.4+b.phase;
+      const p=positions[i];p.x=g.position.x;p.y=b.pos.y;p.z=g.position.z;hazardState.positions[i]=p;
     });
   });
 
@@ -751,7 +753,7 @@ function Props({ themes }: { themes: ThemeDef[] }) {
           )}
           {theme.prop === "circuit" && (
             <>
-              <mesh position={[0, 2.2, 0]} castShadow>
+              <mesh position={[0, 0.9, 0]} castShadow>
                 <boxGeometry args={[0.5, 4.4, 0.5]} />
                 <meshStandardMaterial color="#1a1f4a" emissive={it.kind === 0 ? theme.barrierA : theme.barrierB} emissiveIntensity={1.5} toneMapped={false} />
               </mesh>
@@ -1150,6 +1152,10 @@ function Lake({ theme }: { theme: ThemeDef }) {
   const indoor = !!getActiveTrack().indoor;
   const buildRuns = (half: number, height: number, pad: number) => {
     const runs = ZONES.filter((zone) => zone.type === "water").map((zone) => buildRibbon(half, height, pad, "water", zone));
+    for (const path of getPaths()) {
+      const extra = waterRibbon(path, half - TRACK_WIDTH / 2, height);
+      if (extra) runs.push(extra);
+    }
     if (!runs.length) return new THREE.BufferGeometry();
     const merged = mergeGeometries(runs) ?? runs[0];
     runs.forEach((run) => { if (run !== merged) run.dispose(); });
@@ -1521,17 +1527,17 @@ function SubFish({ zone }: { zone: Zone }) {
 
 /** Hanging spike bars and sliding road spikes; they move with the same clock as the damage check. */
 function MovingTraps({ theme }: { theme: ThemeDef }) {
-  const traps = getActiveTrack().traps ?? [];
+  const traps = (getActiveTrack().traps ?? []).filter(tr => tr.active);
   const refs = useRef<(THREE.Group | null)[]>([]);
   useFrame(() => {
-    const now = performance.now();
+    const now = raceSnapshot.clockMs;
     traps.forEach((tr, i) => {
       const g = refs.current[i];
       if (!g) return;
       const { p, ground, heading, span } = trapTransform(tr, now);
       g.position.set(p.x, ground, p.z);
       g.rotation.set(0, heading, 0);
-      const k = tr.kind === "bar" ? span * 0.55 : 1;
+      const k = trapScale(tr.kind, span);
       g.scale.set(k, 1, 1);
     });
   });
@@ -1541,7 +1547,7 @@ function MovingTraps({ theme }: { theme: ThemeDef }) {
         <group key={i} ref={(el) => (refs.current[i] = el)}>
           {tr.kind === "bar" ? (
             <>
-              <mesh position={[0, 2.2, 0]} castShadow>
+              <mesh position={[0, 0.9, 0]} castShadow>
                 <boxGeometry args={[7, 0.5, 0.7]} />
                 <meshStandardMaterial color={theme.barrierA} emissive={theme.barrierA} emissiveIntensity={1.8} toneMapped={false} />
               </mesh>
@@ -2419,6 +2425,9 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
       <SubZone theme={theme} />
       <MagZone theme={theme} />
 
+      <EnvironmentTraps theme={theme} />
+      <TrackChallenges theme={theme} />
+      <SurfaceChanges theme={theme} />
       <MovingTraps theme={theme} />
       <Portals theme={theme} />
       <MovingHazards theme={theme} />

@@ -8,6 +8,11 @@ export function coast(speed: number, dt: number): number {
   return Math.sign(speed) * Math.max(0, Math.abs(speed) - 8 * Math.max(0, dt));
 }
 
+/** Timers use the same accepted elapsed time as physics and freeze offline pauses. */
+export function activeFrameTime(dt: number, paused: boolean): number {
+  return paused || !Number.isFinite(dt) ? 0 : Math.max(0,Math.min(0.1,dt));
+}
+
 /** The offline starting lights advance only with unpaused simulation time. */
 export class RaceCountdown {
   elapsed = 0;

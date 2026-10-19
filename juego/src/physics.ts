@@ -1,3 +1,4 @@
+import {hasSurface} from "./surfaceEvents";
 import * as THREE from "three";
 import { frameBlend } from "./motion";
 import { groundAt, locate, makeGround, getPaths, mainIndexAt, pathPoint, safeSpot, F_WALL_POS, F_WALL_NEG, type Ground } from "./trackCurve";
@@ -86,6 +87,7 @@ export function makeResult(): StepResult {
 
 const G = makeGround();
 const W = makeGround();
+const J = makeGround();
 
 function wrapAngle(a: number) {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -110,6 +112,7 @@ function wall(b: Body, opts: StepOpts, dt: number, res: StepResult, vx: number, 
   const onFloor = !opts.fly && groundAt(b.pos.x, b.pos.z, b.y, W, 1.6) && W.y > b.y - 2.5;
   if (!onFloor) {
     if (b.path < 0 || !locate(b.path, b.idx, b.pos.x, b.pos.z, W)) return false;
+    if(!opts.fly&&!hasSurface(W.path,W.idx,W.along,W.lat))return false;
     // keep following the ribbon while in the air, so its barriers still apply
     b.idx = W.idx;
     // something already below the deck is past its barrier
@@ -121,6 +124,18 @@ function wall(b: Body, opts: StepOpts, dt: number, res: StepResult, vx: number, 
   if (W.lat > lim && (opts.fly || W.flags & F_WALL_POS)) side = 1;
   else if (W.lat < -lim && (opts.fly || W.flags & F_WALL_NEG)) side = -1;
   if (!side) return false;
+
+  // A diving/flying corridor opens at a real branch too. Previously the
+  // unconditional flight fence made narrow alternate tubes impossible to enter.
+  if (opts.fly && !(W.flags & (side > 0 ? F_WALL_POS : F_WALL_NEG))) {
+    for (const p of getPaths()) {
+      if (p.id === W.path) continue;
+      const u = p.main ? b.prog : progDelta(p.t0, b.prog) / p.span;
+      if (u < -0.04 || u > 1.04) continue;
+      const hint = Math.max(0, Math.min(p.n - 1, Math.round(u * (p.n - 1))));
+      if (locate(p.id, hint, b.pos.x, b.pos.z, J, 24) && Math.abs(J.lat) < J.half + opts.flyMargin && Math.abs(J.y - W.y) < 1.8) return false;
+    }
+  }
 
   // outward normal of the barrier
   const nx = -W.tz * side;

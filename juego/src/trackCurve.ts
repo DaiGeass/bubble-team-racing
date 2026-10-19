@@ -1,5 +1,6 @@
+import {clearSurfaces,configureSurfaces,hasSurface} from "./surfaceEvents";
 import * as THREE from "three";
-import { TRACKS, ZONES, TRACK_WIDTH, type TrackDef, type RouteDef, type ThemeId, setBiomeTrack, defaultBiomes } from "./data";
+import { TRACKS, ZONES, TRACK_WIDTH, type TrackDef, type RouteDef, type ThemeId, type TrapDef, setBiomeTrack, defaultBiomes } from "./data";
 
 // ---------------------------------------------------------------------------
 // Track runtime. A circuit is a set of road ribbons in real 3D: the main loop
@@ -345,7 +346,7 @@ export function groundAt(x: number, z: number, y: number, out: Ground, stepUp = 
         if (along > p.reach[i] || along < -p.reach[i]) continue;
         const lat = -dx * p.tz[i] + dz * p.tx[i];
         const half = p.half[i];
-        if (lat > half || lat < -half) continue;
+        if (lat > half || lat < -half || !hasSurface(pid,i,along,lat)) continue;
         const sy = p.py[i] + along * p.slope[i];
         if (sy > top) continue;
         // the floor closest in height wins: you stay on the road you are on even
@@ -770,6 +771,7 @@ export function plainRoadAt(t: number, reach = 40): boolean {
 export function setActiveTrack(id: string) {
   const def = TRACKS.find((t) => t.id === id) ?? TRACKS[0];
   activeTrackId = def.id;
+  clearSurfaces();
   rebuild(def);
   resample();
   // swap the shared ZONES array in place so every consumer sees the new zones
@@ -778,6 +780,7 @@ export function setActiveTrack(id: string) {
   // a circuit with no scenery of its own inherits a four-stretch chain
   if (!def.biomes || !def.biomes.length) def.biomes = defaultBiomes(def.theme, TRACKS.indexOf(def));
   setBiomeTrack(def);
+  configureSurfaces(paths,def);
 }
 
 // ---------------------------------------------------------------------------
@@ -882,6 +885,20 @@ export function trapTransform(
   return { t, p, ground: surfaceYAt(t), heading: Math.atan2(tan.x, tan.z), span: halfWidthAt(t) };
 }
 
+export function trapScale(kind: TrapDef["kind"], halfWidth: number): number {
+  return kind === "bar" ? Math.min(1.5, (halfWidth - 2) / 7) : 1;
+}
+
+/** Physical metres instead of a fraction of a lap; disabled traps do not hit. */
+export function trapContact(tr: TrapDef, now: number, x: number, y: number, z: number): boolean {
+  if (!tr.active) return false;
+  const hit = trapTransform(tr, now), dx = x-hit.p.x, dz = z-hit.p.z;
+  const along = Math.abs(dx*Math.sin(hit.heading)+dz*Math.cos(hit.heading));
+  const lateral = Math.abs(dx*Math.cos(hit.heading)-dz*Math.sin(hit.heading));
+  const half = tr.kind === "bar" ? 3.5*trapScale(tr.kind,hit.span) : 2.4;
+  return along < 1.3 && lateral < half+0.9 && Math.abs(y-hit.ground)<3;
+}
+
 /** Ground-anchored world position of a portal mouth. */
 export function portalTransform(pr: { tIn: number; side: number }, which: "in" | "out", out?: { tOut: number; side: number }) {
   const t = which === "in" ? pr.tIn : out!.tOut;
@@ -895,3 +912,4 @@ export function portalTransform(pr: { tIn: number; side: number }, which: "in" |
 
 rebuild(TRACKS[0]);
 resample();
+configureSurfaces(paths,TRACKS[0]);

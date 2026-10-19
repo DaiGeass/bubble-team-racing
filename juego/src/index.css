@@ -325,3 +325,9 @@ button, a, [role="button"] {
   -webkit-backdrop-filter: none;
   background: rgba(230, 245, 255, 0.92);
 }
+
+/* Keep the road clear: final-lap energy stays at the screen edge. */
+.final-lap-edge {box-shadow:inset 0 0 38px rgba(255,92,67,.13);border:2px solid rgba(255,156,77,.2);opacity:.65;animation:final-lap-beat .88235s ease-in-out infinite;}
+@keyframes final-lap-beat {50% {opacity:1;}}
+.final-lap-still {animation:none;}
+@media (prefers-reduced-motion: reduce) {.final-lap-edge {animation:none;}}

@@ -1,3 +1,4 @@
+import type { SkillKind } from "./adrenaline";
 import { CAMERA_STYLES, type CameraStyle } from "./camera";
 import { mergePreferences, preferredLanguage } from "./preferences";
 import { GRAPHICS_QUALITIES, type GraphicsQuality } from "./graphics";
@@ -58,8 +59,12 @@ export interface RaceSetup {
 }
 
 export interface Telemetry {
-  drivingCue: "landing" | "drift" | null;
+  drivingCue: "landing" | "drift" | "near" | "sling" | "pass" | "route" | "maneuver" | null;
   drivingValue: number;
+  comboCount: number;
+  comboMultiplier: number;
+  comboLeft: number;
+  comboKind: SkillKind | null;
   lap: number;
   totalLaps: number;
   position: number;
@@ -116,6 +121,7 @@ export interface Telemetry {
 const defaultTelemetry: Telemetry = {
   drivingCue: null,
   drivingValue: 0,
+  comboCount: 0, comboMultiplier: 1, comboLeft: 0, comboKind: null,
   lap: 1,
   totalLaps: 3,
   position: 1,

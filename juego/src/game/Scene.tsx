@@ -1,8 +1,16 @@
+import {passPan} from "../foley";
+import {Maneuver} from "../maneuvers";
+import {rivalStyle,RIVAL_STYLES,rivalTurboThreshold} from "../rivalStyle";
+import {resetSurfaces,evolveSurfaces,setSurfaceClock,bridgeLane,surfaceWater} from "../surfaceEvents";
+import { challengeSites, challengeState, resetChallenges, challengeStage, challengePose, makeChallengePose, challengeMotion, makeChallengeMotion, RiskRouteRun } from "../trackChallenges";
+import { SkillChain, CleanPasses, DraftCharge, isFinalLap, type SkillKind } from "../adrenaline";
+import { environmentEvents, eventPose, eventContact, NearMissLedger, type EventPose } from "../environment";
+import { RACE_SPEED_SCALE, RACE_ACCEL_SCALE } from "../raceTuning";
 import { trackPace, cruisePace, lapTimeBudget } from "../trackPace";
 import { zoneOnPath, modeOnPath, modeFromZone, resetModeState } from "../trackModes";
 import { LandingBonus } from "../landingBonus";
-import { frameBlend, coast, RaceCountdown } from "../motion";
-import { CameraFollow, CameraDynamics, curvePreview, CAMERA_PROFILES } from "../camera";
+import { activeFrameTime, frameBlend, coast, RaceCountdown } from "../motion";
+import { CameraFollow, CameraDynamics, curvePreview, chaseLens, CAMERA_PROFILES } from "../camera";
 import { graphicsProfile } from "../graphics";
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
@@ -43,10 +51,10 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapPhase, trapTransform, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, sectorMix, plainStretches, terrainY, FLY_BASE, FLIGHT, groundAt, makeGround, mainIndexAt, pathPoint, F_TUNNEL } from "../trackCurve";
+import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapContact, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, sectorMix, plainStretches, terrainY, FLY_BASE, FLIGHT, groundAt, locate, makeGround, mainIndexAt, pathPoint, F_TUNNEL } from "../trackCurve";
 import { moveBody, makeResult, placeBody, respawnBody, aimAhead, bendAhead, collideBodies, progDelta, GRAVITY, type Body, type StepOpts } from "../physics";
 import { drainParticleQueue, emitParticles, emitDebris, addShake, shakeState } from "../particles";
-import { setSkid, sfx } from "../sound";
+import { setSkid, setRaceSound, sfx } from "../sound";
 
 const TAG_COOLDOWN_MAX = 3.6;
 // scratch objects for the per-frame physics calls, so the loop allocates nothing
@@ -73,6 +81,12 @@ interface Racer extends Body {
   /** visual pitch in radians: the slope on the ground, the arc in the air */
   pitch: number;
   landingBonus: LandingBonus;
+  maneuver: Maneuver;
+  risk: RiskRouteRun;
+  flow: number;
+  chain: SkillChain;
+  passes: CleanPasses;
+  wake: DraftCharge;
   /** seconds spent wedged with the throttle open */
   pinnedFor: number;
   /** furthest it has got, and seconds since that last moved (AI only) */
@@ -289,7 +303,7 @@ function statsFor(char: CharacterDef, vehicle: VehicleConfig) {
   return {
     // top speed runs from 24 to 27.75 across the speed stat: enough to feel, not
     // enough for the fastest character to lap the slowest in three laps
-    maxSpeed: (21.5 + char.speed * 1.25 + b.speed * 0.8) * mul("speed") * (1 + heavy * 0.012),
+    maxSpeed: RACE_SPEED_SCALE * (21.5 + char.speed * 1.25 + b.speed * 0.8) * mul("speed") * (1 + heavy * 0.012),
     accel: (11 + char.accel * 3.4) * mul("accel") * (1 - heavy * 0.045),
     turnRate: (1.75 + char.handling * 0.4 + b.handling * 0.28) * mul("turn"),
     boatBonus: water ? 1.12 : 1,
@@ -371,6 +385,13 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const setup = useMemo(() => useGame.getState().raceSetup, []);
 
 
+  const challenges=useMemo(()=>challengeSites(),[]);
+  const riskSite=challenges.find(site=>site.risk);
+  const challengeView=useMemo(makeChallengePose,[]);
+  const challengeStep=useMemo(makeChallengeMotion,[]);
+  const environments = useMemo(() => environmentEvents(), []);
+  const environmentPose = useMemo<EventPose>(() => ({x:0,y:0,z:0,heading:0,active:false,lift:0,radius:1}), []);
+  const nearMisses = useMemo(() => new Map<string, NearMissLedger>(), []);
   const skyRings = useMemo(() => getSkyRings(), []);
   const skyBlocks = useMemo(() => getSkyBlocks(), []);
 
@@ -441,6 +462,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         safeIdx: 0,
         pitch: 0,
         landingBonus: new LandingBonus(),
+        risk:new RiskRouteRun(riskSite?.path??-1,riskSite?getPaths()[riskSite.path].def!.t1:1,mainPath.length),flow:0,
+        chain: new SkillChain(), passes: new CleanPasses(), wake: new DraftCharge(), maneuver:new Maneuver(),
         pinnedFor: 0,
         bestTotal: 0,
         noProgressFor: 0,
@@ -709,6 +732,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // road, instead of feeding it to the same gap for ever.
     const again = raceClock.current - r.lastFall < 7000;
     r.lastFall = raceClock.current;
+    breakSkills(r);
     if (again) {
       placeBody(r, 0, mainIndexAt(r.prog + 0.035));
       const spot = safeAhead(r.idx);
@@ -719,6 +743,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     syncMode(r);
     r.speed = pace;
     r.respawnLock = 1;
+    r.flow=0;r.risk.reset();
     r.pinnedFor = 0;
     r.noProgressFor = 0;
     r.landingBonus.reset();
@@ -774,20 +799,20 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const started = useRef(false);
   const countdown = useRef(new RaceCountdown());
   const countdownValue = useRef(3);
-  const drivingCue = useRef<{ kind: "landing" | "drift" | null; value: number; left: number }>({ kind: null, value: 0, left: 0 });
+  const drivingCue = useRef<{ kind: "landing" | "drift" | "near" | "sling" | "pass" | "route" | "maneuver" | null; value: number; left: number }>({ kind: null, value: 0, left: 0 });
   const raceClock = useRef(0);
   const finishedOnce = useRef(false);
   const resultsTimer = useRef<number | null>(null);
   useEffect(() => () => {
     if (resultsTimer.current !== null) window.clearTimeout(resultsTimer.current);
     setSkid(0);
+    setRaceSound(null);
     drainParticleQueue();
   }, []);
   /** the little celebration after the flag: the kart hops and spins while the camera circles it */
   const victory = useRef<null | { t: number; podium: boolean; heading: number; y: number }>(null);
   const frame = useRef(0);
   const uiClock = useRef(1);
-  const clockRef = useRef(0);
   const camPos = useRef(new THREE.Vector3(0, 6, -14));
   const camLook = useRef(new THREE.Vector3());
   const cameraScratch = useMemo(() => ({ forward: new THREE.Vector3(), desired: new THREE.Vector3(), look: new THREE.Vector3(), shake: new THREE.Vector3() }), []);
@@ -812,6 +837,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     skids.mesh.geometry.dispose();
     (skids.mesh.material as THREE.Material).dispose();
     setSkid(0);
+    setRaceSound(null);
   }, [skids]);
   function laySkid(x: number, y: number, z: number, dir: number, slope: number, length: number) {
     skids.e.set(-Math.atan(slope), dir, 0);
@@ -833,12 +859,15 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const beamTo = useRef(new THREE.Vector3());
 
   useEffect(() => {
+    raceSnapshot.clockMs = raceClock.current;
     raceSnapshot.theme = theme;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
   useEffect(() => {
     hazardState.lap = 1;
+    resetChallenges();
+    resetSurfaces();setSurfaceClock(0);
     useGame.getState().resetTelemetry();
     useGame.getState().setTelemetry({ totalLaps: mode.laps, totalRacers: racers.length, countdown: 3 });
     countdown.current = new RaceCountdown();
@@ -1108,6 +1137,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   /** Two racers become one kart: `a` drives, `b` climbs on top and mans the turret. */
   function fuse(a: Racer, b: Racer) {
     const pair: FusionPair = { driver: a, gunner: b, hp: 1, age: 0, aim: 0, fireCd: 0.6, swapCd: 0.8, lock: null, life: 11 + Math.random() * 7 };
+    resetManeuver(a);resetManeuver(b);
     a.pair = pair;
     b.pair = pair;
     b.riding = true;
@@ -1369,6 +1399,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       if (r.isPlayer) { addShake(0.8); sfx.bump(); }
     }
     r.lastHit = raceClock.current;
+    breakSkills(r);
     if (r.isPlayer) useGame.getState().setTelemetry({ hitAt: Date.now() });
     r.hitBy = by?.id ?? "";
     if (battle) takeLife(r);
@@ -1725,6 +1756,8 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const zone = zoneOnPath(r.path, r.prog);
     const newMode = modeFromZone(zone);
     if (resetModeState(r, newMode)) {
+      resetManeuver(r);
+      r.flow=0;
       r.landingBonus.reset();
       r.visual.current.mode = newMode;
       if (announce && r.isPlayer) {
@@ -1744,7 +1777,23 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     return zone;
   }
 
+  function resetManeuver(r:Racer){
+    r.maneuver.reset();r.visual.current.maneuverRoll=0;r.visual.current.maneuverPitch=0;
+  }
+  function breakSkills(r: Racer) {
+    resetManeuver(r);r.chain.reset(); r.passes.resetArmed(); r.wake.reset(); r.draft = 0; r.risk.fail();
+  }
+  function awardSkill(r: Racer, kind: SkillKind) {
+    if (r.finished || r.out || r.riding || r.speed < 12 || r.touching || r.stunTimer > 0 || r.exploding || r.respawnLock > 0) return;
+    const gain = r.chain.add(kind, r.total * getPaths()[0].length, raceClock.current);
+    if (gain <= 0) return;
+    r.turboMeter = Math.min(1, r.turboMeter + gain);
+    if (r.isPlayer && r.chain.count >= 2) sfx.combo(r.chain.count);
+  }
+
   function updateRacer(r: Racer, dt: number, controls: ReturnType<typeof poll> | null) {
+    r.chain.step(dt);
+    if (r.stunTimer > 0 || r.exploding || r.touching || r.respawnLock > 0 || r.speed < -1) breakSkills(r);
     // riding on the turret of someone else's kart: aim and fire, nothing else
     if (r.pair && r.pair.gunner === r) return rideAlong(r, dt, controls);
 
@@ -1899,6 +1948,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // every opponent drives properly whatever the level: the level decides how
       // hard it pushes and how much it gets out of each thing it does
       const ai = AI_PROFILES[useGame.getState().settings.aiSkill];
+      const style=rivalStyle(r.main),traits=RIVAL_STYLES[style];
       const all = getPaths();
 
       // route choice: decided once per junction, a little before reaching it
@@ -1909,7 +1959,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           if (rel > -0.03 && rel < 0 && r.aiSeen !== k) {
             r.aiSeen = k;
             // a cut with no barriers is a gamble the careful levels rarely take
-            if (Math.random() < (all[k].def?.kind === "cut" ? ai.cutUse : ai.routeUse)) r.aiRoute = k;
+            if (Math.random() < (all[k].def?.kind === "cut" ? ai.cutUse*traits.cuts : ai.routeUse*traits.routes)) r.aiRoute = k;
           }
         }
       }
@@ -1950,7 +2000,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         const ahead = dx * tx + dz * tz;
         if (ahead < 1 || ahead > reach) return;
         const at = r.lat + (-dx * tz + dz * tx);
-        const clear = radius + 2.3;
+        const clear = radius + traits.clearance;
         if (Math.abs(at - line) > clear) return;
         // pass on the side with more road
         const left = at + clear;
@@ -1959,16 +2009,40 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       };
       for (const tr of traffic) dodge(tr.pos.x, tr.pos.y, tr.pos.z, 1.6);
       if (r.mode === "land") for (const hz of hazardState.positions) dodge(hz.x, hz.y, hz.z, 1.4);
+      for (const event of environments) {
+        if (event.path !== r.path || event.mode !== r.mode) continue;
+        eventPose(event, raceClock.current, environmentPose);
+        if (environmentPose.active) dodge(environmentPose.x, environmentPose.y, environmentPose.z, environmentPose.radius + 0.5);
+      }
       for (const pd of puddles) if (pd.active && pd.ownerId !== r.id) dodge(pd.pos.x, pd.pos.y, pd.pos.z, 1.1);
       for (const o of racers) if (o !== r && !gone(o) && o.speed < r.speed - 2) dodge(o.pos.x, o.y, o.pos.z, 0.9);
 
+      let opening: (typeof challenges)[number]|null=null,openingAhead=Infinity;
+      // Opening geometry, not a warning: aim through the visible calm channel.
+      for(const site of challenges) {
+        if(site.path!==r.path||site.mode!==r.mode)continue;
+        const planned=all[r.aiRoute],progress=here.prog[site.idx];
+        if(r.path===0&&planned&&!planned.main&&progress>=planned.t0&&progress<=planned.t0+planned.span)continue;
+        const arc=(site.idx-r.idx)*here.ds;
+        if(arc<0||arc>90)continue;
+        const ahead=(site.x-r.pos.x)*tx+(site.z-r.pos.z)*tz;
+        if(ahead<0||ahead>85)continue;
+        challengePose(site,raceClock.current+Math.min(1500,ahead/Math.max(12,r.speed)*1000),challengeState.stages[site.id]??1,challengeView);
+        if(challengeView.active&&ahead<openingAhead){line=challengeView.gap;opening=site;openingAhead=ahead;}
+      }
+      const remainingLane=bridgeLane(r.path,r.idx,Math.max(35,r.speed*1.2));
+      if(remainingLane!==null)line=remainingLane;
       line = THREE.MathUtils.clamp(line, -room, room);
       r.aiLat += (line - r.aiLat) * Math.min(1, dt * 3.5);
 
       // aim along the road it is taking, in 3D: the bridge and the road under it are different roads
       // look less far ahead inside a bend, or the aim point cuts the corner for it
-      const lookDist = 9 + Math.abs(r.speed) * (Math.abs(near) > 0.4 ? 0.3 : 0.5);
+      const lookDist = remainingLane!==null?6+Math.abs(r.speed)*0.18:9 + Math.abs(r.speed) * (Math.abs(near) > 0.4 ? 0.3 : 0.5);
       r.aiRoute = aimAhead(r, r.aiRoute, lookDist, THREE.MathUtils.clamp(r.aiLat / room, -0.95, 0.95), aimV);
+      if(remainingLane===null&&opening&&openingAhead>2&&openingAhead<Math.max(18,r.speed*0.65)) {
+        challengePose(opening,raceClock.current+openingAhead/Math.max(12,r.speed)*1000,challengeState.stages[opening.id]??1,challengeView);
+        aimV.set(opening.x-opening.tz*challengeView.gap,opening.y,opening.z+opening.tx*challengeView.gap);
+      }
       // an aim point that is not in front is one it would circle for ever: take the main road instead
       if (r.aiRoute > 0 && (aimV.x - r.pos.x) * tx + (aimV.z - r.pos.z) * tz < 3) {
         r.aiRoute = 0;
@@ -2008,17 +2082,17 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // and never where there are no barriers to catch a slide
       const whole = r.path === 0 ? plainRoadAt(r.prog + 35 / all[0].length, 45) : !all[r.path].def?.holes?.length && all[r.path].def?.walls !== false;
       if (!r.isDrifting) {
-        driftHeld = onRoad && whole && Math.abs(near) >= ai.driftFrom && steerIn * -near > 0 && Math.abs(r.steerSmooth) > 0.3;
+        driftHeld = onRoad && whole && Math.abs(near) >= ai.driftFrom*traits.drift && steerIn * -near > 0 && Math.abs(r.steerSmooth) > 0.3;
       } else {
         // let go at the exit of the bend, once it has what this level comes for,
         // or when the road wants it to turn the other way
-        driftHeld = onRoad && whole && r.driftCharge < ai.driftHold && Math.abs(bendAhead(r.path, r.idx, 26)) > 0.14 && steerIn * r.driftDir > -0.2;
+        driftHeld = onRoad && whole && r.driftCharge < ai.driftHold*traits.drift && Math.abs(bendAhead(r.path, r.idx, 26)) > 0.14 && steerIn * r.driftDir > -0.2;
         // in a drift the wheel sets how tight the arc is, so ask for the arc that gives the turn it wants
         steerIn = r.driftDir * THREE.MathUtils.clamp((steerIn * r.driftDir - 0.3) / 0.55, -1, 1);
       }
 
       // ---- turbo: on a straight, once the bar is where this level likes it ----
-      turboPressed = r.turboMeter >= Math.min(0.99, ai.turboAt) && Math.abs(far) < 0.3 && onRoad && whole && r.boostTimer <= 0;
+      turboPressed = r.turboMeter >= rivalTurboThreshold(ai.turboAt,style,r.prog,r.lap===mode.laps,!!findTargetAhead(r,0.015)) && Math.abs(far) < 0.3 && onRoad && whole && r.boostTimer <= 0;
 
       // ---- catch-up: by how much it presses on when you are ahead, and eases off when you are behind ----
       const gap = racers[0].total - r.total;
@@ -2027,7 +2101,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // ---- items: each one used for what it is for ----
       if (r.weapon) {
         r.aiWeaponDelay -= dt;
-        if (r.aiWeaponDelay <= 0 && r.rollTimer <= 0 && wantsItem(r, ai.mercy, Math.abs(far) < 0.35)) itemPressed = true;
+        if (r.aiWeaponDelay <= 0 && r.rollTimer <= 0 && wantsItem(r, ai.mercy*traits.mercy, Math.abs(far) < 0.35)) itemPressed = true;
         // out in front with a missile and somebody on its tail: over the shoulder it goes
         else if (r.aiWeaponDelay <= 0 && r.rollTimer <= 0 && r.weapon === "missile" && !findTargetAhead(r, 0.45)) {
           const chaser = findTargetBehind(r, 0.035);
@@ -2037,7 +2111,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           }
         }
       } else {
-        r.aiWeaponDelay = ai.itemDelay * (0.7 + Math.random() * 0.6);
+        r.aiWeaponDelay = ai.itemDelay * traits.delay * (0.7 + Math.random() * 0.6);
       }
 
       // ---- fusion: with someone to shoot at and the partner ready ----
@@ -2048,6 +2122,13 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       throttleIn = 0;
       steerIn *= 0.25;
     }
+
+    if(!r.isPlayer&&(r.mode==="plane"||r.mode==="sub"||r.mode==="hover")&&Math.abs(steerIn)<0.2&&r.maneuver.cooldown===0&&Math.sin(raceClock.current*0.0007+r.aiPhase)>0.998)driftHeld=true;
+    const move=r.maneuver.step(dt,{mode:r.mode,held:driftHeld,steer:steerIn,speed:r.speed,airborne:r.airborne,
+      clean:r.stunTimer<=0&&!r.touching&&!r.exploding&&r.respawnLock<=0&&r.ghostTimer<=0,distance:r.total*getPaths()[0].length});
+    if(move.lift>0){r.vy=move.lift;r.airborne=true;}
+    if(flight&&move.dive)r.flyOff=THREE.MathUtils.clamp(r.flyOff+move.dive,flight.down,flight.up);
+    if(move.start&&r.isPlayer)sfx.maneuver();
 
     // ---- smoothed steering (comfortable, analog-like) ----
     const response = settings.steerAssist ? 9.5 : 7;
@@ -2118,6 +2199,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           r.boostMult = Math.max(r.boostMult, 1 + (power - 1) * st.boostPower);
           r.turboMeter = Math.min(1, r.turboMeter + bar * st.turboRate);
           r.boostsUsed++;
+          awardSkill(r, "drift");
           if (r.isPlayer) {
             drivingCue.current.kind = "drift";
             drivingCue.current.value = r.driftLevel;
@@ -2162,40 +2244,33 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // the last lap is flat out for everybody
     if (mode.laps > 1 && r.lap >= mode.laps) effMax *= 1.03;
 
-    // ---- slipstream: sit in the hole the kart in front makes, then pull out and sling past ----
+    // ---- wake charge: a lateral exit alongside the same target releases the sling ----
     {
-      let tow = false;
-      if (!r.airborne && r.mode !== "sub" && r.speed > st.maxSpeed * 0.6) {
-        const fx = Math.sin(r.course);
-        const fz = Math.cos(r.course);
-        for (const o of racers) {
-          if (o === r || gone(o) || o.mode !== r.mode || Math.abs(o.y - r.y) > 3) continue;
-          const dx = o.pos.x - r.pos.x;
-          const dz = o.pos.z - r.pos.z;
-          const ahead = dx * fx + dz * fz;
-          if (ahead < 2.5 || ahead > 17 || Math.abs(dx * fz - dz * fx) > 1.9) continue;
-          tow = true;
-          break;
-        }
+      const eligible = throttleIn > 0 && !r.airborne && !r.touching && r.stunTimer <= 0 && r.respawnLock <= 0 && !r.exploding && r.speed > st.maxSpeed * 0.6;
+      let target: Racer | null = null; let nearest = Infinity;
+      const fx = Math.sin(r.course), fz = Math.cos(r.course);
+      if (eligible) for (const o of racers) {
+        if (o === r || gone(o) || o.exploding || o.mode !== r.mode || o.path !== r.path || Math.abs(o.y-r.y) > 2.5 || Math.cos(o.course-r.course) < 0.8) continue;
+        const dx=o.pos.x-r.pos.x,dz=o.pos.z-r.pos.z,ahead=dx*fx+dz*fz,side=Math.abs(dx*fz-dz*fx);
+        const inWake=ahead>=2.5&&ahead<=20&&side<=1.9;
+        const locked=o.id===r.wake.target&&ahead>=-2&&ahead<=22&&side<=6;
+        if (!inWake&&!locked) continue;
+        if (locked) {target=o;break;}
+        if (ahead<nearest) {target=o;nearest=ahead;}
       }
-      if (tow) {
-        r.draft = Math.min(1, r.draft + dt / 1.3);
-        if (r.isPlayer && r.draft > 0.3 && frame.current % 3 === 0) {
-          emitParticles({ position: r.pos.clone().setY(r.y + 0.9), color: "#ffffff", count: 2, speed: 9, spread: 1.6, size: 0.1, life: 0.22, gravity: 0 });
-        }
-      } else if (r.draft >= 0.95) {
-        // out of the tow with it fully built: the sling
-        r.draft = 0;
-        r.boostTimer = Math.max(r.boostTimer, 0.75 * st.boostTime);
-        r.boostMult = Math.max(r.boostMult, 1 + 0.24 * st.boostPower);
-        if (r.isPlayer) {
-          r.boostsUsed++;
-          addShake(0.14);
-          sfx.boost();
-        }
-        emitParticles({ position: r.pos.clone().setY(r.y + 0.5), color: "#ffffff", count: 16, speed: 4.5, spread: 0.9, size: 0.18, life: 0.45 });
-      } else r.draft = Math.max(0, r.draft - dt * 1.5);
-      effMax *= 1 + 0.07 * r.draft;
+      const dx=target?target.pos.x-r.pos.x:0,dz=target?target.pos.z-r.pos.z:0;
+      const ahead=dx*fx+dz*fz,side=Math.abs(dx*fz-dz*fx);
+      const sling=r.wake.step(dt,target?{id:target.id,wake:ahead>=2.5&&ahead<=20&&side<=1.9,exit:ahead>=-2&&ahead<=20&&side>=2.2&&side<=6}:null,eligible);
+      r.draft=r.wake.charge;
+      if (r.isPlayer && r.draft>0.3 && frame.current%3===0) emitParticles({position:r.pos.clone().setY(r.y+0.9),color:"#ffffff",count:2,speed:9,spread:1.6,size:0.1,life:0.22,gravity:0});
+      if (sling) {
+        r.boostTimer=Math.max(r.boostTimer,0.85*st.boostTime);
+        r.boostMult=Math.max(r.boostMult,1+0.27*st.boostPower);
+        r.boostsUsed++; awardSkill(r,"sling");
+        if (r.isPlayer) {drivingCue.current={kind:"sling",value:0,left:1.1};addShake(0.14);sfx.boost();}
+        emitParticles({position:r.pos.clone().setY(r.y+0.5),color:"#ffffff",count:16,speed:4.5,spread:0.9,size:0.18,life:0.45});
+      }
+      effMax*=1+0.07*r.draft;
     }
 
     // hills cost speed going up and give it back coming down
@@ -2203,7 +2278,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     effMax *= 1 - hill * (r.speed >= 0 ? 0.55 : -0.55);
     if (hill !== 0) r.speed -= GRAVITY * 0.4 * hill * dt;
 
-    const accelNow = st.accel * 1.08 * (r.mode === "plane" ? 1.25 : 1) * (tier ? tier.accel : 1);
+    const accelNow = st.accel * 1.08 * RACE_ACCEL_SCALE * (r.mode === "plane" ? 1.25 : 1) * (tier ? tier.accel : 1);
     if (throttleIn > 0) r.speed += accelNow * dt;
     else if (throttleIn < 0) r.speed -= accelNow * 1.4 * dt;
     else {
@@ -2244,14 +2319,16 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // shoots off where the nose points.
     {
       // a levitating craft has nothing to grip with either: it glides round a bend
-      const follow = r.mode === "boat" ? (r.isDrifting ? 2.1 : 3.6) : r.mode === "hover" ? (r.isDrifting ? 2.4 : 5) : r.isDrifting ? SLIP_RATE : 13;
+      const wet=surfaceWater(r.path,r.idx);
+      if(wet>0&&r.mode==="land")r.speed*=Math.exp(-wet*0.65*dt);
+      const follow = wet>0&&r.mode==="land"?8:r.mode === "boat" ? (r.isDrifting ? 2.1 : 3.6) : r.mode === "hover" ? (r.isDrifting ? 2.4 : 5) : r.isDrifting ? SLIP_RATE : 13;
       if (r.mode !== "boat" && r.mode !== "hover" && !r.isDrifting && Math.abs(wrapAngle(r.heading - r.course)) < 0.01) r.course = r.heading;
       else r.course += wrapAngle(r.heading - r.course) * frameBlend(follow / 60, dt);
       const slip = wrapAngle(r.heading - r.course);
       if (Math.abs(slip) > SLIP_MAX) r.course = r.heading - Math.sign(slip) * SLIP_MAX;
     }
-    const mx = Math.sin(r.course) * r.speed * dt;
-    const mz = Math.cos(r.course) * r.speed * dt;
+    let mx = Math.sin(r.course) * r.speed * dt;
+    let mz = Math.cos(r.course) * r.speed * dt;
     const bob = performance.now();
     stepOpts.fly = !!flight;
     // a plane may stray a little past the edge of its line; a submarine stays inside its tube
@@ -2265,10 +2342,31 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     stepOpts.gravityMul = r.mode === "hover" ? 0.4 : 1;
     stepOpts.rideOffset =
       r.mode === "boat" ? -0.12 + Math.sin(bob * 0.004 + r.aiPhase) * 0.09 : r.mode === "sub" ? 0.35 + Math.sin(bob * 0.003 + r.aiPhase) * 0.1 : r.mode === "hover" ? 0.55 + Math.sin(bob * 0.005 + r.aiPhase) * 0.12 : 0;
+    if(r.maneuver.lateral!==0){
+      const p=getPaths()[r.path],i=Math.max(0,Math.min(p.n-1,r.idx));
+      const lateral=r.maneuver.lateral*dt;
+      // No evasive move may teleport through an edge, gate or corridor.
+      if(Math.abs(r.lat+lateral)<r.half-1.3){mx-=p.tz[i]*lateral;mz+=p.tx[i]*lateral;}
+    }
+    const eventFromX = r.pos.x, eventFromY = r.y, eventFromZ = r.pos.z;
+    const road=getPaths()[r.path],ri=Math.max(0,Math.min(road.n-1,r.idx));
+    challengeMotion({path:r.path,mode:r.mode,x:r.pos.x,y:r.y,z:r.pos.z,tx:road.tx[ri],tz:road.tz[ri],flow:r.flow,grip:st.grip,ghost:r.ghostTimer>0},mx,mz,dt,raceClock.current,challengeState.stages,challengeStep,challenges);
+    mx=challengeStep.dx;mz=challengeStep.dz;r.flow=challengeStep.flow;
+    if(challengeStep.field)r.risk.fail();
+    if(challengeStep.hit) {
+      breakSkills(r);
+      if(r.hazardCd<=0){r.speed*=Math.max(0.58,1-0.3*st.grip);r.hazardCd=0.65;if(r.isPlayer){addShake(0.14);sfx.bump();}}
+    }
     moveBody(r, mx, mz, dt, stepOpts, stepRes);
+    if(move.reward&&!stepRes.fell&&!r.touching&&stepRes.wallImpact===0&&!challengeStep.hit){
+      awardSkill(r,"maneuver");
+      if(r.isPlayer){drivingCue.current={kind:"maneuver",value:0,left:1.3};sfx.cleanLanding();}
+    }
 
     const landingCharge = r.landingBonus.step(dt, r.airborne, stepRes.landed, r.speed,
       !stepRes.fell && !r.touching && stepRes.wallImpact === 0 && r.stunTimer <= 0 && !r.exploding && r.respawnLock <= 0 && r.mode !== "plane" && r.mode !== "sub");
+    if (landingCharge > 0) awardSkill(r, "landing");
+    if (stepRes.fell || stepRes.wallImpact > 0.2) breakSkills(r);
     const landingGain = Math.min(landingCharge, Math.max(0, 1 - r.turboMeter));
     if (landingGain > 0) {
       r.turboMeter = Math.min(1, r.turboMeter + landingGain);
@@ -2300,6 +2398,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.touching && Math.abs(r.speed) > 8 && frame.current % 3 === 0) {
       emitParticles({ position: r.pos.clone().setY(r.y + 0.35), color: "#ffd166", count: 2, speed: 3, spread: 0.6, size: 0.12, life: 0.3 });
     }
+    if(stepRes.landed>2&&r.isPlayer)sfx.landing(stepRes.landed,r.mode==="boat"||surfaceWater(r.path,r.idx)>0.02);
     if (stepRes.landed > 4 && r.mode !== "plane" && r.mode !== "sub") {
       // dust thrown out either side where it comes down, more of it the harder it lands
       const n = Math.min(14, Math.round(stepRes.landed * 0.7));
@@ -2354,6 +2453,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           const to = new THREE.Vector3(main.px[pad.toIdx], main.py[pad.toIdx], main.pz[pad.toIdx]);
           const from = r.pos.clone().setY(r.y);
           r.landingBonus.reset();
+          resetManeuver(r);
           r.launch = { from, to, idx: pad.toIdx, e: 0, dur: THREE.MathUtils.clamp(from.distanceTo(to) / 62, 1, 2.8), lift: pad.lift };
           r.isDrifting = false;
           r.driftCharge = 0;
@@ -2547,17 +2647,39 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         }
       }
     }
+    // ---- sudden track events: renderer and collision share race time/pose ----
+    if (r.hazardCd <= 0 && !protectedNow(r)) {
+      for (const event of environments) {
+        if (event.path !== r.path || event.mode !== r.mode) continue;
+        eventPose(event, raceClock.current, environmentPose);
+        const contact = eventContact(event, environmentPose, r.path, eventFromX, eventFromY, eventFromZ, r.pos.x, r.y, r.pos.z);
+        if (contact === "hit") {
+          breakSkills(r);
+          r.hazardCd = 1; r.speed *= Math.max(0.65, 1 - 0.22 * st.grip);
+          r.stunTimer = Math.max(r.stunTimer, 0.18 * st.grip);
+          if (r.isPlayer) { addShake(0.12); sfx.bump(); }
+          emitParticles({position:r.pos.clone().setY(r.y+0.6),color:theme.glow,count:10,speed:3,spread:1,size:0.16,life:0.4});
+          break;
+        }
+        if (contact === "near") {
+          let ledger = nearMisses.get(r.id); if (!ledger) { ledger = new NearMissLedger(); nearMisses.set(r.id, ledger); }
+          const forward = Math.sin(r.course) * event.tx + Math.cos(r.course) * event.tz;
+          if (ledger.claim(event.id, r.lap, r.speed, forward)) {
+            awardSkill(r, "near");
+            const gain = Math.min(0.04, Math.max(0, 1 - r.turboMeter)); r.turboMeter += gain;
+            if (r.isPlayer && gain > 0) { drivingCue.current.kind = "near"; drivingCue.current.value = Math.round(gain*100); drivingCue.current.left = 1.2; sfx.coin(); }
+          }
+        }
+      }
+    }
     // ---- moving traps ----
     const trkP2 = getActiveTrack();
     if (r.mode === "land" && r.hazardCd <= 0 && trkP2.traps) {
-      const nowMs = clockRef.current;
+      const nowMs = raceClock.current;
       for (const tr of trkP2.traps) {
-        // same helper the renderer uses, so the spikes you see are the spikes you hit
-        const t = trapPhase(tr, nowMs);
-        const hit = trapTransform(tr, nowMs);
-        const lateral = Math.abs(lateralOffsetFrom(r.pos, t) - tr.side * (halfWidthAt(t) - 2.2));
-        const d = Math.abs((t - r.t + 0.5) % 1 - 0.5);
-        if (d < 0.014 && lateral < 4.2 && Math.abs(r.y - hit.ground) < 3) {
+        if (!tr.active) continue;
+        // Same race clock and world-space shape as the visible obstacle.
+        if (trapContact(tr, nowMs, r.pos.x, r.y, r.pos.z)) {
           r.hazardCd = 1.0;
           applyHit(r, false);
           emitParticles({ position: r.pos.clone().setY(r.y + 0.8), color: WEAPON_META.zap.glow, count: 12, speed: 3, spread: 1, size: 0.2, life: 0.45 });
@@ -2566,6 +2688,15 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       }
     }
 
+
+    if(riskSite&&!battle) {
+      const path=getPaths()[r.path],u=r.idx/(path.n-1);
+      const clean=r.ghostTimer<=0&&!r.touching&&!stepRes.fell&&stepRes.wallImpact<=0.12&&r.stunTimer<=0&&!r.exploding&&r.respawnLock<=0&&!challengeStep.hit&&!challengeStep.field;
+      if(r.risk.step(r.path,u,Math.floor(r.total)+1,r.total,r.speed,clean,!!(challengeStep.cleared&(1<<riskSite.id)))) {
+        const gain=Math.min(0.06,Math.max(0,1-r.turboMeter));r.turboMeter+=gain;awardSkill(r,"route");
+        if(r.isPlayer){drivingCue.current={kind:"route",value:Math.round(gain*100),left:1.4};sfx.cleanLanding();}
+      }
+    }
 
     // ---- actions: the same buttons for the player and for the opponents ----
     {
@@ -2672,6 +2803,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     r.visual.current.speed = r.speed;
     r.visual.current.airborne = r.airborne;
     r.visual.current.vy = r.vy;
+    r.visual.current.maneuverRoll=r.maneuver.roll;r.visual.current.maneuverPitch=r.maneuver.pitch;
     r.visual.current.stunned = r.stunTimer > 0;
     r.visual.current.mode = r.mode;
     r.visual.current.drift = r.isDrifting;
@@ -2833,6 +2965,17 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   function simulate(dt: number, controls: ReturnType<typeof poll>, over: boolean) {
     frame.current++;
     if (!over) raceClock.current += dt * 1000;
+    raceSnapshot.clockMs = raceClock.current;
+    setSurfaceClock(raceClock.current);
+    if(!battle&&!over) {
+      let lap=1;for(const racer of racers)if(!racer.out)lap=Math.max(lap,Math.min(mode.laps,racer.lap));
+      // Physical floor changes stay local until the network protocol synchronizes world events.
+      if(!session)evolveSurfaces(lap,raceClock.current,site=>racers.some(r=>!gone(r)&&Math.abs(r.y-site.y)<12&&(r.pos.x-site.x)**2+(r.pos.z-site.z)**2<55*55));
+      for(const site of challenges) {
+        const occupied=racers.some(r=>!gone(r)&&r.path===site.path&&Math.abs(r.y-site.y)<site.half+6&&(r.pos.x-site.x)**2+(r.pos.z-site.z)**2<35*35);
+        challengeState.stages[site.id]=challengeStage(challengeState.stages[site.id]??1,lap,occupied);
+      }
+    }
     drivingCue.current.left = Math.max(0, drivingCue.current.left - dt);
     if (drivingCue.current.left === 0) drivingCue.current.kind = null;
 
@@ -2866,6 +3009,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           const dx = r.pos.x - tr.pos.x;
           const dz = r.pos.z - tr.pos.z;
           if (dx * dx + dz * dz > 6.2 || Math.abs(r.y - tr.pos.y) > 2) continue;
+          breakSkills(r);
           r.bumpCd = 0.7;
           r.speed *= 0.5;
           r.stunTimer = Math.max(r.stunTimer, 0.3);
@@ -2908,11 +3052,25 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           const small = a.giantTimer > 0 ? b : a;
           if (small.stunTimer <= 0) applyHit(small, true);
         }
+        if (hit > 4) { breakSkills(a); breakSkills(b); }
         if (hit > 4 && (a.isPlayer || b.isPlayer) && a.bumpCd <= 0 && b.bumpCd <= 0) {
           a.bumpCd = 0.4;
           b.bumpCd = 0.4;
           addShake(Math.min(0.2, hit * 0.012));
           sfx.bump();
+        }
+      }
+    }
+
+    if (!battle && !over) for (const r of racers) {
+      if (r.remote || gone(r)) continue;
+      for (const o of racers) {
+        if (o===r) continue;
+        const close=!gone(o)&&o.path===r.path&&o.mode===r.mode&&Math.abs(o.y-r.y)<2.5&&r.pos.distanceToSquared(o.pos)<28*28&&Math.cos(o.course-r.course)>0.8;
+        const clean=r.speed>12&&!r.touching&&r.bumpCd<=0&&r.stunTimer<=0&&r.respawnLock<=0&&!r.exploding;
+        if (r.passes.observe(o.id,r.lap,(o.total-r.total)*getPaths()[0].length,close,clean)) {
+          awardSkill(r,"pass");
+          if (r.isPlayer) {drivingCue.current={kind:"pass",value:0,left:1.0};sfx.pass(passPan(o.pos.x-r.pos.x,o.pos.z-r.pos.z,r.heading));}
         }
       }
     }
@@ -3029,8 +3187,6 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
   useFrame((_, deltaRaw) => {
     let state = useGame.getState();
-    const dt = Math.min(deltaRaw, 1 / 30);
-    clockRef.current = performance.now();
     const controls = poll();
 
     if (controls.pausePressed && state.screen === "race" && !state.telemetry.finished) {
@@ -3045,6 +3201,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       else if (light === 0) sfx.go();
     }
     started.current = countdown.current.started;
+    const dt = activeFrameTime(deltaRaw, state.paused && !session);
 
     // pickups animate
     for (const box of itemBoxes) {
@@ -3131,6 +3288,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const me = racers[0];
       const sliding = me && !state.paused && started.current && me.isDrifting && !me.airborne && !me.riding && !me.finished;
       setSkid(sliding ? (me.mode === "boat" ? 0.35 : 0.55 + Math.min(0.45, Math.abs(wrapAngle(me.heading - me.course)))) : 0);
+      setRaceSound(me && !state.paused && started.current && !me.finished && !state.telemetry.finished && !me.out ? {
+        speed:Math.abs(me.speed),mode:me.mode,final:isFinalLap(me.lap,mode.laps,battle,false),combo:me.chain.count,ms:raceClock.current,boosting:me.boostTimer>0,surface:{mode:me.mode,speed:Math.abs(me.speed),grounded:!me.airborne,rough:theme.id==="eco"||theme.id==="eden",wet:surfaceWater(me.path,me.idx)>0.02}
+      }:null);
     }
     if ((state.paused && !session) || !started.current) {
       // on the grid, before the lights go out, nothing has moved the karts yet: stand them on their marks
@@ -3185,7 +3345,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       player.finished = true;
       const timeBonus = battle ? player.lives * 400 : Math.max(0, Math.round((mode.laps * lapTimeBudget() - raceClock.current) / 18));
       const positionBonus = (racers.length - position + 1) * 180;
-      const running = player.coins * 12 + player.boostsUsed * 25 + player.tagSwaps * 40 + player.rings * 120;
+      const running = player.coins * 12 + player.boostsUsed * 25 + player.tagSwaps * 40 + player.rings * 120 + player.chain.score + player.risk.score;
       const finalScore = Math.round(running + timeBonus + positionBonus);
       state.setTelemetry({ finished: true, score: finalScore });
       state.setRaceResult({
@@ -3221,7 +3381,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     uiClock.current += Math.min(deltaRaw, 0.1);
     if (uiClock.current >= 0.05 && !finishedOnce.current) {
       uiClock.current = 0;
-      const running = player.coins * 12 + player.boostsUsed * 25 + player.tagSwaps * 40 + player.rings * 120;
+      const running = player.coins * 12 + player.boostsUsed * 25 + player.tagSwaps * 40 + player.rings * 120 + player.chain.score + player.risk.score;
       state.setTelemetry({
         lap: Math.min(player.lap, mode.laps),
         position,
@@ -3248,6 +3408,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         driftLevel: player.driftLevel,
         drivingCue: drivingCue.current.kind,
         drivingValue: drivingCue.current.value,
+        comboCount: player.chain.count,
+        comboMultiplier: player.chain.multiplier,
+        comboLeft: player.chain.left / 6,
+        comboKind: player.chain.kind,
         rolling: player.rollTimer > 0,
         incoming: (() => {
           // how close the nearest thing aimed at the player is, 0 none .. 1 on top of it
@@ -3287,7 +3451,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     updateSnapshot();
 
     updateCamera(Math.min(deltaRaw, 0.25), false);
-  });
+  }, -1);
 
   function updateSnapshot() {
     raceSnapshot.racers.length = racers.length;
@@ -3311,7 +3475,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (!player) return;
     // behind where the kart is going rather than where it points: in a drift the
     // kart is seen at an angle, crossed up, instead of the world swinging round it
-    const slip = player.mode === "land" ? wrapAngle(player.heading - player.course) : 0;
+    const slip = player.mode === "land" || player.mode === "boat" || player.mode === "hover" ? wrapAngle(player.heading - player.course) : 0;
     camSlip.current += (slip - camSlip.current) * (1 - Math.exp(-(player.isDrifting ? 9 : 4.5) * dt));
     // on the turret the camera looks where the barrel does: turning the gun turns the view
     const gun = player.pair && player.pair.gunner === player ? player.pair : null;
@@ -3323,23 +3487,27 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const preview = path && !gun ? curvePreview(path, player.idx, player.heading, player.speed) : 0;
     motion.update(dt, player.speed, player.steerSmooth, preview, player.boostTimer > 0, player.airborne || !!player.launch, player.launch ? player.visual.current.vy ?? 0 : player.vy, snap, idle || !!victory.current);
     const dynamic = profile.dynamicFov;
-    const camDir = cameraFollow.current.angle + motion.curve * dynamic * 0.22;
+    const camDir = cameraFollow.current.angle + motion.curve * dynamic * 0.34;
     const covered = trackDef.indoor || !!(path?.flags[player.idx] & F_TUNNEL);
     const fwd = cameraScratch.forward.set(Math.sin(camDir), 0, Math.cos(camDir));
     const flying = player.mode === "plane";
     const wet = player.mode === "boat" || player.mode === "sub";
-    const dist = covered ? 6.5 : ((flying ? 10.5 : wet ? 8 : 8.6) + Math.abs(camSlip.current) * 1.6) * profile.distance;
-    const height = covered ? 2.5 : (flying ? 4.6 : player.mode === "sub" ? 4.4 : wet ? 3.1 : 3.8) * profile.height;
-    const speedKick = THREE.MathUtils.clamp(player.speed / 30, 0, 1);
+    const dist = covered ? 5.4 : ((flying ? 8.8 : wet ? 6.8 : 6.9) + Math.abs(camSlip.current) * 0.8) * profile.distance;
+    const height = covered ? 2.5 : (flying ? 3.5 : player.mode === "sub" ? 2.6 : wet ? 2.5 : 2.9) * profile.height;
+    const speedKick = THREE.MathUtils.clamp(Math.abs(player.speed) / 48, 0, 1);
     const desired = cameraScratch.desired.copy(player.pos)
       .setY(player.y + height + speedKick * 0.5 + dynamic * (motion.landing.value - motion.acceleration * 0.12))
-      .addScaledVector(fwd, -dist - speedKick * (covered ? 0.35 : 1.4) - motion.boost * dynamic * (covered ? 0.25 : 0.9));
-    desired.x += Math.cos(camDir) * motion.side * dynamic * 0.28;
-    desired.z -= Math.sin(camDir) * motion.side * dynamic * 0.28;
+      .addScaledVector(fwd, -dist - speedKick * (covered ? 0.2 : 0.65) - motion.boost * dynamic * (covered ? 0.15 : 0.35));
+    desired.x += Math.cos(camDir) * motion.side * dynamic * 0.48;
+    desired.z -= Math.sin(camDir) * motion.side * dynamic * 0.48;
     if (victory.current) {
       // swing round to the front of the kart and circle it
       const a = victory.current.heading + Math.PI * 0.75 + victory.current.t * 0.9;
       desired.set(player.pos.x + Math.sin(a) * 7.5, victory.current.y + 3.2, player.pos.z + Math.cos(a) * 7.5);
+    }
+    if (covered && path && locate(player.path, player.idx, desired.x, desired.z, camG, Math.ceil(30 / path.ds))) {
+      const excess = camG.lat - THREE.MathUtils.clamp(camG.lat, -camG.half + 1.2, camG.half - 1.2);
+      desired.x += camG.tz * excess; desired.z -= camG.tx * excess;
     }
     // never let the chase camera sink into a hill: lift it to clear the road
     // surface behind the car, and never drop it below the car either
@@ -3349,7 +3517,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const floor = Math.max(behindGround + 1.8, player.y + 1.4);
     if (desired.y < floor) desired.y = floor;
     // look at the road ahead, not at the sky above a crest or into the ground on a descent
-    const aheadY = !player.airborne && groundAt(player.pos.x + fwd.x * 10, player.pos.z + fwd.z * 10, player.y + 3, camG, 0) ? camG.y : player.y;
+    const aheadY = flying || player.mode === "sub" ? player.y : !player.airborne && groundAt(player.pos.x + fwd.x * 10, player.pos.z + fwd.z * 10, player.y + 3, camG, 0) ? camG.y : player.y;
     const look = cameraScratch.look.copy(player.pos)
       .setY(THREE.MathUtils.lerp(player.y, aheadY, 0.8) + 1.2)
       .addScaledVector(fwd, (covered ? 5 : 7) + speedKick * dynamic * 2.5);
@@ -3362,7 +3530,21 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       camPos.current.copy(desired);
       camLook.current.copy(look);
       camRoll.current = 0;
-    } else camPos.current.lerp(desired, ease(idle ? 3 : profile.follow));
+    } else {
+      // Carry the eye with the racer before smoothing its relative offset.
+      // Without this, speed / follow-rate becomes extra, unwanted camera distance.
+      camLook.current.x += cameraFollow.current.dx;
+      camLook.current.y += cameraFollow.current.dy;
+      camLook.current.z += cameraFollow.current.dz;
+      camPos.current.x += cameraFollow.current.dx;
+      camPos.current.y += cameraFollow.current.dy;
+      camPos.current.z += cameraFollow.current.dz;
+      camPos.current.lerp(desired, ease(idle ? 3 : profile.follow));
+    }
+    if (covered && path && locate(player.path, player.idx, camPos.current.x, camPos.current.z, camG, Math.ceil(30 / path.ds))) {
+      const excess = camG.lat - THREE.MathUtils.clamp(camG.lat, -camG.half + 1.2, camG.half - 1.2);
+      camPos.current.x += camG.tz * excess; camPos.current.z -= camG.tx * excess;
+    }
     // the smoothed camera lags on a fast descent, so clamp again once it is
     // settled: otherwise it dips through the road surface for a few frames
     const camGround = groundAt(camPos.current.x, camPos.current.z, player.y + 3, camG, 0) ? camG.y : -Infinity;
@@ -3399,11 +3581,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const cam = camera as THREE.PerspectiveCamera;
     // the Options "speed blur" slider widens the lens as well, so the streaks
     // in the HUD and the camera pull together at high speed
-    const targetFov = 64 + profile.dynamicFov * (speedKick * (9 + settings.motionBlur * 14) + s * 6 + motion.boost * 5);
+    const targetFov = chaseLens(player.speed, motion.boost, settings.motionBlur, profile.dynamicFov, covered);
     if (Math.abs(cam.fov - targetFov) > 0.05) {
       cam.fov = THREE.MathUtils.lerp(cam.fov, targetFov, ease(7.7));
       cam.updateProjectionMatrix();
     }
+    camera.updateMatrixWorld();
   }
 
   return (
