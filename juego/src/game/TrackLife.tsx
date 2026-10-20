@@ -4,11 +4,14 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { lifeSpots } from "../trackLife";
+import {raceSnapshot} from "../data";
+import {useGame} from "../store";
+import {lifeReaction,easeReaction,type LifeVisitor} from "../worldLife";
 import type { ThemeDef } from "../data";
 
 /** Local scenery cells animate at 30 Hz; distant cells keep their cached matrices. */
 export function TrackLife({ themes }: { themes: ThemeDef[] }) {
-  const assets = useMemo(() => ({ base: new THREE.ConeGeometry(0.24, 1.4, 8), head: new THREE.SphereGeometry(1, 10, 6), blade: new THREE.BoxGeometry(1, 1, 1),
+  const assets = useMemo(() => ({ base: new THREE.ConeGeometry(0.24, 1.4, 8), head: new THREE.SphereGeometry(1, 10, 6), blade: new THREE.BoxGeometry(1, 1, 1), ring:new THREE.TorusGeometry(1,0.035,4,20),
     body: new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.3 }), light: new THREE.MeshBasicMaterial({ toneMapped: false }) }), []);
   const spots = useMemo(() => lifeSpots(themes), [themes]);
   const cells = useMemo(() => {
@@ -22,53 +25,77 @@ export function TrackLife({ themes }: { themes: ThemeDef[] }) {
       const base = new THREE.InstancedMesh(assets.base, assets.body, spots.length);
       const head = new THREE.InstancedMesh(assets.head, assets.light, spots.length);
       const blade = new THREE.InstancedMesh(assets.blade, assets.body, spots.length * 2);
+      const ring=new THREE.InstancedMesh(assets.ring,assets.light,spots.length);
+      ring.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      const reactions=new Float32Array(spots.length);
       const box = new THREE.Box3();
       spots.forEach((s, i) => {
         const vent = s.kind === "vent";
         dummy.position.set(s.x, s.y + (vent ? 0 : 0.65 * s.scale), s.z); dummy.rotation.set(0, s.angle, vent ? Math.PI : 0);
         dummy.scale.set(s.scale, vent ? 0.15 : s.scale, s.scale); dummy.updateMatrix(); base.setMatrixAt(i, dummy.matrix); base.setColorAt(i, color.set(s.color));
         head.setColorAt(i, color.set(s.glow).multiplyScalar(1.25));
+        ring.setColorAt(i,color.set(s.glow));
         for (let k = 0; k < 2; k++) blade.setColorAt(i * 2 + k, color.set(k ? s.glow : s.color));
         box.expandByPoint(dummy.position); box.expandByPoint(new THREE.Vector3(s.x, s.y + 2, s.z));
       });
       base.instanceMatrix.needsUpdate = true; base.computeBoundingSphere();
       head.instanceMatrix.setUsage(THREE.DynamicDrawUsage); blade.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       const bounds = box.getBoundingSphere(new THREE.Sphere()); bounds.radius += 4;
-      head.boundingSphere = bounds.clone(); blade.boundingSphere = bounds.clone();
+      head.boundingSphere = bounds.clone(); blade.boundingSphere = bounds.clone();ring.boundingSphere=bounds.clone();
       // The global animation clock supplies the pose when a cell enters the view.
-      head.count = 0; blade.count = 0;
-      return { spots, base, head, blade, bounds };
+      head.count = 0; blade.count = 0;ring.count=0;
+      return { spots, base, head, blade, ring, reactions, bounds };
     });
   }, [assets, spots]);
   const scratch = useMemo(() => ({ d: new THREE.Object3D(), frustum: new THREE.Frustum(), matrix: new THREE.Matrix4() }), []);
   const elapsed = useRef(1);
-  useEffect(() => () => cells.forEach((c) => { c.base.dispose(); c.head.dispose(); c.blade.dispose(); }), [cells]);
+  const lastTime=useRef(-1);
+  const visitor=useMemo<LifeVisitor>(()=>({x:0,y:0,z:0,speed:0}),[]);
+  useEffect(() => () => cells.forEach((c) => { c.base.dispose(); c.head.dispose(); c.blade.dispose();c.ring.dispose(); }), [cells]);
   useEffect(() => () => Object.values(assets).forEach((asset) => asset.dispose()), [assets]);
-  useFrame(({ camera, clock }, dt) => {
-    elapsed.current += dt;
+  useFrame(({ camera }, dt) => {
+    const ms=raceSnapshot.clockMs;
+    if(lastTime.current===ms)return;
+    const animationDt=lastTime.current<0?0:Math.max(0,Math.min(0.1,(ms-lastTime.current)/1000));
+    lastTime.current=ms;
+    elapsed.current += animationDt||dt;
     if (elapsed.current < 1 / 30) return;
+    const step=Math.min(0.1,elapsed.current);
     elapsed.current %= 1 / 30;
     scratch.frustum.setFromProjectionMatrix(scratch.matrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
-    const time = clock.elapsedTime; const d = scratch.d;
+    const time = ms/1000; const d = scratch.d;
+    const player=raceSnapshot.racers.find(r=>r.isPlayer);
+    if(player){visitor.x=player.x;visitor.y=player.y;visitor.z=player.z;visitor.speed=useGame.getState().telemetry.speedKph/6.4;}
     for (const cell of cells) {
-      if (!scratch.frustum.intersectsSphere(cell.bounds)) continue;
-      cell.head.count = cell.spots.length; cell.blade.count = cell.spots.length * 2;
+      const visible=camera.position.distanceToSquared(cell.bounds.center)<(320+cell.bounds.radius)**2&&scratch.frustum.intersectsSphere(cell.bounds);
+      cell.head.visible=cell.blade.visible=cell.ring.visible=visible;
+      if(!visible)continue;
+      cell.head.count = cell.spots.length; cell.blade.count = cell.spots.length * 2;cell.ring.count=cell.spots.length;
       cell.spots.forEach((s, i) => {
         const vent = s.kind === "vent"; const drone = s.kind === "drone"; const flower = s.kind === "flower";
+        const response=cell.reactions[i]=easeReaction(cell.reactions[i],lifeReaction(s,player?visitor:undefined),step);
+        const away=player?Math.atan2(s.x-player.x,s.z-player.z):s.angle;
         const sway = Math.sin(time * (drone ? 1.1 : 1.7) + s.phase);
-        const y = s.y + (vent ? -0.22 : 1.35 * s.scale) + (vent ? 0 : sway * (drone ? 0.35 : 0.10));
-        const x = s.x + (flower ? sway * 0.16 : 0);
-        d.position.set(x, y, s.z); d.rotation.set(0, time * 0.5 + s.phase, 0);
-        d.scale.set(flower ? 0.32 : 0.18, flower ? 0.13 : 0.18, flower ? 0.32 : 0.18); d.updateMatrix(); cell.head.setMatrixAt(i, d.matrix);
+        const y = s.y + (vent ? -0.22 : 1.35 * s.scale) + (vent ? 0 : sway * (drone ? 0.35 : 0.10))+(drone?response*0.75:0);
+        const x = s.x + (flower ? sway * 0.16+Math.sin(away)*response*0.35 : 0);
+        const z=s.z+(flower?Math.cos(away)*response*0.35:0);
+        d.position.set(x, y, z); d.rotation.set(0, time * 0.5 + s.phase, 0);
+        d.scale.set((flower ? 0.32 : 0.18)*(1+response*0.5), flower ? 0.13 : 0.18, (flower ? 0.32 : 0.18)*(1+response*0.5)); d.updateMatrix(); cell.head.setMatrixAt(i, d.matrix);
         for (let k = 0; k < 2; k++) {
-          d.position.set(x, y - (flower ? 0.12 : 0), s.z);
-          d.rotation.set(0, (vent ? time * 7 : drone ? time * 4 : s.angle + sway * 0.2) + k * Math.PI / 2, 0);
+          d.position.set(x, y - (flower ? 0.12 : 0), z);
+          d.rotation.set(0, (vent ? time * 7+response*5 : drone ? time * 4+response*4 : s.angle + sway * 0.2+response*0.4) + k * Math.PI / 2, 0);
           d.scale.set(vent ? 1 : drone ? 0.85 : flower ? 0.55 : 0.35, 0.065, flower ? 0.26 : 0.16);
           d.updateMatrix(); cell.blade.setMatrixAt(i * 2 + k, d.matrix);
         }
+        const ripple=s.kind==="buoy"||flower||vent;
+        d.position.set(x,ripple?s.y+0.12:y,z);
+        d.rotation.set(ripple?-Math.PI/2:0,0,ripple?0:time+s.phase);
+        const radius=response>0.015?(0.5+((time*1.6+s.phase)%1)*1.7)*response:0;
+        d.scale.setScalar(radius);d.updateMatrix();cell.ring.setMatrixAt(i,d.matrix);
       });
+      cell.ring.instanceMatrix.needsUpdate=true;
       cell.head.instanceMatrix.needsUpdate = true; cell.blade.instanceMatrix.needsUpdate = true;
     }
   });
-  return <group dispose={null}><TrackActors spots={spots} indoor={!!getActiveTrack().indoor} />{cells.map((cell) => <group key={cell.base.uuid}><primitive object={cell.base} /><primitive object={cell.head} /><primitive object={cell.blade} /></group>)}</group>;
+  return <group dispose={null}><TrackActors spots={spots} indoor={!!getActiveTrack().indoor} />{cells.map((cell) => <group key={cell.base.uuid}><primitive object={cell.base} /><primitive object={cell.head} /><primitive object={cell.blade} /><primitive object={cell.ring} /></group>)}</group>;
 }

@@ -1,3 +1,5 @@
+import {AbilityReserve,signatureShot,signatureCooldown,signatureTarget,signatureNeedsTarget,type AbilityTarget} from "../abilities";
+import {raceRules} from "../raceRules";
 import {passPan} from "../foley";
 import {Maneuver} from "../maneuvers";
 import {rivalStyle,RIVAL_STYLES,rivalTurboThreshold} from "../rivalStyle";
@@ -10,9 +12,9 @@ import { trackPace, cruisePace, lapTimeBudget } from "../trackPace";
 import { zoneOnPath, modeOnPath, modeFromZone, resetModeState } from "../trackModes";
 import { LandingBonus } from "../landingBonus";
 import { activeFrameTime, frameBlend, coast, RaceCountdown } from "../motion";
-import { CameraFollow, CameraDynamics, curvePreview, chaseLens, CAMERA_PROFILES } from "../camera";
+import { RearView, CameraFollow, CameraDynamics, curvePreview, chaseLens, CAMERA_PROFILES } from "../camera";
 import { graphicsProfile } from "../graphics";
-import { useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import Track from "./Track";
@@ -56,6 +58,9 @@ import { moveBody, makeResult, placeBody, respawnBody, aimAhead, bendAhead, coll
 import { drainParticleQueue, emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { setSkid, setRaceSound, sfx } from "../sound";
 
+const TrackDiagnostics=import.meta.env.DEV?lazy(()=>import("./TrackDiagnostics")):null;
+
+const REAR_LOCK_SHOT={kind:"homing"} as const;
 const TAG_COOLDOWN_MAX = 3.6;
 // scratch objects for the per-frame physics calls, so the loop allocates nothing
 const stepOpts: StepOpts = { rideOffset: 0, bobbing: false, fly: false, flyAlt: 0, flyMargin: 4, ghost: false };
@@ -82,6 +87,7 @@ interface Racer extends Body {
   pitch: number;
   landingBonus: LandingBonus;
   maneuver: Maneuver;
+  ability:AbilityReserve;
   risk: RiskRouteRun;
   flow: number;
   chain: SkillChain;
@@ -376,9 +382,10 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const aestheticLap = useGame((s) => s.telemetry.lap);
   const theme = useMemo(() => mutateTheme(THEMES[getActiveTrack().theme], aestheticLap - 1), [aestheticLap]);
   const mode = MODES[modeId];
-  const battle = modeId === "battle";
   // a race over the network: who is in it, which of them I am, and whether the bots are mine to drive
   const session = useMemo(() => useNet.getState().session, []);
+  const rules=useMemo(()=>raceRules(getActiveTrack(),mode,!!session),[mode,session]);
+  const battle=rules.victory==="lives";
   const myNetId = useMemo(() => useNet.getState().id, []);
   const hosting = useMemo(() => isHost(), []);
   // read once: the terms of a race do not change while it is being run
@@ -463,7 +470,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         pitch: 0,
         landingBonus: new LandingBonus(),
         risk:new RiskRouteRun(riskSite?.path??-1,riskSite?getPaths()[riskSite.path].def!.t1:1,mainPath.length),flow:0,
-        chain: new SkillChain(), passes: new CleanPasses(), wake: new DraftCharge(), maneuver:new Maneuver(),
+        ability:new AbilityReserve(), chain: new SkillChain(), passes: new CleanPasses(), wake: new DraftCharge(), maneuver:new Maneuver(),
         pinnedFor: 0,
         bestTotal: 0,
         noProgressFor: 0,
@@ -816,6 +823,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const camPos = useRef(new THREE.Vector3(0, 6, -14));
   const camLook = useRef(new THREE.Vector3());
   const cameraScratch = useMemo(() => ({ forward: new THREE.Vector3(), desired: new THREE.Vector3(), look: new THREE.Vector3(), shake: new THREE.Vector3() }), []);
+  const rearView=useRef(new RearView());
+  const rearHeld=useRef(false);
+  const abilityTargets=useMemo<AbilityTarget[]>(()=>racers.map(r=>({id:r.id,x:0,y:0,z:0,team:r.team,unavailable:false})),[racers]);
   const cameraFollow = useRef(new CameraFollow());
   const cameraDynamics = useRef(new CameraDynamics());
   const camRoll = useRef(0);
@@ -869,6 +879,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     resetChallenges();
     resetSurfaces();setSurfaceClock(0);
     useGame.getState().resetTelemetry();
+    useGame.getState().setTelemetry({abilityEnabled:rules.abilities,abilityName:signatureShot(activeChar(racers[0]),racers[0].mode).name,abilityCharge:racers[0].ability.charge});
     useGame.getState().setTelemetry({ totalLaps: mode.laps, totalRacers: racers.length, countdown: 3 });
     countdown.current = new RaceCountdown();
     countdownValue.current = 3;
@@ -900,19 +911,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     return p;
   }
 
-  /** Whoever is closest behind, within `maxGap` of a lap. */
+  /** Rear items use physical view space, including lapped pursuers on the same level. */
   function findTargetBehind(r: Racer, maxGap: number) {
-    let best: Racer | null = null;
-    let bestDiff = Infinity;
-    for (const o of racers) {
-      if (o === r || gone(o)) continue;
-      const gap = r.total - o.total;
-      if (gap > 0.002 && gap < maxGap && gap < bestDiff) {
-        bestDiff = gap;
-        best = o;
-      }
-    }
-    return best;
+    const target=signatureAim(r,REAR_LOCK_SHOT,true);
+    const range=Math.min(70,maxGap*getPaths()[0].length);
+    return target&&(target.pos.x-r.pos.x)**2+(target.pos.z-r.pos.z)**2<range*range?target:null;
   }
 
   function findTargetAhead(r: Racer, maxGap: number) {
@@ -1783,16 +1786,33 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   function breakSkills(r: Racer) {
     resetManeuver(r);r.chain.reset(); r.passes.resetArmed(); r.wake.reset(); r.draft = 0; r.risk.fail();
   }
+  function signatureAim(r:Racer,shot:Pick<FusionShot,"kind">,back:boolean):Racer|null {
+    for(let i=0;i<racers.length;i++){
+      const o=racers[i],sample=abilityTargets[i];
+      sample.x=o.pos.x;sample.y=o.y;sample.z=o.pos.z;sample.team=o.team;sample.unavailable=gone(o)||!!o.launch;
+    }
+    const aimed=signatureTarget(abilityTargets[racers.indexOf(r)],r.heading,back,shot,abilityTargets);
+    return aimed?racers.find(o=>o.id===aimed.id)??null:null;
+  }
+  function signatureBlocked(r:Racer){return !!r.pair||r.turretTimer>0||!!r.launch||r.exploding||r.stunTimer>0||r.frozenTimer>0||r.respawnLock>0||r.speed<=8;}
+  function signatureSupply(shot:FusionShot){
+    if(shot.kind==="mortar")return puddles.some(p=>!p.active);
+    if(shot.kind==="nova"||shot.kind==="lance")return true;
+    let free=0;for(const p of projectiles)if(!p.active&&++free>=shot.count)return true;
+    return false;
+  }
   function awardSkill(r: Racer, kind: SkillKind) {
     if (r.finished || r.out || r.riding || r.speed < 12 || r.touching || r.stunTimer > 0 || r.exploding || r.respawnLock > 0) return;
     const gain = r.chain.add(kind, r.total * getPaths()[0].length, raceClock.current);
     if (gain <= 0) return;
     r.turboMeter = Math.min(1, r.turboMeter + gain);
+    if(rules.abilities)r.ability.reward(kind);
     if (r.isPlayer && r.chain.count >= 2) sfx.combo(r.chain.count);
   }
 
   function updateRacer(r: Racer, dt: number, controls: ReturnType<typeof poll> | null) {
     r.chain.step(dt);
+    r.ability.step(dt,r.total*getPaths()[0].length,r.speed,rules.abilities&&!r.finished&&!r.out&&!r.pair&&!r.launch&&!r.exploding&&r.stunTimer<=0&&r.frozenTimer<=0&&!r.touching&&r.respawnLock<=0);
     if (r.stunTimer > 0 || r.exploding || r.touching || r.respawnLock > 0 || r.speed < -1) breakSkills(r);
     // riding on the turret of someone else's kart: aim and fire, nothing else
     if (r.pair && r.pair.gunner === r) return rideAlong(r, dt, controls);
@@ -1923,6 +1943,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     let driftHeld = false;
     let itemPressed = false;
     let itemBack = false;
+    let abilityPressed=false;
     let swapPressed = false;
     let fusePressed = false;
     let turboPressed = false;
@@ -1933,8 +1954,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       throttleIn = controls.throttle;
       driftHeld = controls.drift;
       itemPressed = controls.itemPressed;
-      // brake held as the item goes: it is thrown backwards
-      itemBack = controls.throttle < 0;
+      // Rear view or brake held: throw directional items towards pursuers.
+      itemBack = controls.lookBack || controls.throttle < 0;
+      abilityPressed=controls.abilityPressed;
       swapPressed = controls.swapPressed;
       fusePressed = controls.fusePressed;
       turboPressed = controls.turboPressed;
@@ -2701,6 +2723,16 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     // ---- actions: the same buttons for the player and for the opponents ----
     {
       const mine = r.isPlayer;
+      if(rules.abilities&&r.ability.ready&&(abilityPressed||!mine)) {
+        const signature=signatureShot(activeChar(r),r.mode);
+        const rear=!!(mine&&controls?.lookBack)||signature.kind==="rear";
+        const target=signatureAim(r,signature,rear);
+        const usable=!signatureBlocked(r)&&signatureSupply(signature);
+        if((target||mine&&!signatureNeedsTarget(signature))&&r.ability.use(signatureCooldown(activeChar(r)),usable)){
+          fireShot(r,signature,target,r.heading+(rear?Math.PI:0),null);
+          if(mine){sfx.item();addShake(0.2);}
+        }
+      }
       if (itemPressed && r.rollTimer <= 0) fireWeapon(r, null, itemBack);
       if (turboPressed && r.turboMeter > 0.18) {
         const power = r.turboMeter;
@@ -2970,7 +3002,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if(!battle&&!over) {
       let lap=1;for(const racer of racers)if(!racer.out)lap=Math.max(lap,Math.min(mode.laps,racer.lap));
       // Physical floor changes stay local until the network protocol synchronizes world events.
-      if(!session)evolveSurfaces(lap,raceClock.current,site=>racers.some(r=>!gone(r)&&Math.abs(r.y-site.y)<12&&(r.pos.x-site.x)**2+(r.pos.z-site.z)**2<55*55));
+      if(rules.physicalEvolution)evolveSurfaces(lap,raceClock.current,site=>racers.some(r=>!gone(r)&&Math.abs(r.y-site.y)<12&&(r.pos.x-site.x)**2+(r.pos.z-site.z)**2<55*55));
       for(const site of challenges) {
         const occupied=racers.some(r=>!gone(r)&&r.path===site.path&&Math.abs(r.y-site.y)<site.half+6&&(r.pos.x-site.x)**2+(r.pos.z-site.z)**2<35*35);
         challengeState.stages[site.id]=challengeStage(challengeState.stages[site.id]??1,lap,occupied);
@@ -3188,6 +3220,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   useFrame((_, deltaRaw) => {
     let state = useGame.getState();
     const controls = poll();
+    rearHeld.current=controls.lookBack;
 
     if (controls.pausePressed && state.screen === "race" && !state.telemetry.finished) {
       state.setPaused(!state.paused);
@@ -3293,6 +3326,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       }:null);
     }
     if ((state.paused && !session) || !started.current) {
+      if(state.telemetry.lookingBack)state.setTelemetry({lookingBack:false});
       // on the grid, before the lights go out, nothing has moved the karts yet: stand them on their marks
       if (!started.current) {
         for (const r of racers) {
@@ -3313,7 +3347,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const steps = Math.max(1, Math.ceil(span * 60 - 0.01));
     const h = span / steps;
     // a press belongs to one step only; holding carries through all of them
-    const held = steps > 1 ? { ...controls, itemPressed: false, swapPressed: false, fusePressed: false, turboPressed: false } : controls;
+    const held = steps > 1 ? { ...controls, itemPressed: false, swapPressed: false, fusePressed: false, turboPressed: false,abilityPressed:false } : controls;
     for (let step = 0; step < steps; step++) simulate(h, step === 0 ? controls : held, state.telemetry.finished);
 
     if (session) {
@@ -3382,7 +3416,16 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (uiClock.current >= 0.05 && !finishedOnce.current) {
       uiClock.current = 0;
       const running = player.coins * 12 + player.boostsUsed * 25 + player.tagSwaps * 40 + player.rings * 120 + player.chain.score + player.risk.score;
+      const signature=signatureShot(activeChar(player),player.mode);
+      const needsTarget=signatureNeedsTarget(signature)&&!signatureAim(player,signature,rearHeld.current||signature.kind==="rear");
       state.setTelemetry({
+        abilityNeedsTarget:needsTarget,
+        abilityCharge:player.ability.charge,
+        abilityWait:Math.ceil(player.ability.cooldown),
+        abilityName:signature.name,
+        abilityEnabled:rules.abilities,
+        abilityBlocked:signatureBlocked(player)||!signatureSupply(signature),
+        lookingBack:rearView.current.active,
         lap: Math.min(player.lap, mode.laps),
         position,
         timeMs: raceClock.current,
@@ -3481,13 +3524,15 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const gun = player.pair && player.pair.gunner === player ? player.pair : null;
     camAim.current += wrapAngle((gun ? gun.aim : 0) - camAim.current) * (1 - Math.exp(-8 * dt));
     const profile = CAMERA_PROFILES[settings.cameraStyle];
-    const snap = cameraFollow.current.update(player.pos.x, player.y, player.pos.z, player.heading - camSlip.current * 0.72 + camAim.current, dt);
+    const rearChanged=rearView.current.update(rearHeld.current,!idle&&!victory.current&&!gun&&!player.out);
+    const followSnap = cameraFollow.current.update(player.pos.x, player.y, player.pos.z, player.heading - camSlip.current * 0.72 + camAim.current, dt);
+    const snap=followSnap||rearChanged;
     const path = getPaths()[player.path];
     const motion = cameraDynamics.current;
     const preview = path && !gun ? curvePreview(path, player.idx, player.heading, player.speed) : 0;
-    motion.update(dt, player.speed, player.steerSmooth, preview, player.boostTimer > 0, player.airborne || !!player.launch, player.launch ? player.visual.current.vy ?? 0 : player.vy, snap, idle || !!victory.current);
+    motion.update(dt, player.speed, player.steerSmooth, preview, player.boostTimer > 0, player.airborne || !!player.launch, player.launch ? player.visual.current.vy ?? 0 : player.vy, followSnap, idle || !!victory.current);
     const dynamic = profile.dynamicFov;
-    const camDir = cameraFollow.current.angle + motion.curve * dynamic * 0.34;
+    const camDir = cameraFollow.current.angle + rearView.current.offset + (rearView.current.active?0:motion.curve * dynamic * 0.34);
     const covered = trackDef.indoor || !!(path?.flags[player.idx] & F_TUNNEL);
     const fwd = cameraScratch.forward.set(Math.sin(camDir), 0, Math.cos(camDir));
     const flying = player.mode === "plane";
@@ -3575,7 +3620,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       cameraScratch.shake.set(Math.sin(motion.clock * 31) * s * 0.5, Math.sin(motion.clock * 43 + 1.4) * s * 0.35, Math.sin(motion.clock * 23 + 0.7) * s * 0.25)
     );
     camera.lookAt(camLook.current);
-    const bank = idle || victory.current ? 0 : -motion.side * profile.bank;
+    const bank = idle || victory.current || rearView.current.active ? 0 : -motion.side * profile.bank;
     camRoll.current += (bank - camRoll.current) * ease(5);
     camera.rotateZ(camRoll.current);
     const cam = camera as THREE.PerspectiveCamera;
@@ -3594,6 +3639,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       <primitive object={sun} />
       <primitive object={sun.target} />
       <Track theme={theme} lap={aestheticLap - 1} />
+      {TrackDiagnostics&&<Suspense fallback={null}><TrackDiagnostics bodies={racers}/></Suspense>}
       <primitive object={skids.mesh} />
       {itemBoxes.map((box, i) => (
         <group key={`b${i}`} ref={box.group} position={box.pos.toArray()}>

@@ -19,6 +19,8 @@ const KEY_LABEL: Record<string, string> = {
 };
 
 const ACTION_LABEL: Record<Action, string> = {
+  lookBack: "Mirar atrás",
+  ability: "Habilidad",
   item: "Objeto",
   drift: "Derrape",
   swap: "Cambiar",
@@ -236,7 +238,7 @@ export default function OptionsScreen() {
                     onClick={() => setGrabbing(a)}
                     className={`rounded-xl px-4 py-2 text-sm font-bold shadow-sm ${grabbing === a ? "animate-pulse bg-amber-400 text-sky-900" : "bg-white/70"}`}
                   >
-                    {grabbing === a ? "Pulsa una tecla…" : (settings.keybinds[a] ?? []).map((k) => KEY_LABEL[k] ?? k).join(" / ") || "—"}
+                    {grabbing === a ? "Pulsa una tecla…" : (settings.keybinds[a] ?? DEFAULT_KEYBINDS[a]).map((k) => KEY_LABEL[k] ?? k).join(" / ") || "—"}
                   </button>
                 </Row>
               ))}

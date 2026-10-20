@@ -506,3 +506,13 @@ Xvfb y terminó por el límite programado. El .deb mostró el aviso DRI3 de la
 pantalla virtual; el AppImage no registró errores. Esto comprueba el arranque
 básico, no la aceleración gráfica ni una instalación administrativa. El .deb
 local requiere GLIBC 2.39 y las bibliotecas del AppImage local GLIBC 2.44.
+
+
+## Evolución de mapas, mirada trasera y habilidades — 2026-10-19
+
+- V (mirar atrás) y C (habilidad propia), reasignables, con equivalentes táctiles y mando estándar Y/palanca derecha. La mirada cambia de lado al pulsar y vuelve al soltar sin invertir el volante.
+- Ataque propio por personaje adaptado a los cinco vehículos, con reserva por piloto, recarga por avance real y maniobras, espera compartida y protección contra gasto sin objetivo o sin reservas disponibles.
+- Apuntado trasero espacial para misiles: perseguidores próximos, altura compatible y exclusión de compañeros de equipo.
+- Reacción por proximidad de flores, drones, ventiladores, boyas y criaturas en los 41 mapas. Recursos compartidos, animación limitada a 30 Hz, culling a distancia y reloj de carrera para respetar la pausa.
+- Reglas centralizadas, inspección de mapas reutilizable y diagnóstico F8 solo en desarrollo, excluido del HTML final.
+- Documentación: `juego/DESARROLLO.md`. Auditoría: `npm run audit:maps`. No se añaden dependencias ni bibliotecas de controladores.

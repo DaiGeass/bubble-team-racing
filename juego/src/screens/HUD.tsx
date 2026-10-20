@@ -1,7 +1,7 @@
 import { isFinalLap } from "../adrenaline";
 import { useEffect, useState } from "react";
 import { useI18n, ordinal } from "../i18n";
-import { useGame, DEFAULT_TOUCH, type Action, type TouchSlot } from "../store";
+import { useGame, DEFAULT_KEYBINDS, DEFAULT_TOUCH, type Action, type TouchSlot } from "../store";
 import { WEAPON_META, WEAPONS, THEMES, mutateTheme, type WeaponId, type VehicleMode } from "../data";
 import { getActiveTrack } from "../trackCurve";
 import type { UseControlsReturn } from "../controls";
@@ -45,16 +45,20 @@ function TouchButton({
   style,
   onDown,
   onUp,
+  description,
 }: {
   label: string;
   className?: string;
   color?: string;
   style?: React.CSSProperties;
+  description?:string;
   onDown: () => void;
   onUp: () => void;
 }) {
   return (
     <button
+      aria-label={description}
+      title={description}
       className={`glass-btn flex select-none items-center justify-center rounded-full font-bold leading-none active:scale-95 ${className}`}
       style={{ ...style, ...(color ? { color, textShadow: `0 0 12px ${color}` } : {}) }}
       onPointerDown={(e) => {
@@ -68,6 +72,7 @@ function TouchButton({
       }}
       onPointerLeave={onUp}
       onPointerCancel={onUp}
+      onLostPointerCapture={onUp}
       onContextMenu={(e) => e.preventDefault()}
     >
       {label}
@@ -77,6 +82,8 @@ function TouchButton({
 
 /** Glyph shown on a remappable touch slot. */
 const TOUCH_GLYPH: Record<Action, string> = {
+  lookBack:"↶",
+  ability:"✦",
   left: "\u25C0",
   right: "\u25B6",
   gas: "\u25B2",
@@ -91,6 +98,8 @@ const TOUCH_GLYPH: Record<Action, string> = {
 export default function HUD({ controls }: { controls: UseControlsReturn }) {
   const { t } = useI18n();
   const telemetry = useGame((s) => s.telemetry);
+  const keybinds=useGame(s=>s.settings.keybinds);
+  const keyHint=(action:Action)=>(keybinds?.[action]??DEFAULT_KEYBINDS[action])[0]?.replace(/^Key/,"")??"—";
   const setPaused = useGame((s) => s.setPaused);
   const muted = useGame((s) => s.muted);
   const toggleMuted = useGame((s) => s.toggleMuted);
@@ -475,6 +484,17 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         </div>
       )}
 
+      <div className={`pointer-events-auto absolute right-3 flex items-center gap-2 ${touch?"top-60":"bottom-28"}`}>
+        <div className="flex flex-col items-end gap-1">
+          {telemetry.lookingBack&&<span className="glass-panel rounded-full px-2 text-xs font-bold">{t("lookBack")}</span>}
+          <TouchButton description={t("lookBack")} label={`↶ ${touch?"":keyHint("lookBack")}`} className="h-10 min-w-12 rounded-full px-3 text-sm text-sky-900" onDown={()=>controls.setAction("lookBack",true)} onUp={()=>controls.setAction("lookBack",false)}/>
+        </div>
+        {telemetry.abilityEnabled&&<div className="glass-panel w-40 rounded-2xl p-2 text-sky-900">
+          <div className="truncate text-[10px] font-black" title={telemetry.abilityName}>{telemetry.abilityName||t("signatureAbility")}</div>
+          <div className="my-1 h-1.5 overflow-hidden rounded-full bg-sky-950/20"><div className="h-full bg-violet-500" style={{width:`${telemetry.abilityCharge*100}%`}}/></div>
+          <TouchButton description={`${t("signatureAbility")}: ${telemetry.abilityName}`} label={`✦ ${touch?"":keyHint("ability")} · ${telemetry.abilityWait>0?`${telemetry.abilityWait}s`:telemetry.abilityCharge>=0.999?(telemetry.abilityBlocked?t("abilityBlocked"):telemetry.abilityNeedsTarget?t("abilityAim"):t("ready")):`${Math.round(telemetry.abilityCharge*100)}%`}`} className={`h-8 w-full px-2 text-xs ${telemetry.abilityCharge>=0.999&&!telemetry.abilityBlocked&&!telemetry.abilityNeedsTarget?"text-violet-800":"opacity-60"}`} onDown={()=>controls.setAction("ability",true)} onUp={()=>controls.setAction("ability",false)}/>
+        </div>}
+      </div>
       {/* ---------- weapon + tag swap + fusion ---------- */}
       <div
         className={`pointer-events-auto absolute ${
@@ -609,7 +629,7 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
             : telemetry.fused
               ? `↑↓←→ / WASD · SHIFT ${t("drift")} · SPACE ${t("useItem")} · K ${t("turboBtn")} · Q ⇄ · F ✕ · ESC ${t("pauseGame")}`
               : `↑↓←→ / WASD · SHIFT ${t("drift")} · SPACE ${t("useItem")} · K ${t("turboBtn")} · Q ${t("swapRacer")} · F ${t("fuse")} · ESC ${t("pauseGame")}`}
-          <div className="text-sky-700">{t("maneuverHelp")}</div>
+          <div className="text-sky-700">{t("maneuverHelp")}<br/>{controls.hasGamepad()?t("padAbilityControls"):t("abilityHelp")}</div>
           </div>
         </div>
       )}

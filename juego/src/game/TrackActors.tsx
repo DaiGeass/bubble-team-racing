@@ -2,6 +2,9 @@ import {useMemo,useEffect,useRef} from "react";
 import {useFrame} from "@react-three/fiber";
 import * as THREE from "three";
 import {trackActors,actorPose,type ActorPose} from "../trackActors";
+import {raceSnapshot} from "../data";
+import {useGame} from "../store";
+import {lifeReaction,type LifeVisitor} from "../worldLife";
 import type {LifeSpot} from "../trackLife";
 /** Two instanced draws, no separate React/frame callbacks per animal. */
 export default function TrackActors({spots,indoor}:{spots:readonly LifeSpot[];indoor:boolean}) {
@@ -9,7 +12,8 @@ export default function TrackActors({spots,indoor}:{spots:readonly LifeSpot[];in
   const body=useRef<THREE.InstancedMesh>(null);const wings=useRef<THREE.InstancedMesh>(null);
   const assets=useMemo(()=>({body:new THREE.SphereGeometry(1,10,6),wing:new THREE.BoxGeometry(1,1,1),material:new THREE.MeshStandardMaterial({roughness:0.4,metalness:0.25})}),[]);
   const scratch=useMemo(()=>({d:new THREE.Object3D(),matrix:new THREE.Matrix4(),frustum:new THREE.Frustum(),sphere:new THREE.Sphere(new THREE.Vector3(),5),pose:{x:0,y:0,z:0,heading:0,bank:0,wing:0} as ActorPose,color:new THREE.Color()}),[]);
-  const elapsed=useRef(1);
+  const elapsed=useRef(1);const lastTime=useRef(-1);
+  const visitor=useMemo<LifeVisitor>(()=>({x:0,y:0,z:0,speed:0}),[]);
   useEffect(()=>{const b=body.current,w=wings.current;return()=>{b?.dispose();w?.dispose();Object.values(assets).forEach(a=>a.dispose());};},[assets]);
   useEffect(()=>{
     const b=body.current,w=wings.current;if(!b||!w)return;
@@ -17,14 +21,17 @@ export default function TrackActors({spots,indoor}:{spots:readonly LifeSpot[];in
     if(b.instanceColor)b.instanceColor.needsUpdate=true;if(w.instanceColor)w.instanceColor.needsUpdate=true;
     b.instanceMatrix.setUsage(THREE.DynamicDrawUsage);w.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   },[actors,scratch]);
-  useFrame(({clock,camera},dt)=>{
+  useFrame(({camera},dt)=>{
+    if(lastTime.current===raceSnapshot.clockMs)return;lastTime.current=raceSnapshot.clockMs;
     elapsed.current+=dt;if(elapsed.current<1/30)return;elapsed.current%=1/30;
     const b=body.current,w=wings.current;if(!b||!w)return;
     scratch.frustum.setFromProjectionMatrix(scratch.matrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
     let count=0;const d=scratch.d;
+    const player=raceSnapshot.racers.find(r=>r.isPlayer);
+    if(player){visitor.x=player.x;visitor.y=player.y;visitor.z=player.z;visitor.speed=useGame.getState().telemetry.speedKph/6.4;}
     for(let i=0;i<actors.length;i++) {
-      const a=actors[i];actorPose(a,clock.elapsedTime,scratch.pose);const p=scratch.pose;
-      scratch.sphere.center.set(p.x,p.y,p.z);if(!scratch.frustum.intersectsSphere(scratch.sphere))continue;
+      const a=actors[i];actorPose(a,raceSnapshot.clockMs/1000,scratch.pose,lifeReaction(a.anchor,player?visitor:undefined));const p=scratch.pose;
+      scratch.sphere.center.set(p.x,p.y,p.z);if(camera.position.distanceToSquared(scratch.sphere.center)>320*320||!scratch.frustum.intersectsSphere(scratch.sphere))continue;
       const fish=a.kind==="fish",insect=a.kind==="butterfly";
       d.position.set(p.x,p.y,p.z);d.rotation.set(0,p.heading,p.bank);d.scale.set(insect?0.12:0.32,insect?0.15:0.2,fish?0.7:0.34);d.updateMatrix();b.setMatrixAt(count,d.matrix);b.setColorAt(count,scratch.color.set(a.anchor.glow));
       for(let side=-1;side<=1;side+=2) {

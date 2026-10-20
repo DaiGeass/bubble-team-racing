@@ -15,7 +15,8 @@
     "red": "node servidor/servidor.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node tools/test-graphics.mjs",
-    "audit:tracks": "node tools/audit-tracks.mjs"
+    "audit:tracks": "node tools/audit-tracks.mjs",
+    "audit:maps": "node tools/audit-maps.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

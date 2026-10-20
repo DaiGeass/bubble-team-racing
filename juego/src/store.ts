@@ -59,6 +59,13 @@ export interface RaceSetup {
 }
 
 export interface Telemetry {
+  abilityCharge:number;
+  abilityWait:number;
+  abilityName:string;
+  abilityEnabled:boolean;
+  abilityBlocked:boolean;
+  abilityNeedsTarget:boolean;
+  lookingBack:boolean;
   drivingCue: "landing" | "drift" | "near" | "sling" | "pass" | "route" | "maneuver" | null;
   drivingValue: number;
   comboCount: number;
@@ -119,6 +126,7 @@ export interface Telemetry {
 }
 
 const defaultTelemetry: Telemetry = {
+  abilityCharge:0.35, abilityWait:0, abilityName:"", abilityEnabled:false, abilityBlocked:false, abilityNeedsTarget:false, lookingBack:false,
   drivingCue: null,
   drivingValue: 0,
   comboCount: 0, comboMultiplier: 1, comboLeft: 0, comboKind: null,
@@ -191,9 +199,9 @@ export interface VehiclePrefs {
 // on-screen buttons, so anything the HUD can do the player can reassign.
 // ---------------------------------------------------------------------------
 
-export type Action = "item" | "drift" | "swap" | "fuse" | "turbo" | "left" | "right" | "gas" | "brake";
+export type Action = "item" | "drift" | "swap" | "fuse" | "turbo" | "left" | "right" | "gas" | "brake" | "lookBack" | "ability";
 
-export const ACTIONS: Action[] = ["item", "drift", "swap", "fuse", "turbo", "left", "right", "gas", "brake"];
+export const ACTIONS: Action[] = ["item", "drift", "swap", "fuse", "turbo", "left", "right", "gas", "brake", "lookBack", "ability"];
 
 /** Physical slots available to the touch overlay. */
 export type TouchSlot = "padL" | "padR" | "drift" | "turbo" | "gas" | "brake" | "swap" | "fuse" | "item";
@@ -201,6 +209,8 @@ export type TouchSlot = "padL" | "padR" | "drift" | "turbo" | "gas" | "brake" | 
 export const TOUCH_SLOTS: TouchSlot[] = ["padL", "padR", "drift", "turbo", "gas", "brake", "swap", "fuse", "item"];
 
 export const DEFAULT_KEYBINDS: Record<Action, string[]> = {
+  lookBack: ["KeyV"],
+  ability: ["KeyC"],
   item: ["Space"],
   drift: ["ShiftLeft", "ShiftRight"],
   swap: ["KeyQ"],
@@ -219,6 +229,8 @@ export const DEFAULT_KEYBINDS: Record<Action, string[]> = {
 export const PRESET_KEYBINDS: Record<"A" | "B", Record<Action, string[]>> = {
   A: DEFAULT_KEYBINDS,
   B: {
+    lookBack: ["KeyV"],
+    ability: ["KeyC"],
     item: ["KeyE"],
     drift: ["Space"],
     swap: ["KeyQ"],

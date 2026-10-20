@@ -13,6 +13,9 @@ export interface ControlState {
   fusePressed: boolean;
   turbo: boolean;
   turboPressed: boolean;
+  lookBack: boolean;
+  ability: boolean;
+  abilityPressed: boolean;
   drift: boolean;
   pausePressed: boolean;
 }
@@ -27,7 +30,9 @@ const LAYOUTS = {
 export type ControlPreset = keyof typeof LAYOUTS;
 
 /** Actions map onto the on-screen flags the game already tracks. */
-const TOUCH_KEY: Record<Action, keyof { left: boolean; right: boolean; up: boolean; down: boolean; item: boolean; swap: boolean; fuse: boolean; turbo: boolean; drift: boolean }> = {
+const TOUCH_KEY: Record<Action, keyof { left: boolean; right: boolean; up: boolean; down: boolean; item: boolean; swap: boolean; fuse: boolean; turbo: boolean; drift: boolean; lookBack: boolean; ability: boolean }> = {
+  lookBack:"lookBack",
+  ability:"ability",
   left: "left",
   right: "right",
   gas: "up",
@@ -41,6 +46,9 @@ const TOUCH_KEY: Record<Action, keyof { left: boolean; right: boolean; up: boole
 
 export function useControls() {
   const state = useRef<ControlState>({
+    lookBack:false,
+    ability:false,
+    abilityPressed:false,
     steer: 0,
     throttle: 0,
     item: false,
@@ -63,11 +71,12 @@ export function useControls() {
   // so a quick tap always counts, however slow the frame.
   const taps = useRef<Record<string, boolean>>({});
   const touchTaps = useRef<Record<string, boolean>>({});
+  const prevAbility=useRef(false);
   const prevItem = useRef(false);
   const prevSwap = useRef(false);
   const prevFuse = useRef(false);
   const prevTurbo = useRef(false);
-  const touch = useRef({ left: false, right: false, up: false, down: false, item: false, swap: false, fuse: false, turbo: false, drift: false });
+  const touch = useRef({ left: false, right: false, up: false, down: false, item: false, swap: false, fuse: false, turbo: false, drift: false,lookBack:false,ability:false });
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -87,6 +96,7 @@ export function useControls() {
       taps.current = {};
       touchTaps.current = {};
       for (const key of Object.keys(touch.current) as (keyof typeof touch.current)[]) touch.current[key] = false;
+      prevAbility.current=false;
       prevItem.current = prevSwap.current = prevFuse.current = prevTurbo.current = false;
       state.current.pausePressed = false;
     };
@@ -138,6 +148,11 @@ export function useControls() {
     const digitalSteer=(left ? -1 : 0) + (right ? 1 : 0);
     state.current.steer = digitalSteer || pad.steer * (st.invertSteer?-1:1);
     state.current.throttle = ((fwd ? 1 : 0) + (back ? -1 : 0)) || pad.throttle;
+    const ability=on("ability")||pad.ability;
+    state.current.lookBack=on("lookBack")||pad.lookBack;
+    state.current.ability=ability;
+    state.current.abilityPressed=ability&&!prevAbility.current;
+    prevAbility.current=ability;
     state.current.item = item;
     state.current.itemPressed = item && !prevItem.current;
     state.current.swap = swap;

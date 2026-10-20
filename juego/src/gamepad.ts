@@ -1,6 +1,6 @@
 /** Standard Web Gamepad mapping: OS/WebView owns the device driver. */
-export interface PadInput {steer:number;throttle:number;item:boolean;drift:boolean;turbo:boolean;swap:boolean;fuse:boolean;pause:boolean}
-export const emptyPad=():PadInput=>({steer:0,throttle:0,item:false,drift:false,turbo:false,swap:false,fuse:false,pause:false});
+export interface PadInput {steer:number;throttle:number;item:boolean;drift:boolean;turbo:boolean;swap:boolean;fuse:boolean;pause:boolean;lookBack:boolean;ability:boolean}
+export const emptyPad=():PadInput=>({steer:0,throttle:0,item:false,drift:false,turbo:false,swap:false,fuse:false,pause:false,lookBack:false,ability:false});
 export function deadzone(value:number,zone=0.18){return Number.isFinite(value)?Math.sign(value)*Math.max(0,(Math.min(1,Math.abs(value))-zone)/(1-zone)):0;}
 export class PadReader {
   get connected(){return this.index>=0;}
@@ -16,7 +16,7 @@ export class PadReader {
     if(this.blocked){if(neutral)this.blocked=false;return out;}
     out.steer=deadzone(pad.axes[0]??0)||Number(held(15))-Number(held(14));
     out.throttle=button(7)-button(6)||-deadzone(pad.axes[1]??0)||Number(held(12))-Number(held(13));
-    out.item=held(0);out.drift=held(1);out.turbo=held(2);out.swap=held(4);out.fuse=held(5);
+    out.lookBack=held(11);out.ability=held(3);out.item=held(0);out.drift=held(1);out.turbo=held(2);out.swap=held(4);out.fuse=held(5);
     out.pause=held(9)&&!this.pause;this.pause=held(9);return out;
   }
 }

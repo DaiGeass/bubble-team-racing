@@ -17,11 +17,11 @@ export function trackActors(spots: readonly LifeSpot[], indoor: boolean): TrackA
 }
 export interface ActorPose {x:number;y:number;z:number;heading:number;bank:number;wing:number}
 /** Absolute time: distant actors resume without integrating missed frames. */
-export function actorPose(actor:TrackActor,time:number,out:ActorPose):ActorPose {
-  const a=actor.anchor; const t=time*(actor.kind==="fish"?0.55:actor.kind==="drone"?0.65:0.9)+a.phase;
-  out.x=a.x+Math.cos(t)*actor.radius;out.z=a.z+Math.sin(t)*actor.radius;
-  out.y=a.y+(actor.kind==="fish"?-0.7:actor.kind==="butterfly"?2:a.kind==="vent"?-0.7:3.2)+Math.sin(t*1.7)*0.22;
+export function actorPose(actor:TrackActor,time:number,out:ActorPose,response=0):ActorPose {
+  const a=actor.anchor;const react=Math.max(0,Math.min(1,Number.isFinite(response)?response:0));const radius=actor.radius*(1-react*0.45); const t=time*(actor.kind==="fish"?0.55:actor.kind==="drone"?0.65:0.9)+a.phase;
+  out.x=a.x+Math.cos(t)*radius;out.z=a.z+Math.sin(t)*radius;
+  out.y=a.y+(actor.kind==="fish"?-0.7:actor.kind==="butterfly"?2:a.kind==="vent"?-0.7:3.2)+Math.sin(t*1.7)*0.22+(actor.kind==="fish"?-react*0.3:react*0.8);
   out.heading=-t;out.bank=Math.sin(t*1.4)*0.18;
-  out.wing=actor.kind==="butterfly"?Math.sin(time*11+a.phase)*0.85:actor.kind==="fish"?Math.sin(time*6+a.phase)*0.28:time*18;
+  out.wing=actor.kind==="butterfly"?Math.sin(time*11+a.phase+react*4)*0.85:actor.kind==="fish"?Math.sin(time*6+a.phase+react*3)*0.28:time*18;
   return out;
 }

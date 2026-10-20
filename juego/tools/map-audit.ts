@@ -1,0 +1,15 @@
+import {writeFileSync} from "node:fs";
+import {TRACKS,MODES,themeOnLap} from "../src/data";
+import {setActiveTrack} from "../src/trackCurve";
+import {inspectMap} from "../src/mapInspection";
+import {raceRules} from "../src/raceRules";
+import {lifeSpots} from "../src/trackLife";
+import {trackActors} from "../src/trackActors";
+import {environmentEvents} from "../src/environment";
+import {challengeSites} from "../src/trackChallenges";
+import {surfaceSites} from "../src/surfaceEvents";
+const maps=TRACKS.map(t=>{setActiveTrack(t.id);const spots=lifeSpots((t.sectors??[{t0:0,theme:t.theme}]).map(s=>themeOnLap(s.theme,0)));return {id:t.id,paths:inspectMap(),scenery:spots.length,creatures:trackActors(spots,!!t.indoor).length,traps:environmentEvents().length,challenges:challengeSites().length,surfaceEvents:surfaceSites.length,modes:Object.values(MODES).map(m=>({id:m.id,local:raceRules(t,m,false),network:raceRules(t,m,true)}))};});
+const report={maps:maps.length,modeCombinations:maps.length*Object.keys(MODES).length*2,issues:maps.flatMap(m=>m.paths.flatMap(p=>p.issues.map(issue=>`${m.id}/${p.id}: ${issue}`))),coverage:maps};
+if(process.argv[2])writeFileSync(process.argv[2],JSON.stringify(report,null,2));
+console.log(JSON.stringify({maps:report.maps,modeCombinations:report.modeCombinations,issues:report.issues,scenery:maps.reduce((n,m)=>n+m.scenery,0),creatures:maps.reduce((n,m)=>n+m.creatures,0)}));
+if(report.issues.length)process.exitCode=1;

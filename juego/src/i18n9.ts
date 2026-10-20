@@ -1,6 +1,13 @@
 import type { Lang, Dict } from "./i18n";
 export const MODEL_NAMES: Record<Lang, Dict> = {
   "en": {
+    "abilityAim":"Aim at a rival",
+    "lookBack": "Look back",
+    "signatureAbility": "Signature ability",
+    "abilityBlocked": "Unavailable",
+    "abilityHelp": "Drive cleanly and vary moves to charge your signature. Hold rear view to aim backwards.",
+    "padAbilityControls": "Y signature · right stick click rear view",
+
     "cleanManeuver": "Clean maneuver!",
     "maneuverHelp": "Drift: air trick · roll · dive · magnetic shift · boat hop (straight)",
     "padControls": "Controller: RT/LT drive · stick steer · A item · B drift/move · X turbo · LB swap · RB fuse · Start pause",
@@ -23,6 +30,13 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "Flux Rings"
   },
   "es": {
+    "abilityAim":"Busca un rival",
+    "lookBack": "Mirar atrás",
+    "signatureAbility": "Habilidad propia",
+    "abilityBlocked": "No disponible",
+    "abilityHelp": "Conduce limpio y combina maniobras para cargar tu habilidad. Mira atrás para apuntar a tus perseguidores.",
+    "padAbilityControls": "Y habilidad · pulsar palanca derecha mirar atrás",
+
     "cleanManeuver": "¡Maniobra limpia!",
     "maneuverHelp": "Derrape: acrobacia aérea · tonel · inmersión · impulso magnético · salto del barco (recto)",
     "padControls": "Mando: RT/LT conducir · palanca girar · A objeto · B derrape/maniobra · X turbo · LB cambiar · RB fusión · Start pausa",
@@ -45,6 +59,13 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "Anillos Flux"
   },
   "fr": {
+    "abilityAim":"Visez un rival",
+    "lookBack": "Regarder derrière",
+    "signatureAbility": "Pouvoir signature",
+    "abilityBlocked": "Indisponible",
+    "abilityHelp": "Pilotez proprement et variez les figures pour charger le pouvoir. Regardez derrière pour viser les poursuivants.",
+    "padAbilityControls": "Y pouvoir · clic stick droit vue arrière",
+
     "cleanManeuver": "Figure réussie !",
     "maneuverHelp": "Dérapage : figure aérienne · tonneau · plongée · impulsion magnétique · saut en bateau (tout droit)",
     "padControls": "Manette : RT/LT accélérer/freiner · stick diriger · A objet · B figure · X turbo · LB changer · RB fusion · Start pause",
@@ -67,6 +88,13 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "Anneaux Flux"
   },
   "ru": {
+    "abilityAim":"Найдите соперника",
+    "lookBack": "Взгляд назад",
+    "signatureAbility": "Особый приём",
+    "abilityBlocked": "Недоступно",
+    "abilityHelp": "Чистая езда и разные трюки заряжают приём. Смотрите назад, чтобы целиться в преследователей.",
+    "padAbilityControls": "Y приём · нажатие правого стика взгляд назад",
+
     "cleanManeuver": "Чистый манёвр!",
     "maneuverHelp": "Дрифт: воздушный трюк · бочка · нырок · магнитный рывок · прыжок лодки (прямо)",
     "padControls": "Геймпад: RT/LT газ/тормоз · стик руль · A предмет · B манёвр · X турбо · LB смена · RB слияние · Start пауза",
@@ -89,6 +117,13 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "Кольца Флюкс"
   },
   "ja": {
+    "abilityAim":"ライバルを狙おう",
+    "lookBack": "後方を見る",
+    "signatureAbility": "固有アビリティ",
+    "abilityBlocked": "使用不可",
+    "abilityHelp": "丁寧な走りと多彩な技でゲージをためよう。後方を見ると追手を狙える。",
+    "padAbilityControls": "Y 固有技 · 右スティック押し込みで後方を見る",
+
     "cleanManeuver": "マニューバ成功！",
     "maneuverHelp": "ドリフト：空中技・ロール・急潜航・磁気ダッシュ・船のジャンプ（直進中）",
     "padControls": "コントローラー：RT/LT アクセル/ブレーキ・スティック 操舵・A アイテム・B 技・X ターボ・LB 交代・RB 合体・Start ポーズ",
@@ -111,6 +146,13 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "フラックスリング"
   },
   "zh": {
+    "abilityAim":"瞄准对手",
+    "lookBack": "向后看",
+    "signatureAbility": "专属技能",
+    "abilityBlocked": "暂不可用",
+    "abilityHelp": "干净驾驶并组合不同动作来充能。向后看可瞄准追赶者。",
+    "padAbilityControls": "Y 技能 · 按下右摇杆向后看",
+
     "cleanManeuver": "完美机动！",
     "maneuverHelp": "漂移键：空中特技 · 滚转 · 快速下潜 · 磁力冲刺 · 船只跳跃（直行）",
     "padControls": "手柄：RT/LT 加速/刹车 · 摇杆转向 · A 道具 · B 漂移/机动 · X 涡轮 · LB 切换 · RB 融合 · Start 暂停",
@@ -133,6 +175,13 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "磁通环"
   },
   "ar": {
+    "abilityAim":"استهدف منافسًا",
+    "lookBack": "النظر للخلف",
+    "signatureAbility": "قدرة خاصة",
+    "abilityBlocked": "غير متاح",
+    "abilityHelp": "قد بسلاسة ونوّع المناورات لشحن قدرتك. انظر للخلف لاستهداف المطاردين.",
+    "padAbilityControls": "Y قدرة · ضغط العصا اليمنى للنظر للخلف",
+
     "cleanManeuver": "مناورة متقنة!",
     "maneuverHelp": "الانجراف: حركة جوية · لفة · غوص سريع · دفعة مغناطيسية · قفزة القارب (بخط مستقيم)",
     "padControls": "يد التحكم: RT/LT قيادة · العصا توجيه · A أداة · B مناورة · X توربو · LB تبديل · RB دمج · Start إيقاف",
@@ -155,6 +204,13 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "حلقات فلكس"
   },
   "he": {
+    "abilityAim":"כוונו ליריב",
+    "lookBack": "מבט לאחור",
+    "signatureAbility": "יכולת מיוחדת",
+    "abilityBlocked": "לא זמין",
+    "abilityHelp": "נהיגה נקייה ושילוב תרגילים טוענים את היכולת. הביטו לאחור כדי לכוון לרודפים.",
+    "padAbilityControls": "Y יכולת · לחיצה על המוט הימני למבט לאחור",
+
     "cleanManeuver": "תמרון נקי!",
     "maneuverHelp": "דריפט: פעלול אווירי · גלגול · צלילה · דחיפה מגנטית · קפיצת סירה (ישר)",
     "padControls": "בקר: RT/LT נהיגה · מוט היגוי · A חפץ · B תמרון · X טורבו · LB החלפה · RB מיזוג · Start השהיה",

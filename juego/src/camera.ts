@@ -36,6 +36,15 @@ export function chaseLens(speed: number, boost: number, motionBlur: number, dyna
   return 64 + dynamic * (amount * (covered ? 5 : 6 + Math.max(0, Math.min(1, motionBlur)) * 5) + Math.max(0, Math.min(1, boost)) * 3.5);
 }
 
+/** A quick glance never changes steering, gun aim or the chase follow angle. */
+export class RearView {
+  active=false;
+  update(held:boolean,allowed:boolean):boolean {
+    const next=held&&allowed,changed=next!==this.active;this.active=next;return changed;
+  }
+  get offset(){return this.active?Math.PI:0;}
+}
+
 const clamp = (x: number, limit: number) => Math.max(-limit, Math.min(limit, x));
 
 /** Preview the selected ribbon, only when driving forwards along it. */
