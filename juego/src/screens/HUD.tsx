@@ -1,4 +1,6 @@
 import { isFinalLap } from "../adrenaline";
+import { RHYTHM_TRACK_ID, rhythmState } from "../rhythm";
+import { songClock } from "../music";
 import { useEffect, useState } from "react";
 import { useI18n, ordinal } from "../i18n";
 import { useGame, DEFAULT_KEYBINDS, DEFAULT_TOUCH, type Action, type TouchSlot } from "../store";
@@ -108,6 +110,9 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
   // the palette of the current lap of the circuit being raced, so the mutation the
   // player can see in the world is the one the HUD reports
   const lapTheme = mutateTheme(THEMES[getActiveTrack().theme], telemetry.lap - 1);
+  // on a song's circuit: seconds of the song still to play
+  const songTime = getActiveTrack().id === RHYTHM_TRACK_ID && rhythmState.features ? songClock()?.time ?? (telemetry.countdown >= 0 ? 0 : telemetry.timeMs / 1000) : null;
+  const songLeft = songTime === null || !rhythmState.features ? null : Math.max(0, rhythmState.features.duration - songTime);
   const [cdKey, setCdKey] = useState(0);
   // the last lap is announced once, as the line is crossed into it
   const modeId=useGame(s=>s.modeId);
@@ -198,8 +203,8 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
 
       {telemetry.drivingCue && !telemetry.finished && telemetry.countdown < 0 && (
         <div className="absolute left-1/2 top-[20%] -translate-x-1/2 rounded-2xl border border-white/70 bg-sky-950/75 px-5 py-2 text-center font-bold text-white shadow-lg" role="status">
-          <div className="text-sm tracking-wide">{t(telemetry.drivingCue === "maneuver" ? "cleanManeuver" : telemetry.drivingCue === "landing" ? "cleanLanding" : telemetry.drivingCue === "near" ? "nearMiss" : telemetry.drivingCue === "route" ? "riskRoute" : telemetry.drivingCue === "sling" ? "slingShot" : telemetry.drivingCue === "pass" ? "cleanPass" : "driftRelease")}</div>
-          <div className="text-xs text-cyan-200">{telemetry.drivingCue === "drift" ? ["", "I", "II", "III"][telemetry.drivingValue] : telemetry.drivingValue > 0 ? `+${telemetry.drivingValue}% ${t("turboBtn")}` : t("skillChain")}</div>
+          <div className="text-sm tracking-wide">{t(telemetry.drivingCue === "finish" ? "songOver" : telemetry.drivingCue === "maneuver" ? "cleanManeuver" : telemetry.drivingCue === "landing" ? "cleanLanding" : telemetry.drivingCue === "near" ? "nearMiss" : telemetry.drivingCue === "route" ? "riskRoute" : telemetry.drivingCue === "sling" ? "slingShot" : telemetry.drivingCue === "pass" ? "cleanPass" : "driftRelease")}</div>
+          <div className="text-xs text-cyan-200">{telemetry.drivingCue === "finish" ? t("songOverSub") : telemetry.drivingCue === "drift" ? ["", "I", "II", "III"][telemetry.drivingValue] : telemetry.drivingValue > 0 ? `+${telemetry.drivingValue}% ${t("turboBtn")}` : t("skillChain")}</div>
         </div>
       )}
       {telemetry.comboCount>=2 && telemetry.comboLeft>0 && !telemetry.finished && telemetry.countdown<0 && (
@@ -236,11 +241,23 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
           </div>
         ) : null}
         <div className={`glass-panel relative flex-col items-center rounded-2xl px-3 py-1.5 ${telemetry.lives >= 0 ? "hidden" : "flex"}`}>
-          <span className="text-[10px] font-bold uppercase tracking-wide text-sky-900/60">{t("lap")}</span>
-          <span className="font-display text-2xl font-extrabold leading-none text-sky-900">
-            {telemetry.lap}
-            <span className="text-sm opacity-50">/{telemetry.totalLaps}</span>
-          </span>
+          {songLeft !== null ? (
+            // a song's race is not counted in laps: what is left of the song, then the finish
+            <>
+              <span className="text-[10px] font-bold uppercase tracking-wide text-sky-900/60">♫</span>
+              <span className="font-display text-2xl font-extrabold leading-none text-sky-900">
+                {songLeft > 0 ? `${Math.floor(songLeft / 60)}:${String(Math.floor(songLeft % 60)).padStart(2, "0")}` : t("finishWord")}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[10px] font-bold uppercase tracking-wide text-sky-900/60">{t("lap")}</span>
+              <span className="font-display text-2xl font-extrabold leading-none text-sky-900">
+                {telemetry.lap}
+                <span className="text-sm opacity-50">/{telemetry.totalLaps}</span>
+              </span>
+            </>
+          )}
           <span className="mt-0.5 flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-sky-900/60">
             <span className="inline-block h-2 w-2 rounded-full" style={{ background: lapTheme.glow }} />
             <span className="inline-block h-2 w-2 rounded-full" style={{ background: lapTheme.water }} />

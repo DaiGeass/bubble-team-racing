@@ -67,7 +67,7 @@ export interface Telemetry {
   abilityBlocked:boolean;
   abilityNeedsTarget:boolean;
   lookingBack:boolean;
-  drivingCue: "landing" | "drift" | "near" | "sling" | "pass" | "route" | "maneuver" | null;
+  drivingCue: "landing" | "drift" | "near" | "sling" | "pass" | "route" | "maneuver" | "finish" | null;
   drivingValue: number;
   comboCount: number;
   comboMultiplier: number;

@@ -722,6 +722,11 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const rhythmic = trackDef.id === RHYTHM_TRACK_ID;
   /** lap progress the song's circuit is built to; -1 until the race starts */
   const buildFront = useRef(-1);
+  /** a song's race has no line to reach: the finish appears, ahead of the leader, when the song ends */
+  const finishAt = useRef(-1);
+  const goClock = useRef(-1);
+  const finishArch = useRef<THREE.Group | null>(null);
+  const archRise = useRef(0);
   // set before the first frame is drawn, so the circuit never shows whole even for a moment
   useMemo(() => {
     reveal.front.value = rhythmic ? 30 / getPaths()[0].length : 2;
@@ -834,7 +839,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const started = useRef(false);
   const countdown = useRef(new RaceCountdown());
   const countdownValue = useRef(3);
-  const drivingCue = useRef<{ kind: "landing" | "drift" | "near" | "sling" | "pass" | "route" | "maneuver" | null; value: number; left: number }>({ kind: null, value: 0, left: 0 });
+  const drivingCue = useRef<{ kind: "landing" | "drift" | "near" | "sling" | "pass" | "route" | "maneuver" | "finish" | null; value: number; left: number }>({ kind: null, value: 0, left: 0 });
   const raceClock = useRef(0);
   const finishedOnce = useRef(false);
   const resultsTimer = useRef<number | null>(null);
@@ -914,6 +919,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     countdownValue.current = 3;
     started.current = false;
     buildFront.current = -1;
+    finishAt.current = -1;
+    goClock.current = -1;
+    archRise.current = 0;
     // before the lights, only the grid and a first stretch of a song's circuit are there
     if (rhythmic) reveal.front.value = 30 / getPaths()[0].length;
     updateSnapshot();
@@ -3445,6 +3453,30 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       // never so far behind that someone drives off the end of what is there
       buildFront.current = Math.max(buildFront.current, lead + 45 / L);
       reveal.front.value = buildFront.current;
+
+      // the song is over: the finish rises out of the road just ahead of whoever leads
+      if (started.current && goClock.current < 0) goClock.current = raceClock.current;
+      const elapsed = songClock()?.time ?? (goClock.current < 0 ? 0 : (raceClock.current - goClock.current) / 1000);
+      if (finishAt.current < 0 && goClock.current >= 0 && elapsed >= (rhythmState.features?.duration ?? Infinity)) {
+        finishAt.current = lead + Math.max(90, Math.abs(leader.speed) * 2.5) / L;
+        addShake(0.3);
+        sfx.coin();
+        drivingCue.current = { kind: "finish", value: 0, left: 3.5 };
+      }
+      const arch = finishArch.current;
+      if (arch) {
+        arch.visible = finishAt.current > 0;
+        if (finishAt.current > 0) {
+          const ft = ((finishAt.current % 1) + 1) % 1;
+          archRise.current = Math.min(1, archRise.current + dt * 1.6);
+          const c = trackPointAt(ft);
+          const tan = trackTangentAt(ft);
+          const k = archRise.current;
+          arch.position.set(c.x, surfaceYAt(ft) - (1 - k * k * (3 - 2 * k)) * 16, c.z);
+          arch.rotation.set(0, Math.atan2(tan.x, tan.z), 0);
+          arch.scale.set(halfWidthAt(ft) + 1.2, 1, 1);
+        }
+      }
     } else reveal.front.value = 2;
     stepPlaced();
     // the last lap plays harder, and a finished race calms down
@@ -3460,6 +3492,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const over = setup.teams ? new Set(alive.map((r) => r.team)).size <= 1 : alive.length <= 1;
       if (player.out) endPos = setup.teams ? 2 : alive.length + 1;
       else if (over && racers.length > 1) endPos = 1;
+    } else if (rhythmic) {
+      // whoever crosses the finish that came with the end of the song
+      if (finishAt.current > 0 && player.total >= finishAt.current) endPos = position;
     } else if (player.lap > mode.laps) endPos = position;
     if (!finishedOnce.current && endPos > 0) {
       const position = endPos;
@@ -3735,6 +3770,23 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       <Track theme={theme} lap={aestheticLap - 1} />
       {TrackDiagnostics&&<Suspense fallback={null}><TrackDiagnostics bodies={racers}/></Suspense>}
       <primitive object={skids.mesh} />
+      {rhythmic && (
+        // the finish of a song's race: two posts and a chequered banner, scaled to the road
+        <group ref={finishArch} visible={false}>
+          {[-1, 1].map((side) => (
+            <mesh key={side} position={[side, 4, 0]} scale={[1 / 12, 1, 1]}>
+              <boxGeometry args={[0.9, 8, 0.9]} />
+              <meshStandardMaterial color={theme.barrierA} emissive={theme.glow} emissiveIntensity={1.6} toneMapped={false} />
+            </mesh>
+          ))}
+          {Array.from({ length: 16 }, (_, i) => (
+            <mesh key={i} position={[-1 + (i % 8) * 0.25 + 0.125, 7.4 + (i < 8 ? 0.55 : 0), 0]}>
+              <boxGeometry args={[0.25, 0.55, 0.3]} />
+              <meshBasicMaterial color={(i + (i < 8 ? 0 : 1)) % 2 ? "#ffffff" : "#1b1b24"} toneMapped={false} />
+            </mesh>
+          ))}
+        </group>
+      )}
       {itemBoxes.map((box, i) => (
         <group key={`b${i}`} ref={box.group} position={box.pos.toArray()}>
           {/* gift-crystal item box; the gold one gives two */}

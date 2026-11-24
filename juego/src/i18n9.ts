@@ -1,6 +1,9 @@
 import type { Lang, Dict } from "./i18n";
 export const MODEL_NAMES: Record<Lang, Dict> = {
   "en": {
+    "songOver": "The song is over!",
+    "songOverSub": "The finish is just ahead",
+    "finishWord": "FINISH",
     "rhythmBuilt": "The circuit is built while you drive it, beat by beat.",
     "secLand": "Road",
     "secWater": "Boat",
@@ -76,6 +79,9 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "Flux Rings"
   },
   "es": {
+    "songOver": "¡Se acabó la canción!",
+    "songOverSub": "La meta está justo delante",
+    "finishWord": "META",
     "rhythmBuilt": "El circuito se construye mientras lo conduces, pulso a pulso.",
     "secLand": "Carretera",
     "secWater": "Barco",
@@ -151,6 +157,9 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "Anillos Flux"
   },
   "fr": {
+    "songOver": "La chanson est finie !",
+    "songOverSub": "L'arrivée est juste devant",
+    "finishWord": "ARRIVÉE",
     "rhythmBuilt": "Le circuit se construit pendant que vous roulez, temps après temps.",
     "secLand": "Route",
     "secWater": "Bateau",
@@ -226,6 +235,9 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "Anneaux Flux"
   },
   "ru": {
+    "songOver": "Песня закончилась!",
+    "songOverSub": "Финиш прямо впереди",
+    "finishWord": "ФИНИШ",
     "rhythmBuilt": "Трасса строится, пока вы едете, доля за долей.",
     "secLand": "Дорога",
     "secWater": "Лодка",
@@ -301,6 +313,9 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "Кольца Флюкс"
   },
   "ja": {
+    "songOver": "曲が終わった！",
+    "songOverSub": "ゴールはすぐ先",
+    "finishWord": "ゴール",
     "rhythmBuilt": "コースは走りながら、拍ごとに組み上がります。",
     "secLand": "道路",
     "secWater": "ボート",
@@ -376,6 +391,9 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "フラックスリング"
   },
   "zh": {
+    "songOver": "歌曲结束了！",
+    "songOverSub": "终点就在前方",
+    "finishWord": "终点",
     "rhythmBuilt": "赛道会在你驾驶时随节拍逐段生成。",
     "secLand": "公路",
     "secWater": "船",
@@ -451,6 +469,9 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "磁通环"
   },
   "ar": {
+    "songOver": "انتهت الأغنية!",
+    "songOverSub": "خط النهاية أمامك مباشرة",
+    "finishWord": "النهاية",
     "rhythmBuilt": "يُبنى المضمار وأنت تقود، نبضة بعد نبضة.",
     "secLand": "طريق",
     "secWater": "قارب",
@@ -526,6 +547,9 @@ export const MODEL_NAMES: Record<Lang, Dict> = {
     "hover_flux": "حلقات فلكس"
   },
   "he": {
+    "songOver": "השיר נגמר!",
+    "songOverSub": "קו הסיום ממש לפניך",
+    "finishWord": "סיום",
     "rhythmBuilt": "המסלול נבנה בזמן הנהיגה, פעמה אחר פעמה.",
     "secLand": "כביש",
     "secWater": "סירה",

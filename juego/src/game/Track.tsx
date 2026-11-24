@@ -2451,7 +2451,7 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
           <meshStandardMaterial color={new THREE.Color(theme.ground).multiplyScalar(0.78)} roughness={1} side={THREE.DoubleSide} flatShading />
         </mesh>
       )}
-      <StartArch theme={theme} />
+      {!rhythmic && <StartArch theme={theme} />}
       <SkyRings theme={theme} />
       {!rhythmic && <ForkIslands theme={theme} />}
       <SubZone theme={theme} />
