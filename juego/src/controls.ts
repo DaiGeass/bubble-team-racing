@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import {PadReader,emptyPad} from "./gamepad";
+import {emptyPad,sharedPad,setRumbleLevel,DEFAULT_PAD_BINDS} from "./gamepad";
 import { useGame, DEFAULT_KEYBINDS, type Action } from "./store";
 
 export interface ControlState {
@@ -63,7 +63,7 @@ export function useControls() {
     pausePressed: false,
   });
 
-  const padReader = useRef(new PadReader());
+  const padReader = useRef(sharedPad);
   const blurred = useRef(false);
   const keys = useRef<Record<string, boolean>>({});
   // A key or button pressed and let go between two frames would never be seen
@@ -119,6 +119,9 @@ export function useControls() {
 
   function poll(): ControlState {
     let pad=emptyPad();
+    const ps=useGame.getState().settings;
+    padReader.current.config={binds:{...DEFAULT_PAD_BINDS,...(ps.padBinds??{})},deadzone:ps.padDeadzone??0.18,curve:ps.steerCurve??1};
+    setRumbleLevel(ps.vibration??0.7);
     try { if(!blurred.current&&typeof navigator.getGamepads==="function")pad=padReader.current.read(navigator.getGamepads()); } catch { padReader.current.suspend(); }
     const k = keys.current;
     const t = touch.current;

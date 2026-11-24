@@ -2,6 +2,10 @@ import { create } from "zustand";
 import { BODY_COLORS, BOATS, CHARACTERS, HOVERS, MODES, PLANES, SHAPES, SUBS, type AiSkillId, type ModeId } from "./data";
 import { useGame, type VehiclePrefs } from "./store";
 import { setActiveTrack } from "./trackCurve";
+import { rhythmState, useSong, RHYTHM_TRACK_ID, type SongFeatures } from "./rhythm";
+import { setSong } from "./music";
+import { audioContext } from "./sound";
+import type { ThemeId } from "./data";
 
 // ---------------------------------------------------------------------------
 // Playing over a network. The server (servidor/servidor.mjs) only passes
@@ -48,6 +52,8 @@ export interface NetSession {
   roster: RosterEntry[];
   /** counts the races of this room, so every start is a fresh one */
   run: number;
+  /** on a song's circuit: what the song sounds like, so every machine builds the same road */
+  song?: { features: SongFeatures; theme: ThemeId };
 }
 
 interface NetState {
@@ -129,7 +135,8 @@ export function announce() {
 
 /** The host changes what the next race will be. */
 export function setConfig(patch: Partial<NetConfig>) {
-  if (!isHost()) return;
+  // before joining a room the choice is kept, and used if this machine ends up the host
+  if (inRoom() && !isHost()) return;
   const cfg = { ...useNet.getState().cfg, ...patch };
   useNet.setState({ cfg });
   netSend({ t: "cfg", cfg });
@@ -218,6 +225,9 @@ function receive(m: Msg) {
     case "start":
       if (m.from === n.hostId) begin(m.session as NetSession);
       break;
+    case "song":
+      if (m.from === n.hostId) songPart(m);
+      break;
     case "lobby":
       // the host has called everyone back to the room
       if (m.from === n.hostId) backToLobby();
@@ -230,6 +240,12 @@ function receive(m: Msg) {
 function begin(session: NetSession) {
   const g = useGame.getState();
   useNet.setState({ session, cfg: session.cfg });
+  if (session.song && session.cfg.trackId === RHYTHM_TRACK_ID) {
+    // the host's own recording, if it got here whole; otherwise the music is made up as usual
+    const mine = rhythmState.features?.name === session.song.features.name && Math.abs(rhythmState.features.duration - session.song.features.duration) < 0.5;
+    useSong(session.song.features, mine ? rhythmState.buffer : null, mine ? rhythmState.bytes : null, session.song.theme);
+    if (!mine && incoming && incoming.got === incoming.parts.length) decodeIncoming();
+  }
   g.setTrackId(session.cfg.trackId);
   // the road itself: without this everyone would race on whatever circuit was loaded last
   setActiveTrack(session.cfg.trackId);
@@ -297,6 +313,10 @@ export function startRace() {
   // two sides, dealt alternately down the grid
   if (battle && cfg.teams) roster.forEach((r, i) => (r.team = i % 2));
   const session: NetSession = { cfg, roster, run: (n.session?.run ?? 0) + 1 };
+  if (cfg.trackId === RHYTHM_TRACK_ID && rhythmState.features) {
+    session.song = { features: rhythmState.features, theme: rhythmState.theme };
+    shareSong();
+  }
   netSend({ t: "start", session });
   begin(session);
 }
@@ -305,3 +325,58 @@ export function startRace() {
 useGame.subscribe((s, prev) => {
   if (s.characterId !== prev.characterId || s.partnerId !== prev.partnerId || s.vehicle !== prev.vehicle) announce();
 });
+
+// ---------------------------------------------------------------------------
+// The song itself goes to the others in pieces small enough for the server
+// (one message may be up to a megabyte), before the start, so that it is
+// usually there and decoded by the time the lights go green. Songs over 24 MB
+// are not sent: the others race the same circuit to the made-up music.
+// ---------------------------------------------------------------------------
+
+const PART = 600 * 1024;
+let incoming: { name: string; parts: string[]; got: number } | null = null;
+
+function toBase64(bytes: Uint8Array) {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+function shareSong() {
+  const bytes = rhythmState.bytes;
+  const name = rhythmState.features?.name ?? "";
+  if (!bytes || bytes.byteLength > 24 * 1024 * 1024) return;
+  const all = new Uint8Array(bytes);
+  const n = Math.ceil(all.length / PART);
+  for (let i = 0; i < n; i++) netSend({ t: "song", name, i, n, data: toBase64(all.subarray(i * PART, (i + 1) * PART)) });
+}
+
+function songPart(m: Msg) {
+  const { name, i, n, data } = m as unknown as { name: string; i: number; n: number; data: string };
+  if (typeof data !== "string" || !Number.isInteger(i) || !Number.isInteger(n) || n < 1 || n > 64 || i < 0 || i >= n) return;
+  if (!incoming || incoming.name !== name || incoming.parts.length !== n) incoming = { name, parts: new Array(n).fill(""), got: 0 };
+  if (!incoming.parts[i]) incoming.got++;
+  incoming.parts[i] = data;
+  // the start may already have come: then the song is put in as soon as it is whole
+  if (incoming.got === n && useNet.getState().session?.song?.features.name === name) decodeIncoming();
+}
+
+function decodeIncoming() {
+  const got = incoming;
+  const c = audioContext();
+  if (!got || !c) return;
+  const chunks = got.parts.map((p) => Uint8Array.from(atob(p), (ch) => ch.charCodeAt(0)));
+  const all = new Uint8Array(chunks.reduce((a, b) => a + b.length, 0));
+  let at = 0;
+  for (const ch of chunks) (all.set(ch, at), (at += ch.length));
+  const bytes = all.buffer;
+  c.decodeAudioData(bytes.slice(0))
+    .then((buffer) => {
+      const song = useNet.getState().session?.song;
+      if (!song || song.features.name !== got.name) return;
+      rhythmState.buffer = buffer;
+      rhythmState.bytes = bytes;
+      setSong(buffer, RHYTHM_TRACK_ID, song.features.bpm, song.features.offset);
+    })
+    .catch(() => {});
+}

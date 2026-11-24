@@ -9,7 +9,7 @@ import {moveBody,makeResult,placeBody,aimAhead,type Body} from "../src/physics";
 import {RACE_SPEED_SCALE,RACE_ACCEL_SCALE} from "../src/raceTuning";
 import {trackPace,cruisePace} from "../src/trackPace";
 export function auditNewRoutes(fps=60,stage=1,startMs=0) {
-  return TRACKS.map(track=>{
+  return TRACKS.filter(track=>EXTRA_ROUTES[track.id]).map(track=>{
     setActiveTrack(track.id);evolveSurfaces(stage,0,()=>false);setSurfaceClock(startMs);const paths=getPaths();const route=EXTRA_ROUTES[track.id];
     const target=paths.find(p=>p.def===route);if(!target)throw Error(`Missing express route: ${track.id}`);
     const b:Body={pos:new THREE.Vector3(),y:0,vy:0,airborne:false,heading:0,course:0,speed:0,path:0,idx:0,prog:0,total:0,safePath:0,safeIdx:0,touching:false,groundY:0,slopeAlong:0,lat:0,half:10};

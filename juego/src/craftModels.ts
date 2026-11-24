@@ -1,5 +1,5 @@
 export const NEW_CRAFT = {
-  land: ["rally", "roadster"], boat: ["hydrofoil", "outrigger"], plane: ["canard", "vtol"],
+  land: ["rally", "roadster", "monster", "muscle", "tuktuk", "beetle", "bumper", "hotrod"], boat: ["hydrofoil", "outrigger"], plane: ["canard", "vtol"],
   sub: ["nautilus", "raypod"], hover: ["triad", "flux"],
 } as const;
 export type NewCraftId = typeof NEW_CRAFT[keyof typeof NEW_CRAFT][number];
@@ -37,6 +37,60 @@ export function craftParts(id: NewCraftId): CraftPart[] {
     for(const x of [-0.7,0.7]) { box("body",[x,0.58,0],[0.22,0.3,2]); box("glow",[x,0.6,-1.25],[0.22,0.07,0.12]); }
     box("dark",[0,0.7,-0.7],[0.75,0.35,0.16]);
     box("trim",[0,0.6,1.53],[1.2,0.08,0.12]);
+  } else if (id === "monster") {
+    // a pickup on stilts: the body sits high over four fat tyres
+    // low enough that the driver's head shows above it, under an open roll cage
+    box("body",[0,0.98,0.1],[1.7,0.42,2.6]);
+    for (const x of [-0.62,0.62]) box("trim",[x,1.62,-0.35],[0.08,0.9,0.08]);
+    box("trim",[0,2.05,-0.35],[1.32,0.08,0.08]);
+    box("dark",[0,0.7,0],[0.35,0.3,2.4]);
+    for (const x of [-0.95,0.95]) for (const z of [-1.0,1.0]) add("tube","dark",[x,0.62,z],[0.62,0.5,0.62],[0,0,P/2]);
+    for (const x of [-0.55,0.55]) hull([x,1.08,1.42],[0.18,0.14,0.08],"glow");
+    box("trim",[0,1.25,-1.3],[1.5,0.1,0.2]);
+  } else if (id === "muscle") {
+    // long bonnet, short tail, a scoop and two stripes
+    box("body",[0,0.52,0.1],[1.75,0.42,3.0]);
+    box("body",[0,0.86,-0.45],[1.5,0.38,1.25]);
+    box("glass",[0,0.88,0.22],[1.4,0.3,0.07],[-0.6,0,0]);
+    box("dark",[0,0.78,0.9],[0.55,0.18,0.7]);
+    for (const x of [-0.25,0.25]) box("trim",[x,0.74,0.4],[0.18,0.02,3.0]);
+    box("trim",[0,0.95,-1.35],[1.7,0.08,0.35]);
+    for (const x of [-0.6,0.6]) { hull([x,0.55,1.6],[0.17,0.13,0.06],"glow"); add("tube","dark",[x,0.4,-1.62],[0.1,0.3,0.1],[P/2,0,0]); }
+  } else if (id === "tuktuk") {
+    // three wheels' worth of body: a rounded cab with a canvas roof and the driver up front
+    hull([0,0.7,-0.25],[0.9,0.6,1.1]);
+    box("trim",[0,1.45,-0.1],[1.7,0.08,2.0]);
+    for (const x of [-0.8,0.8]) for (const z of [-0.95,0.8]) box("dark",[x,1.05,z],[0.06,0.8,0.06]);
+    hull([0,0.6,1.05],[0.45,0.4,0.55]);
+    box("glass",[0,1.12,1.0],[1.1,0.45,0.05],[-0.2,0,0]);
+    hull([0,0.62,1.55],[0.15,0.12,0.06],"glow");
+    box("body",[0,0.35,0],[1.5,0.12,2.2]);
+  } else if (id === "beetle") {
+    // round in every direction
+    hull([0,0.72,0],[0.95,0.65,1.45]);
+    hull([0,1.15,-0.1],[0.7,0.45,0.85],"glass");
+    for (const x of [-0.88,0.88]) for (const z of [-0.85,0.85]) hull([x,0.6,z],[0.3,0.32,0.45],"trim");
+    for (const x of [-0.42,0.42]) hull([x,0.82,1.35],[0.16,0.16,0.08],"glow");
+    box("dark",[0,0.45,-1.45],[1.2,0.12,0.12]);
+    add("ring","trim",[0,1.62,-0.1],[0.35,0.35,0.6],[P/2,0,0]);
+  } else if (id === "bumper") {
+    // a fairground car: one rubber ring all round and a pole up to the ceiling that is not there
+    hull([0,0.62,0],[1.05,0.45,1.35]);
+    add("ring","dark",[0,0.45,0],[1.35,1.65,2.4],[P/2,0,0]);
+    box("trim",[0,0.95,-0.7],[1.5,0.35,0.35]);
+    add("tube","dark",[0,1.85,-1.0],[0.05,1.8,0.05]);
+    hull([0,2.78,-1.0],[0.14,0.14,0.14],"glow");
+    hull([0,0.92,0.95],[0.35,0.22,0.12],"glow");
+    for (const x of [-0.55,0.55]) box("dark",[x,0.88,0.35],[0.12,0.12,0.6]);
+  } else if (id === "hotrod") {
+    // an engine with a car behind it: exposed block, exhausts and a chopped roof
+    box("body",[0,0.52,-0.35],[1.45,0.48,2.1]);
+    box("dark",[0,0.78,0.95],[0.85,0.55,0.85]);
+    for (const x of [-0.25,0.25]) add("tube","trim",[x,1.15,0.95],[0.16,0.25,0.16]);
+    for (const side of [-1,1]) { add("tube","trim",[side*0.55,0.62,0.55],[0.07,0.9,0.07],[P/2,0,side*0.35]); hull([side*0.8,0.4,1.35],[0.12,0.12,0.12],"glow"); }
+    box("body",[0,0.95,-0.75],[1.25,0.26,0.9]);
+    box("glass",[0,0.95,-0.25],[1.15,0.18,0.06],[-0.2,0,0]);
+    box("trim",[0,0.3,0.4],[0.5,0.08,1.4]);
   } else if (id === "hydrofoil") {
     hull([0,0.25,0.1],[0.8,0.35,1.8]);
     box("trim",[0,0.48,0.5],[0.7,0.08,1.5]);

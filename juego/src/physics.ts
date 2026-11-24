@@ -230,8 +230,12 @@ export function moveBody(b: Body, dx: number, dz: number, dt: number, opts: Step
     if (b.airborne) {
       b.vy = fall;
       b.y += b.vy * dt;
-      if (b.y <= rideY && b.vy <= 0) {
-        res.landed = -b.vy;
+      // Coming down onto the road, or the road coming up to meet us: a ramp that
+      // steepens again after a little crest catches a kart still rising off the
+      // crest. Before, that kart went on rising into the underside of the ramp
+      // and dropped straight through it.
+      if (b.y <= rideY) {
+        res.landed = Math.max(0, -b.vy);
         b.y = rideY;
         b.vy = 0;
         b.airborne = false;

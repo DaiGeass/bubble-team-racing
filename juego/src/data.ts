@@ -14,7 +14,7 @@ export type WeaponId =
 export type ShapeId =
   | "kart" | "hover" | "buggy" | "jet" | "cruiser" | "moto" | "ufo"
   | "coupe" | "van" | "formula" | "bubble" | "rocket" | "mono"
-  | "tank" | "wedge" | "sled" | "orbit" | "dune" | "phantom" | "mech" | "board" | "shell" | "winglet" | "pod" | "rally" | "roadster";
+  | "tank" | "wedge" | "sled" | "orbit" | "dune" | "phantom" | "mech" | "board" | "shell" | "winglet" | "pod" | "rally" | "roadster" | "monster" | "muscle" | "tuktuk" | "beetle" | "bumper" | "hotrod";
 export type ThemeId =
   | "frutiger" | "aero" | "techno" | "eco" | "aqua" | "sunset"
   | "y2k" | "liquid" | "win98" | "vapor" | "dreamcore" | "cyberpunk" | "noir" | "backrooms" | "liminal" | "eden"
@@ -468,6 +468,12 @@ export const SHAPES: { id: ShapeId; bonus: { speed: number; handling: number } }
   { id: "pod", bonus: { speed: 1.7, handling: -0.9 } },
   { id: "rally", bonus: { speed: 0.5, handling: 1.1 } },
   { id: "roadster", bonus: { speed: 1.1, handling: 0.5 } },
+  { id: "monster", bonus: { speed: -0.3, handling: 0.4 } },
+  { id: "muscle", bonus: { speed: 1.5, handling: -0.4 } },
+  { id: "tuktuk", bonus: { speed: -0.5, handling: 1.4 } },
+  { id: "beetle", bonus: { speed: 0.2, handling: 0.9 } },
+  { id: "bumper", bonus: { speed: -0.6, handling: 1.6 } },
+  { id: "hotrod", bonus: { speed: 1.3, handling: 0.0 } },
 ];
 
 export const BODY_COLORS = ["#ff4d6d", "#ff9f1c", "#fde047", "#4ade80", "#22d3ee", "#6366f1", "#f472b6", "#ffffff", "#111827", "#a855f7", "#14b8a6"];
@@ -908,6 +914,8 @@ export interface TrapDef {
   speed: number;
   phase: number;
   active: boolean;
+  /** a trap that slides to and fro over this share of the lap instead of going all the way round */
+  range?: number;
 }
 
 /**

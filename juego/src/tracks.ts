@@ -1168,4 +1168,68 @@ export const DESIGNED_TRACKS: TrackDef[] = expandTracks([
     traffic: 2,
     pads: [["go", "boost"], ["m0", "boost", 1.4], ["br", "boost", 1.6, 30]],
   }),
+
+  // HEART — up one side, round two lobes with a dip between them, down the
+  // other side to a point. The upper lobe floats.
+  design({
+    id: "corazon", warp: "soft", theme: "vapor", difficulty: 2, start: [0, 10, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(40).mark("go").go(20).mark("aA").go(BYPASS + 23).mark("aB").flex("f1", 60)
+        .left(180, 150, 8).mark("top").right(90, 50).left(180, 150, -8)
+        .go(20).mark("bA").go(BYPASS + 83).mark("bB").flex("f2", 60).left(90, 42),
+    zones: [["top", "bA", "mag"]],
+    sectors: [["aB", "dreamcore"], ["top", "y2k"], ["bA", "vapor"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["aB", "boost"], ["top", "jump", 11, 20], ["bB", "boost", 1.4]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 23, 0), kind: "side", pads: [["mid", "boost"]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 23, 0), kind: "side", pads: [["mid", "jump", 10]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("L", 83, 10), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("R", 83, -5), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
+
+  // CENTIPEDE — four bends one way and the other up the hill, and a long way
+  // round and back down, with a road over and a road under on both straights.
+  design({
+    id: "ciempies", theme: "eco", difficulty: 2, start: [0, 8, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(60).mark("go").flex("f1", 200)
+        .right(120, 80, 4).mark("w1").left(120, 80, 4).right(120, 80, 4).mark("w3").left(120, 80, 4)
+        .left(90, 110).mark("wA").go(BYPASS + 223).mark("wB").flex("f2", 150)
+        .left(90, 110).go(100).mark("sA").go(BYPASS + 223, -16).mark("sB").go(100)
+        .left(90, 110).go(100).left(90, 110),
+    sectors: [["w1", "eden"], ["wA", "frutiger"], ["sA", "sunset"], ["sB", "eco"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["w3", "boost", 1.4], ["wB", "boost"], ["sB", "boost"]],
+    routes: [
+      { from: "wA", to: "wB", draw: (t) => t.bypass("L", 223, -6), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      { from: "wA", to: "wB", draw: (t) => t.bypass("R", 223, 14), kind: "high", holes: [["mid", 14]], pads: [["mid", "boost", 1.6]] },
+      { from: "sA", to: "sB", draw: (t) => t.bypass("L", 223, 0, -16), kind: "side", pads: [["mid", "boost"]] },
+      { from: "sA", to: "sB", draw: (t) => t.bypass("R", 223, 10, -16), kind: "high", pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
+
+  // THE WAVE — nine bends in a row climbing like a swell, a turn, and a long
+  // run back down beside them on four lanes.
+  design({
+    id: "ola", theme: "liquid", difficulty: 2, start: [0, 8, 0, 0], hazards: 3,
+    draw: (t) =>
+      t.go(60).mark("go").flex("f1", 55)
+        .right(60, 90, 3).left(120, 90, 3).right(60, 90, 3)
+        .right(60, 90, 3).mark("crest").left(120, 90, 3).right(60, 90, 3)
+        .right(60, 90, 3).left(120, 90, 3).right(60, 90, 3)
+        .left(90, 120).flex("f2", 80).left(90, 120)
+        .go(60).mark("aA").go(BYPASS + 223, -12).mark("aB").go(30).mark("bA").go(BYPASS + 223, -12).mark("bB").go(160, -3)
+        .left(90, 120).go(80).left(90, 120),
+    sectors: [["crest", "aqua"], ["aA", "liquid"], ["bA", "mac"]],
+    traffic: 3,
+    pads: [["go", "boost"], ["crest", "boost", 1.4], ["aB", "boost"], ["bB", "boost"]],
+    routes: [
+      { from: "aA", to: "aB", draw: (t) => t.bypass("L", 223, -6, -12), kind: "low", tunnel: true, pads: [["mid", "boost", 1.5]] },
+      { from: "aA", to: "aB", draw: (t) => t.bypass("R", 223, 14, -12), kind: "high", holes: [["mid", 14]], pads: [["mid", "boost", 1.6]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("L", 223, 0, -12), kind: "side", pads: [["mid", "boost"]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("R", 223, 10, -12), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+    ],
+  }),
 ]);

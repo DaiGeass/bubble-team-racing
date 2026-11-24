@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { TrackDef, RouteDef, RouteKind, PadDef, Zone, ZoneKind, ThemeId, BiomeDef, BiomeId } from "./data";
+import type { TrackDef, RouteDef, RouteKind, PadDef, Zone, ZoneKind, ThemeId, BiomeDef, BiomeId, TrapDef } from "./data";
 
 // ---------------------------------------------------------------------------
 // Track designer. A circuit is drawn the way you would describe it: go
@@ -184,7 +184,7 @@ export class Turtle {
 /** Forward distance a bypass takes besides its parallel run, for laying the straight it runs beside. */
 export const BYPASS = 177;
 
-interface RouteSpec {
+export interface RouteSpec {
   from: string;
   to: string;
   draw: (t: Turtle) => unknown;
@@ -200,7 +200,7 @@ interface RouteSpec {
   pads?: [string, PadDef["kind"], number?][];
 }
 
-interface DesignSpec {
+export interface DesignSpec {
   id: string;
   theme: ThemeId;
   difficulty: 1 | 2 | 3;
@@ -233,6 +233,8 @@ interface DesignSpec {
   routes?: RouteSpec[];
   /** false keeps the drawing exactly as drawn; otherwise it is pulled out of true, each circuit its own way */
   warp?: boolean | "soft";
+  /** false: no sliding spikes on this one */
+  traps?: boolean;
 }
 
 /** What the designer had to bend to make each circuit close, for the checker. */
@@ -433,8 +435,37 @@ export function design(spec: DesignSpec): TrackDef {
     pads,
     portals: (spec.portals ?? []).map(([a, b], i) => ({ tIn: tOf(a), tOut: tOf(b), side: i % 2 ? -1 : 1, cd: 4 })),
     routes,
+    traps: spec.traps === false ? [] : slidingSpikes(spec, length, zones, holes, pads, routes, (spec.portals ?? []).flatMap(([a, b]) => [tOf(a), tOf(b)])),
     biomes: spec.biomes ?? biomes,
     sectors,
     traffic: spec.traffic,
   };
+}
+
+/**
+ * A few rows of spikes on every circuit, each sliding to and fro along one
+ * side of a quiet stretch of road: never in a water, sky, submarine or
+ * magnetic stretch, never over a jump, a pad or the mouth of another road,
+ * and never near the start.
+ */
+function slidingSpikes(spec: DesignSpec, length: number, zones: Zone[], holes: [number, number][], pads: PadDef[], routes: RouteDef[], portals: number[]) {
+  const count = 2 + spec.difficulty;
+  const near = (t: number, at: number, units: number) => Math.abs((((t - at) % 1) + 1.5) % 1 - 0.5) * length < units;
+  const inside = (t: number, a: number, b: number, pad: number) => (a <= b ? t >= a - pad && t <= b + pad : t >= a - pad || t <= b + pad);
+  const clear = (t: number) =>
+    !near(t, 0, 140) &&
+    !zones.some((z) => inside(t, z.t0, z.t1, 60 / length)) &&
+    !holes.some(([a, b]) => inside(t, a, b, 70 / length)) &&
+    !pads.some((p) => p.route === undefined && (near(t, p.t, 40) || (p.toT !== undefined && inside(t, p.t, p.toT, 40 / length)))) &&
+    !routes.some((r) => near(t, r.t0, 110) || near(t, r.t1, 110)) &&
+    !portals.some((p) => near(t, p, 60));
+  const out: TrapDef[] = [];
+  let seed = 0;
+  for (const ch of spec.id) seed = (seed * 33 + ch.charCodeAt(0)) >>> 0;
+  for (let k = 0; k < 40 && out.length < count; k++) {
+    const t = ((k * 0.61803398875 + (seed % 97) / 97) % 1 + 1) % 1;
+    if (!clear(t) || out.some((o) => near(o.t, t, 160))) continue;
+    out.push({ t, side: out.length % 2 ? -1 : 1, kind: "spike", speed: 0.8 + (out.length % 3) * 0.25, phase: k * 1.7, active: true, range: 22 / length });
+  }
+  return out;
 }

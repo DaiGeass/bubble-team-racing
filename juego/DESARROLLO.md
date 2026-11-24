@@ -33,6 +33,27 @@ Abrir el juego con el servidor de desarrollo y pulsar **F8 durante una carrera**
 
 No muestra todos los tipos de colisión ni todas las obstrucciones posibles. Usa el soporte real, incluido el lado caído de un puente. El diagnóstico se importa únicamente en desarrollo y queda excluido del HTML de producción.
 
+## Música
+
+`src/music.ts` genera la música mientras suena, sin archivos: compases de 16 pasos sobre un bucle de cuatro acordes, con batería, bajo, arpegio y melodía. Cada circuito saca su tonalidad y su progresión de su nombre, y su estilo de la estética (`aero`, `synth`, `drive`, `eerie`). Empieza con el «¡Ya!», sube de intensidad en la última vuelta, se calla en pausa local y se detiene al salir de la carrera. El volumen va en Opciones («Música») sobre el volumen general. Para poner una banda sonora de verdad basta con sustituir `startMusic`, `setMusicIntensity` y `stopMusic`.
+
+## Trampas
+
+- `src/environment.ts`: seis obstáculos súbitos en la carretera principal y uno en hasta tres rutas. Uno de cada tres en tierra o levitación es una bola que rueda de un lado a otro sin salir de su mitad de la carretera. Quedan lejos de un tercio y dos tercios de vuelta, donde van los desafíos.
+- `src/trackDesign.ts` (`slidingSpikes`): cada circuito diseñado recibe 3 a 5 filas de pinchos que se deslizan a lo largo de un lado de un tramo tranquilo: nunca en zonas de agua, cielo, submarino o magnéticas, ni sobre saltos, impulsores, bocas de rutas o portales, ni cerca de la salida. `traps: false` en un circuito las quita. La IA las esquiva.
+
+## Modo ritmo
+
+`src/rhythm.ts` escucha una canción (`analyseSong`: energía, bajo, ataques, tempo por autocorrelación y fase del primer pulso, todo resumido por compás) y construye su circuito (`rhythmTrack`): un óvalo cuyo largo hace que una vuelta a ritmo de carrera dure lo que la canción, con cada compás como una curva hacia un lado u otro (más fuerte cuanto más cargado), colinas que siguen el bajo, tramos magnéticos en estribillos largos, saltos en los subidones y una segunda carretera junto a los pasajes tranquilos que caen en recta. Es determinista: en red el anfitrión manda los datos del compás y cada máquina construye el mismo circuito; el audio va aparte en trozos de 600 KB (hasta 24 MB). En carrera `music.ts` reproduce la canción en lugar de la música generada y `game/reveal.ts` hace que la carretera aparezca alrededor del piloto latiendo con el pulso.
+
+## Mods
+
+`src/mods.ts` carga mods JSON (formato en `MODS.md`) al arrancar, antes de la primera pantalla: estéticas, personajes con disparo propio y circuitos dibujados con las órdenes de la tortuga. Cada orden se valida; lo que falla se salta y se informa en la pantalla Mods. Se guardan en `localStorage` (`btr_mods`).
+
+## Mando
+
+Opciones → Mando: reasignar botones (los gatillos y la cruceta quedan fijos), zona muerta, curva de dirección, vibración y una vista en vivo de lo que manda el mando. La vibración sigue a la sacudida de cámara del jugador (`addShake`).
+
 ## Validación
 
 Desde `juego/`:

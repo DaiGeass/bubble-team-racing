@@ -13,3 +13,5 @@ import "./challenges.test";
 import "./finale.test";
 
 import "./evolution.test";
+import "./update.test";
+import "./rhythm.test";

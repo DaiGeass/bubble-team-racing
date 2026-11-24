@@ -16,7 +16,7 @@ function straight():PathRT {
     tx:new Float32Array(n),tz:new Float32Array(n).fill(1),slope:new Float32Array(n),
     half:new Float32Array(n).fill(10),flags:new Uint8Array(n).fill(F_SOLID)};
 }
-test("all 41 pace profiles are bounded and continuous, including lap seams and circuit switches",()=>{
+test("all pace profiles are bounded and continuous, including lap seams and circuit switches",()=>{
   let boosted=0;
   for(const track of TRACKS){
     setActiveTrack(track.id);
@@ -67,9 +67,9 @@ test("time bonus reference follows circuit distance instead of a fixed 55 second
   assert.ok(samples[samples.length-1].budget>samples[0].budget*1.5);
   assert.ok(samples[samples.length-1].budget>150000);
 });
-test("ten new selectable craft have unique ids and usable speed/handling rows",()=>{
+test("new selectable craft have unique ids and usable speed/handling rows",()=>{
   const groups={land:SHAPES.map(s=>s.id),boat:BOATS,plane:PLANES,sub:SUBS,hover:HOVERS};
-  const ids=Object.values(NEW_CRAFT).flat();assert.equal(new Set(ids).size,10);
+  const ids=Object.values(NEW_CRAFT).flat();assert.equal(new Set(ids).size,ids.length);assert.ok(ids.length>=16);
   for(const [mode,list] of Object.entries(NEW_CRAFT))for(const id of list){
     assert.ok((groups[mode as keyof typeof groups] as readonly string[]).includes(id));
     if(mode!=="land"){assert.ok(craftSpeed(id,0)>0.8&&craftSpeed(id,0)<1.4);assert.ok(craftHandling(id,0)>0.7);}
@@ -84,7 +84,7 @@ test("new silhouettes use a bounded, finite mesh budget and distinct shapes",()=
     for(const p of parts){assert.ok([...p.at,...p.size,...p.rotation].every(Number.isFinite));assert.ok(p.size.every(s=>s>0));}
     silhouettes.add(JSON.stringify(parts));
   }
-  assert.equal(silhouettes.size,10);
+  assert.equal(silhouettes.size,Object.values(NEW_CRAFT).flat().length);
 });
 test("new model names exist in all eight interface languages",()=>{
   for(const dictionary of Object.values(MODEL_NAMES))for(const [mode,ids] of Object.entries(NEW_CRAFT))for(const id of ids){

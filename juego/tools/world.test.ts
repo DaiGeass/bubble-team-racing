@@ -15,7 +15,7 @@ function body(): Body {
   return { pos: new THREE.Vector3(), y: 0, vy: 0, airborne: false, heading: 0, course: 0, speed: 0, path: 0, idx: 0, prog: 0, total: 0, safePath: 0, safeIdx: 0, touching: false, groundY: 0, slopeAlong: 0, lat: 0, half: 10 };
 }
 
-test("all 41 circuits use their actual ribbon for land/water/flight/diving/magnetic modes", () => {
+test("all circuits use their actual ribbon for land/water/flight/diving/magnetic modes", () => {
   const seen = new Set<VehicleMode>(); const corrected = new Set<string>(); let routesFixed = 0;
   for (const track of TRACKS) {
     setActiveTrack(track.id);

@@ -18,8 +18,14 @@ export default function EnvironmentTraps({theme}:{theme:ThemeDef}) {
     const root=roots.current[i],part=parts.current[i],light=lights.current[i];if(!root||!part||!light)return;
     eventPose(event,raceSnapshot.clockMs,pose);root.position.set(pose.x,pose.y,pose.z);root.rotation.y=pose.heading;
     const height=pose.lift*(event.kind==="piston"?2.2:event.kind==="sprout"?1.8:3.0);
+    if(event.kind==="roller"){
+      // a ball that grows out of the road and rolls with its own motion
+      const r=pose.radius*1.15*pose.lift;part.visible=r>0.02;part.scale.setScalar(r);part.position.y=r+0.05;
+      part.rotation.set(raceSnapshot.clockMs*0.006,0,raceSnapshot.clockMs*0.004);
+    } else {
     part.visible=height>0.02;part.scale.set(pose.radius,height*(event.kind==="sprout"?0.5:1),pose.radius);part.position.y=height/2+0.1;
     part.rotation.y=event.kind==="sweeper"?raceSnapshot.clockMs*0.003:0;
+    }
     // No idle beacon or countdown: the flash appears with the physical obstacle.
     light.visible=pose.active;light.scale.setScalar(1.1+pose.lift*0.35);
     const beacon=beacons.current[i];if(beacon){beacon.visible=pose.active;beacon.scale.setScalar(0.23+pose.lift*0.12);}
@@ -28,7 +34,7 @@ export default function EnvironmentTraps({theme}:{theme:ThemeDef}) {
   return <group dispose={null}>{events.map((event,i)=><group key={event.id} ref={g=>{roots.current[i]=g;}}>
     <mesh geometry={assets.base} material={assets.metal} position={[0,0.08,0]}/>
     <mesh ref={m=>{lights.current[i]=m;}} visible={false} geometry={assets.ring} material={indicators[i]} rotation={[-Math.PI/2,0,0]} position={[0,0.19,0]}/>
-    <mesh visible={false} ref={m=>{parts.current[i]=m;}} geometry={event.kind==="piston"||event.kind==="sweeper"?assets.piston:event.kind==="sprout"?assets.orb:assets.jet} material={assets.metal} castShadow/>
+    <mesh visible={false} ref={m=>{parts.current[i]=m;}} geometry={event.kind==="piston"||event.kind==="sweeper"?assets.piston:event.kind==="sprout"||event.kind==="roller"?assets.orb:assets.jet} material={assets.metal} castShadow/>
     <mesh visible={false} ref={m=>{beacons.current[i]=m;}} geometry={assets.orb} material={indicators[i]} position={[event.side*2.2,1.1,0]} scale={0.23}/>
   </group>)}</group>;
 }

@@ -1,5 +1,7 @@
 import SurfaceChanges from "./SurfaceChanges";
 import {replacedDeck} from "../surfaceEvents";
+import { revealShader } from "./reveal";
+import { RHYTHM_TRACK_ID } from "../rhythm";
 import TrackChallenges from "./TrackChallenges";
 import { ambientHazardCount } from "../environment";
 import { characterPhase } from "../modelDetail";
@@ -681,6 +683,8 @@ function BarrierRing({ matrices, sector, themes, theme }: { matrices: THREE.Matr
         metalness={0.2}
         emissive={theme.glow}
         emissiveIntensity={theme.id === "techno" ? 0.9 : 0.25}
+        onBeforeCompile={getActiveTrack().id === RHYTHM_TRACK_ID ? revealShader : undefined}
+        customProgramCacheKey={getActiveTrack().id === RHYTHM_TRACK_ID ? () => "reveal" : undefined}
       />
     </instancedMesh>
   );
@@ -2326,6 +2330,7 @@ function MagZone({ theme }: { theme: ThemeDef }) {
 }
 
 export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) {
+  const rhythmic = getActiveTrack().id === RHYTHM_TRACK_ID;
   const ribbons = useMemo(() => getPaths().map((p) => buildRibbonGeometry(p)), []);
   const def = getActiveTrack();
   // the aesthetics of the lap, as they look on this lap
@@ -2393,11 +2398,13 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
                 roughness={techno ? 0.4 : 0.8}
                 metalness={techno ? 0.4 : 0.05}
                 side={THREE.DoubleSide}
+                onBeforeCompile={rhythmic ? revealShader : undefined}
+                customProgramCacheKey={rhythmic ? () => "reveal" : undefined}
               />
             ))}
           </mesh>
           <mesh geometry={r.slab} castShadow>
-            <meshStandardMaterial color={theme.roadEdge} roughness={0.5} metalness={0.3} side={THREE.DoubleSide} />
+            <meshStandardMaterial color={theme.roadEdge} roughness={0.5} metalness={0.3} side={THREE.DoubleSide} onBeforeCompile={rhythmic ? revealShader : undefined} customProgramCacheKey={rhythmic ? () => "reveal" : undefined} />
           </mesh>
         </group>
       ))}
@@ -2412,7 +2419,7 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
       <TunnelArches theme={theme} />
       {barriers.mats.length > 0 && <BarrierRing matrices={barriers.mats} sector={barriers.sector} themes={themes} theme={theme} />}
       <mesh geometry={rails} castShadow>
-        <meshStandardMaterial vertexColors roughness={0.3} metalness={0.25} emissive={theme.glow} emissiveIntensity={0.12} side={THREE.DoubleSide} />
+        <meshStandardMaterial vertexColors roughness={0.3} metalness={0.25} emissive={theme.glow} emissiveIntensity={0.12} side={THREE.DoubleSide} onBeforeCompile={rhythmic ? revealShader : undefined} customProgramCacheKey={rhythmic ? () => "reveal" : undefined} />
       </mesh>
       {banks && (
         <mesh geometry={banks} receiveShadow>

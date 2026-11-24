@@ -2,9 +2,11 @@ import { CAMERA_STYLES } from "../camera";
 import { GRAPHICS_QUALITIES } from "../graphics";
 import { useEffect, useState } from "react";
 import { useGame, ACTIONS, TOUCH_SLOTS, DEFAULT_KEYBINDS, DEFAULT_TOUCH, type Action, type TouchSlot } from "../store";
+import { DEFAULT_PAD_BINDS } from "../gamepad";
 import { AI_PROFILES, AI_SKILL_LIST, type AiSkillId } from "../data";
 import { LANGS, useI18n } from "../i18n";
 import { Bubbles, GlassButton } from "../ui/common";
+import PadSettings from "./PadSettings";
 
 const KEY_LABEL: Record<string, string> = {
   Space: "Espacio",
@@ -86,7 +88,7 @@ export default function OptionsScreen() {
   const toggleMuted = useGame((s) => s.toggleMuted);
   const lang = useGame((s) => s.lang);
   const setLang = useGame((s) => s.setLang);
-  const [tab, setTab] = useState<"game" | "controls" | "touch">("game");
+  const [tab, setTab] = useState<"game" | "controls" | "pad" | "touch">("game");
   const [grabbing, setGrabbing] = useState<Action | null>(null);
   const [slotFor, setSlotFor] = useState<TouchSlot | null>(null);
 
@@ -113,9 +115,9 @@ export default function OptionsScreen() {
         <div className="glass-panel mb-5 flex flex-wrap items-center justify-between gap-3 rounded-3xl px-5 py-4">
           <h1 className="font-display text-3xl font-extrabold">Opciones</h1>
           <div className="flex flex-wrap gap-2">
-            {(["game", "controls", "touch"] as const).map((k) => (
+            {(["game", "controls", "pad", "touch"] as const).map((k) => (
               <GlassButton key={k} onClick={() => setTab(k)} className={tab === k ? "ring-4 ring-white/70" : ""}>
-                {k === "game" ? "Juego" : k === "controls" ? "Controles" : "Táctil"}
+                {k === "game" ? "Juego" : k === "controls" ? "Teclado" : k === "pad" ? "Mando" : "Táctil"}
               </GlassButton>
             ))}
             <GlassButton onClick={() => goto("start")}>Volver</GlassButton>
@@ -169,6 +171,9 @@ export default function OptionsScreen() {
                 <Slider value={settings.volume} onChange={(v) => setSettings({ volume: v })} />
                 <Toggle on={!muted} onClick={toggleMuted} />
               </Row>
+              <Row label={`Música · ${Math.round(settings.music * 100)}%`}>
+                <Slider value={settings.music} onChange={(v) => setSettings({ music: v })} />
+              </Row>
               <Row label="Calidad gráfica">
                 {GRAPHICS_QUALITIES.map((quality) => (
                   <button
@@ -206,6 +211,11 @@ export default function OptionsScreen() {
                   onClick={() =>
                     setSettings({
                       keybinds: DEFAULT_KEYBINDS,
+                      padBinds: DEFAULT_PAD_BINDS,
+                      padDeadzone: 0.18,
+                      steerCurve: 1,
+                      vibration: 0.7,
+                      music: 0.55,
                       touchLayout: DEFAULT_TOUCH,
                       touchScale: 1,
                       handed: "right",
@@ -251,6 +261,8 @@ export default function OptionsScreen() {
               </Row>
             </>
           )}
+
+          {tab === "pad" && <PadSettings Row={Row} Slider={Slider} />}
 
           {tab === "touch" && (
             <>

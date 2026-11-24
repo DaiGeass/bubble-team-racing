@@ -22,6 +22,9 @@ import Vehicle, { type KartVisualState, type VehicleConfig } from "./Vehicle";
 import ParticleSystem from "./ParticleSystem";
 import type { UseControlsReturn } from "../controls";
 import { useGame } from "../store";
+import { setMusicIntensity, setMusicLevel, setMusicPaused, songClock, startMusic, stopMusic, styleFor } from "../music";
+import { RHYTHM_TRACK_ID } from "../rhythm";
+import { reveal } from "./reveal";
 import { useNet, netSend, onRace, isHost } from "../net";
 import {
   CHARACTERS,
@@ -53,7 +56,7 @@ import {
   type WeaponId,
   type VehicleMode,
 } from "../data";
-import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapContact, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, sectorMix, plainStretches, terrainY, FLY_BASE, FLIGHT, groundAt, locate, makeGround, mainIndexAt, pathPoint, F_TUNNEL } from "../trackCurve";
+import { trackPointAt, trackTangentAt, lateralOffsetFrom, getActiveTrack, surfaceYAt, halfWidthAt, trapContact, trapTransform, getPaths, getPads, plainRoadAt, getSkyRings, getSkyBlocks, sectorMix, plainStretches, terrainY, FLY_BASE, FLIGHT, groundAt, locate, makeGround, mainIndexAt, pathPoint, F_TUNNEL } from "../trackCurve";
 import { moveBody, makeResult, placeBody, respawnBody, aimAhead, bendAhead, collideBodies, progDelta, GRAVITY, type Body, type StepOpts } from "../physics";
 import { drainParticleQueue, emitParticles, emitDebris, addShake, shakeState } from "../particles";
 import { setSkid, setRaceSound, sfx } from "../sound";
@@ -881,11 +884,13 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     useGame.getState().resetTelemetry();
     useGame.getState().setTelemetry({abilityEnabled:rules.abilities,abilityName:signatureShot(activeChar(racers[0]),racers[0].mode).name,abilityCharge:racers[0].ability.charge});
     useGame.getState().setTelemetry({ totalLaps: mode.laps, totalRacers: racers.length, countdown: 3 });
+    setMusicIntensity(0.4);
     countdown.current = new RaceCountdown();
     countdownValue.current = 3;
     started.current = false;
     updateSnapshot();
     sfx.countdown();
+    return () => stopMusic();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2031,6 +2036,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       };
       for (const tr of traffic) dodge(tr.pos.x, tr.pos.y, tr.pos.z, 1.6);
       if (r.mode === "land") for (const hz of hazardState.positions) dodge(hz.x, hz.y, hz.z, 1.4);
+      // the rows of spikes sliding along the side of the road
+      if (r.mode === "land" && r.path === 0) for (const tr of getActiveTrack().traps ?? []) {
+        if (!tr.active) continue;
+        const h = trapTransform(tr, raceClock.current);
+        dodge(h.p.x, h.ground, h.p.z, 2.4);
+      }
       for (const event of environments) {
         if (event.path !== r.path || event.mode !== r.mode) continue;
         eventPose(event, raceClock.current, environmentPose);
@@ -2052,10 +2063,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         challengePose(site,raceClock.current+Math.min(1500,ahead/Math.max(12,r.speed)*1000),challengeState.stages[site.id]??1,challengeView);
         if(challengeView.active&&ahead<openingAhead){line=challengeView.gap;opening=site;openingAhead=ahead;}
       }
-      const remainingLane=bridgeLane(r.path,r.idx,Math.max(35,r.speed*1.2));
+      // a bridge that has lost half its deck: get over to the half that is left well before it,
+      // and quickly. At race speed the old one second's warning came too late, and they went through.
+      const remainingLane=bridgeLane(r.path,r.idx,Math.max(80,r.speed*2.8));
       if(remainingLane!==null)line=remainingLane;
       line = THREE.MathUtils.clamp(line, -room, room);
-      r.aiLat += (line - r.aiLat) * Math.min(1, dt * 3.5);
+      r.aiLat += (line - r.aiLat) * Math.min(1, dt * (remainingLane!==null ? 9 : 3.5));
 
       // aim along the road it is taking, in 3D: the bridge and the road under it are different roads
       // look less far ahead inside a bend, or the aim point cuts the corner for it
@@ -2075,7 +2088,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const err = wrapAngle(desired - (r.isDrifting ? r.heading - wrapAngle(r.heading - r.course) * 0.6 : r.heading));
       // steer at the aim point, and lean back towards the line it is meant to be on
       // (+lateral is to the right, and steering right is negative)
-      steerIn = THREE.MathUtils.clamp(err * 3.4 - (r.aiLat - r.lat) * 0.09, -1, 1);
+      steerIn = THREE.MathUtils.clamp(err * 3.4 - (r.aiLat - r.lat) * (remainingLane !== null ? 0.3 : 0.09), -1, 1);
 
       // flying or diving: line up with the next ring on the line it is on
       if (flight) {
@@ -3231,9 +3244,15 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       countdownValue.current = light;
       state.setTelemetry({ countdown: light });
       if (light > 0) sfx.countdown();
-      else if (light === 0) sfx.go();
+      else if (light === 0) {
+        sfx.go();
+        // the music starts with the race, in the manner of the circuit and a tune of its own
+        startMusic(styleFor(getActiveTrack().theme), getActiveTrack().id);
+      }
     }
     started.current = countdown.current.started;
+    setMusicLevel(state.settings.music);
+    setMusicPaused(state.paused && !session);
     const dt = activeFrameTime(deltaRaw, state.paused && !session);
 
     // pickups animate
@@ -3360,6 +3379,15 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
 
     const player = racers[0];
+    // a song's circuit is built round the driver, a little further on every beat
+    if (getActiveTrack().id === RHYTHM_TRACK_ID) {
+      const beat = songClock()?.beat ?? 0;
+      reveal.center.value.set(player.pos.x, player.y, player.pos.z);
+      // it opens out over the first seconds, then breathes with the beat
+      reveal.radius.value = 65 + 40 * Math.min(1, raceClock.current / 6000) + 16 * Math.pow(1 - beat, 3);
+    } else reveal.radius.value = 1e7;
+    // the last lap plays harder, and a finished race calms down
+    setMusicIntensity(player.finished ? 0.2 : !battle && mode.laps > 1 && player.lap >= mode.laps ? 1 : 0.4);
     // a race is ordered by distance; a battle by who is still in it and with how many lives
     const sorted = [...racers].sort((a, b) => (battle ? Number(a.out) - Number(b.out) || b.lives - a.lives : 0) || b.total - a.total);
     const position = sorted.indexOf(player) + 1;

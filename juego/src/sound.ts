@@ -3,6 +3,16 @@ import { raceSoundProfile, type RaceSoundState } from "./adrenaline";
 // Lightweight procedural SFX using the Web Audio API — no audio files needed.
 let ctx: AudioContext | null = null;
 
+/** The one audio context the game shares, for the music to play into as well. */
+export function audioContext(): AudioContext | null {
+  return getCtx();
+}
+
+/** What every sound is scaled by: the master volume, or nothing when muted. */
+export function soundLevel(): number {
+  return useMutedCheck() ? 0 : masterVolume();
+}
+
 function getCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
   if (!ctx) {

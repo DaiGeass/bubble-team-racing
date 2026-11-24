@@ -43,8 +43,10 @@ export function evolveSurfaces(lap:number,ms:number,occupied:(site:SurfaceSite)=
 export function bridgeDrop(site:SurfaceSite,ms:number){return site.stage<2?0:Math.min(22,Math.max(0,(ms-site.changed)/1000)*18);}
 let clock=0;
 export function setSurfaceClock(ms:number){clock=Number.isFinite(ms)?ms:clock;}
+/** Share of the half-width past the centre line that the collapse leaves standing: a little more than half the road survives. */
+export const BRIDGE_KEEP=0.2;
 export function hasSurface(path:number,idx:number,along:number,lat:number){
-  for(const s of surfaceSites)if(s.kind==="bridge"&&s.path===path&&s.stage>1&&lat*s.side>0&&bridgeDrop(s,clock)>0.5){
+  for(const s of surfaceSites)if(s.kind==="bridge"&&s.path===path&&s.stage>1&&lat*s.side>s.half*BRIDGE_KEEP&&bridgeDrop(s,clock)>0.5){
     const at=idx*s.ds+along;
     if(at>=s.first*s.ds&&at<s.last*s.ds)return false;
   }

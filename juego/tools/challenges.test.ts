@@ -8,7 +8,7 @@ import {auditNewRoutes} from "./routeAudit";
 
 const site:ChallengeSite={id:0,path:1,idx:10,u:0.5,x:0,y:0,z:0,tx:0,tz:1,half:6,risk:true,kind:"gate",mode:"land",phase:0};
 const body=(x=0,y=0,z=-10):ChallengeBody=>({path:1,mode:"land",x,y,z,tx:0,tz:1,flow:0,grip:1});
-test("all 41 circuits have a risk-route challenge and two evolving main-road sites covering all modes",()=>{
+test("all circuits have a risk-route challenge and two evolving main-road sites covering all modes",()=>{
   const kinds=new Set<string>(),modes=new Set<string>();let count=0;
   for(const track of TRACKS){
     setActiveTrack(track.id);const sites=challengeSites();assert.equal(sites.length,3,track.id);assert.equal(challengeSites(),sites);
@@ -16,7 +16,7 @@ test("all 41 circuits have a risk-route challenge and two evolving main-road sit
     resetChallenges();assert.deepEqual([...challengeState.stages],[1,1,1]);
     for(const s of sites){count++;kinds.add(s.kind);modes.add(s.mode);const p=getPaths()[s.path];assert.ok(p.flags[s.idx]&F_SOLID);assert.equal(modeOnPath(s.path,p.prog[s.idx]),s.mode);assert.ok(s.idx*p.ds>=28&&p.length-s.idx*p.ds>=28);}
   }
-  assert.equal(count,123);assert.equal(kinds.size,4);assert.equal(modes.size,5);
+  assert.equal(count,TRACKS.length*3);assert.equal(kinds.size,4);assert.equal(modes.size,5);
 });
 test("anchors preserve solid support and one mode throughout the moving obstacle footprint",()=>{
   for(const track of TRACKS){setActiveTrack(track.id);for(const s of challengeSites()){

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { ShapeId, WheelStyle } from "../data";
 
-const FLOATING = new Set<ShapeId>(["hover", "ufo", "tank", "orbit", "phantom", "board", "pod"]);
+const FLOATING = new Set<ShapeId>(["hover", "ufo", "tank", "orbit", "phantom", "board", "pod", "monster", "bumper"]);
 export const hasRoadWheels = (shape: ShapeId) => !FLOATING.has(shape);
 
 /** Four wheels share two geometries/materials, private to this vehicle's effects. */

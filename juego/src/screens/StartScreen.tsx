@@ -4,6 +4,7 @@ import type { Group } from "three";
 import { useI18n } from "../i18n";
 import { useGame } from "../store";
 import { Bubbles, GlassButton, LanguageSwitcher, PrimaryButton } from "../ui/common";
+import { resumeAudio, sfx } from "../sound";
 import Vehicle, { type KartVisualState } from "../game/Vehicle";
 import { CHARACTERS, THEMES, THEME_LIST, type ThemeId } from "../data";
 import Portrait from "../ui/Portrait";
@@ -95,13 +96,37 @@ export default function StartScreen() {
               ))}
             </div>
 
-            <div className="mt-5 flex flex-col items-center gap-2 sm:flex-row lg:items-start">
+            <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
               <PrimaryButton big onClick={() => goto("select")}>
                 ▶ {t("play")}
               </PrimaryButton>
-              <GlassButton onClick={() => goto("lobby")}>⇄ {t("multiplayer")}</GlassButton>
-              <GlassButton onClick={() => goto("howto")}>? {t("howToPlayTitle")}</GlassButton>
-              <GlassButton onClick={() => goto("options")}>{t("options")}</GlassButton>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {(
+                  [
+                    ["rhythm", "♫", "rhythmMode", "menuRhythm"],
+                    ["lobby", "⇄", "multiplayer", "menuLobby"],
+                    ["mods", "✚", "mods", "menuMods"],
+                    ["howto", "?", "howToPlayTitle", "menuHowto"],
+                    ["options", "⚙", "options", "menuOptions"],
+                  ] as const
+                ).map(([to, icon, title, sub]) => (
+                  <button
+                    key={to}
+                    onClick={() => {
+                      resumeAudio();
+                      sfx.click();
+                      goto(to);
+                    }}
+                    className="glass-btn group flex items-center gap-2.5 rounded-2xl px-3 py-2 text-left transition hover:-translate-y-0.5"
+                  >
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/70 text-lg font-extrabold text-sky-700 shadow-sm transition group-hover:bg-sky-500 group-hover:text-white">{icon}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-extrabold text-sky-900">{t(title)}</span>
+                      <span className="block truncate text-[10px] font-semibold text-sky-800/70">{t(sub)}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

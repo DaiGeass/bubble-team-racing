@@ -9,6 +9,9 @@ import { EXTRA4 } from "./i18n6";
 import { EXTRA5 } from "./i18n7";
 import { EXTRA6 } from "./i18n8";
 import LobbyScreen from "./screens/LobbyScreen";
+import RhythmScreen from "./screens/RhythmScreen";
+import ModsScreen from "./screens/ModsScreen";
+import { MOD_WORDS } from "./mods";
 import { useGame } from "./store";
 import { bindShakeScale } from "./particles";
 import { useControls } from "./controls";
@@ -56,6 +59,7 @@ export default function App() {
       ...EXTRA5.en,
       ...EXTRA6.en,
       ...MODEL_NAMES.en,
+      ...MOD_WORDS.en,
       ...DICTS[lang],
       ...EXTRA[lang],
       ...EXTRA_WORDS2[lang],
@@ -65,6 +69,7 @@ export default function App() {
       ...EXTRA5[lang],
       ...EXTRA6[lang],
       ...MODEL_NAMES[lang],
+      ...MOD_WORDS[lang],
     };
     return {
       lang,
@@ -88,6 +93,8 @@ export default function App() {
         {screen === "start" && <StartScreen />}
         {screen === "select" && <SelectScreen />}
         {screen === "lobby" && <LobbyScreen />}
+        {screen === "rhythm" && <RhythmScreen />}
+        {screen === "mods" && <ModsScreen />}
         {screen === "highscores" && <HighScoresScreen />}
         {screen === "howto" && <HowToScreen />}
         {screen === "options" && <OptionsScreen />}

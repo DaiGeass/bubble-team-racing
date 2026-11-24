@@ -1,4 +1,5 @@
 import type { SkillKind } from "./adrenaline";
+import { DEFAULT_PAD_BINDS, PAD_ACTIONS, type PadAction } from "./gamepad";
 import { CAMERA_STYLES, type CameraStyle } from "./camera";
 import { mergePreferences, preferredLanguage } from "./preferences";
 import { GRAPHICS_QUALITIES, type GraphicsQuality } from "./graphics";
@@ -24,7 +25,7 @@ import {
   type SubId,
 } from "./data";
 
-export type Screen = "start" | "select" | "howto" | "options" | "race" | "results" | "highscores" | "lobby";
+export type Screen = "start" | "select" | "howto" | "options" | "race" | "results" | "highscores" | "lobby" | "rhythm" | "mods";
 
 export interface HighScoreEntry {
   name: string;
@@ -256,6 +257,8 @@ export const DEFAULT_TOUCH: Record<TouchSlot, Action> = {
 };
 
 export interface Settings {
+  /** race music, 0..1, on top of the master volume */
+  music: number;
   cameraStyle: CameraStyle;
   graphicsQuality: GraphicsQuality;
   autoGas: boolean;
@@ -282,6 +285,14 @@ export interface Settings {
   touchScale: number;
   /** mirrors the touch overlay for left handed players */
   handed: "right" | "left";
+  /** which pad button does each action */
+  padBinds: Record<PadAction, number>;
+  /** stick travel ignored around the middle, 0.05..0.4 */
+  padDeadzone: number;
+  /** 1 straight .. 2.5 gentle near the middle and sharp at the end */
+  steerCurve: number;
+  /** pad rumble 0..1 */
+  vibration: number;
 }
 
 interface GameState {
@@ -395,11 +406,16 @@ const defaultSettings: Settings = {
   shake: 1,
   telemetry: true,
   volume: 0.8,
+  music: 0.55,
   motionBlur: 0,
   keybinds: DEFAULT_KEYBINDS,
   touchLayout: DEFAULT_TOUCH,
   touchScale: 1,
   handed: "right",
+  padBinds: DEFAULT_PAD_BINDS,
+  padDeadzone: 0.18,
+  steerCurve: 1,
+  vibration: 0.7,
 };
 
 function loadSettings(): Settings {
@@ -411,7 +427,13 @@ function loadSettings(): Settings {
   for (const slot of TOUCH_SLOTS) {
     if (!ACTIONS.includes(settings.touchLayout[slot])) settings.touchLayout[slot] = DEFAULT_TOUCH[slot];
   }
-  for (const field of ["volume", "shake", "motionBlur"] as const) settings[field] = Math.max(0, Math.min(1, settings[field]));
+  if (typeof settings.music !== "number") settings.music = 0.55;
+  settings.padBinds = { ...DEFAULT_PAD_BINDS, ...(settings.padBinds ?? {}) };
+  for (const a of PAD_ACTIONS) if (!Number.isInteger(settings.padBinds[a]) || settings.padBinds[a] < 0 || settings.padBinds[a] > 16) settings.padBinds[a] = DEFAULT_PAD_BINDS[a];
+  settings.padDeadzone = typeof settings.padDeadzone === "number" ? Math.max(0.05, Math.min(0.4, settings.padDeadzone)) : 0.18;
+  settings.steerCurve = typeof settings.steerCurve === "number" ? Math.max(1, Math.min(2.5, settings.steerCurve)) : 1;
+  settings.vibration = typeof settings.vibration === "number" ? Math.max(0, Math.min(1, settings.vibration)) : 0.7;
+  for (const field of ["volume", "music", "shake", "motionBlur"] as const) settings[field] = Math.max(0, Math.min(1, settings[field]));
   return settings;
 }
 

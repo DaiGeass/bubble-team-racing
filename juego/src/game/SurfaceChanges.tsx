@@ -2,7 +2,7 @@ import {useMemo,useRef,useEffect} from "react";
 import {useFrame} from "@react-three/fiber";
 import * as THREE from "three";
 import {getPaths} from "../trackCurve";
-import {surfaceSites,bridgeDrop,floodDepth} from "../surfaceEvents";
+import {surfaceSites,bridgeDrop,floodDepth,BRIDGE_KEEP} from "../surfaceEvents";
 import {raceSnapshot,type ThemeDef} from "../data";
 /** Replaces only the moving deck; the rest of the track stays batched. */
 export default function SurfaceChanges({theme}:{theme:ThemeDef}){
@@ -12,7 +12,9 @@ export default function SurfaceChanges({theme}:{theme:ThemeDef}){
     const geometries=(site.kind==="bridge"?[-1,1]:[0]).map(side=>{
       const vertices:number[]=[],indices:number[]=[];
       for(let i=site.first;i<=site.last;i++){
-        const limits=side===0?[-p.half[i],p.half[i]]:side<0?[-p.half[i],0]:[0,p.half[i]];
+        // the break runs a little into the half that falls, the same line the support query uses
+        const cut=site.side*p.half[i]*BRIDGE_KEEP;
+        const limits=side===0?[-p.half[i],p.half[i]]:side<0?[-p.half[i],cut]:[cut,p.half[i]];
         for(const lat of limits)vertices.push(p.px[i]-p.tz[i]*lat,p.py[i]+0.055,p.pz[i]+p.tx[i]*lat);
         const k=(i-site.first)*2;if(i<site.last)indices.push(k,k+1,k+2,k+1,k+3,k+2);
       }

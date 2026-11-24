@@ -867,13 +867,14 @@ export function lateralOffsetFrom(pos: THREE.Vector3, t: number) {
  * Traps slide along the circuit instead of sitting still. Both the renderer and
  * the collision check run this so what you see is what you hit.
  */
-export function trapPhase(tr: { t: number; speed: number; phase: number }, now: number) {
+export function trapPhase(tr: { t: number; speed: number; phase: number; range?: number }, now: number) {
+  if (tr.range) return norm(tr.t + tr.range * Math.sin(now * 0.001 * tr.speed + tr.phase));
   return norm(tr.t + now * 0.0001 * tr.speed + tr.phase);
 }
 
 /** World transform of a trap at a given clock time. */
 export function trapTransform(
-  tr: { t: number; side: number; kind: "spike" | "bar"; speed: number; phase: number },
+  tr: { t: number; side: number; kind: "spike" | "bar"; speed: number; phase: number; range?: number },
   now: number
 ) {
   const t = trapPhase(tr, now);

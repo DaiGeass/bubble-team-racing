@@ -1,3 +1,4 @@
+import { rumble } from "./gamepad";
 import * as THREE from "three";
 
 export interface ParticleBurstRequest {
@@ -43,6 +44,8 @@ export function bindShakeScale(fn: () => number) {
 }
 
 export function addShake(amount: number) {
+  // what shakes the camera is what the player feels: the pad shakes too
+  if (amount >= 0.1) rumble(Math.min(1, amount * 0.9), 90 + amount * 160);
   let k = 1;
   try {
     k = shakeScale();

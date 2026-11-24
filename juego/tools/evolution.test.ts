@@ -52,11 +52,11 @@ test("standard controller Y / right-stick click are independent and blocked unti
   const buttons=Array.from({length:17},()=>({pressed:false,touched:false,value:0}));const p={connected:true,index:0,mapping:"standard",axes:[0,0,0,0],buttons} as unknown as Gamepad;
   const reader=new PadReader();buttons[3]={pressed:true,touched:true,value:1};assert.equal(reader.read([p]).ability,false);buttons[3]={pressed:false,touched:false,value:0};reader.read([p]);buttons[3]={pressed:true,touched:true,value:1};buttons[11]={pressed:true,touched:true,value:1};const result=reader.read([p]);assert.equal(result.ability,true);assert.equal(result.lookBack,true);assert.equal(result.item,false);reader.suspend();assert.equal(reader.read([p]).lookBack,false);
 });
-test("all 41 maps and seven modes have explicit local/network policies and finite ribbons",()=>{
-  assert.equal(TRACKS.length,41);let combinations=0;
+test("all maps and seven modes have explicit local/network policies and finite ribbons",()=>{
+  assert.ok(TRACKS.length>=44);let combinations=0;
   for(const t of TRACKS){setActiveTrack(t.id);const inspected=inspectMap();assert.ok(inspected.length>=2,t.id);for(const path of inspected){assert.deepEqual(path.issues,[],t.id);assert.ok(path.minWidth>0);}
     for(const m of Object.values(MODES))for(const network of [false,true]){const rules=raceRules(t,m,network);assert.equal(rules.abilities,m.id!=="trial");assert.equal(rules.physicalEvolution,!network&&m.id!=="battle");assert.equal(rules.victory,m.id==="battle"?"lives":"laps");assert.ok(rules.vehicleModes.includes("land"));combinations++;}
-  }assert.equal(combinations,574);
+  }assert.equal(combinations,TRACKS.length*Object.keys(MODES).length*2);
 });
 test("every map has deterministic life and creatures anchored outside ribbons",()=>{
   for(const t of TRACKS){setActiveTrack(t.id);const themes=(t.sectors??[{t0:0,theme:t.theme}]).map(s=>themeOnLap(s.theme,0));const spots=lifeSpots(themes),actors=trackActors(spots,!!t.indoor);
