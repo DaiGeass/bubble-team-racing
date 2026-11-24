@@ -23,8 +23,8 @@ import ParticleSystem from "./ParticleSystem";
 import type { UseControlsReturn } from "../controls";
 import { useGame } from "../store";
 import { setMusicIntensity, setMusicLevel, setMusicPaused, songClock, startMusic, stopMusic, styleFor } from "../music";
-import { RHYTHM_TRACK_ID } from "../rhythm";
-import { reveal } from "./reveal";
+import { RHYTHM_TRACK_ID, rhythmNotes, rhythmRush, rhythmState } from "../rhythm";
+import { reveal, clearPlaced, stepPlaced, aheadOf } from "./reveal";
 import { useNet, netSend, onRace, isHost } from "../net";
 import {
   CHARACTERS,
@@ -648,14 +648,17 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   }, []);
 
   const itemBoxes = useMemo(() => {
-    const boxes: { t: number; pos: THREE.Vector3; active: boolean; respawn: number; group: React.MutableRefObject<THREE.Group | null> }[] = [];
+    const boxes: { t: number; pos: THREE.Vector3; active: boolean; respawn: number; gold: boolean; group: React.MutableRefObject<THREE.Group | null> }[] = [];
     // Rows of three across the road, so the pack splits to take them. Only on
-    // road that is really there: never over a jump, a cannon shot, a flight or the sea.
-    const rows = Math.max(4, Math.round(10 * (mode.itemFrequency || 1)));
+    // road that is really there: never over a jump, a cannon shot or a flight.
+    // Boats, submarines and hovers get theirs on the way like everyone else.
+    // The middle box of every third row is gold: two items at once.
+    const rows = Math.max(4, Math.round((getActiveTrack().id === RHYTHM_TRACK_ID ? 16 : 10) * (mode.itemFrequency || 1)));
     for (let i = 0; i < rows; i++) {
       let t = (i + 0.5) / rows;
       const whole = (z: ReturnType<typeof zoneAt>) => !!z && z.t1 - z.t0 >= 0.99;
-      for (let guard = 0; guard < 30 && ((zoneAt(t) && !whole(zoneAt(t))) || !plainRoadAt(t, 30)); guard++) t = (t + 0.017) % 1;
+      const flight = (z: ReturnType<typeof zoneAt>) => !!z && z.type === "sky" && !whole(z);
+      for (let guard = 0; guard < 30 && (flight(zoneAt(t)) || !plainRoadAt(t, 30)); guard++) t = (t + 0.017) % 1;
       const center = trackPointAt(t);
       const tangent = trackTangentAt(t);
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
@@ -664,6 +667,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         boxes.push({
           t,
           pos: center.clone().addScaledVector(normal, side * gap),
+          gold: side === 0 && i % 3 === 1,
           active: mode.itemsEnabled,
           respawn: 0,
           group: { current: null },
@@ -675,7 +679,20 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   }, []);
 
   const coinSpots = useMemo(() => {
-    const coins: { pos: THREE.Vector3; active: boolean; respawn: number; group: React.MutableRefObject<THREE.Group | null> }[] = [];
+    const coins: { pos: THREE.Vector3; active: boolean; respawn: number; note?: boolean; t?: number; group: React.MutableRefObject<THREE.Group | null> }[] = [];
+    if (getActiveTrack().id === RHYTHM_TRACK_ID) {
+      // a song's circuit has notes instead of coins, one on each strong beat: take them in a row for a chain
+      for (const n of rhythmNotes()) {
+        if (!plainRoadAt(n.t, 6)) continue;
+        const center = trackPointAt(n.t);
+        const tangent = trackTangentAt(n.t);
+        const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+        const zone = zoneAt(n.t);
+        const y = surfaceYAt(n.t) + (zone?.type === "sky" ? FLY_BASE + 0.6 : 1.1);
+        coins.push({ pos: center.clone().addScaledVector(normal, n.lat * Math.min(3.2, halfWidthAt(n.t) - 2.5)).setY(y), active: true, respawn: 0, note: true, t: n.t, group: { current: null } });
+      }
+      return coins;
+    }
     const count = 26;
     for (let i = 0; i < count; i++) {
       const t = (i + 0.35) / count;
@@ -702,6 +719,14 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
 
   const pads = useMemo(() => getPads(), []);
   const trackDef = useMemo(() => getActiveTrack(), []);
+  const rhythmic = trackDef.id === RHYTHM_TRACK_ID;
+  /** lap progress the song's circuit is built to; -1 until the race starts */
+  const buildFront = useRef(-1);
+  // set before the first frame is drawn, so the circuit never shows whole even for a moment
+  useMemo(() => {
+    reveal.front.value = rhythmic ? 30 / getPaths()[0].length : 2;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Slow traffic: a few blobs trundling along the plain stretches, on the
   // outer lanes. Each keeps to one stretch and starts it again at the end.
@@ -888,9 +913,16 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     countdown.current = new RaceCountdown();
     countdownValue.current = 3;
     started.current = false;
+    buildFront.current = -1;
+    // before the lights, only the grid and a first stretch of a song's circuit are there
+    if (rhythmic) reveal.front.value = 30 / getPaths()[0].length;
     updateSnapshot();
     sfx.countdown();
-    return () => stopMusic();
+    return () => {
+      stopMusic();
+      clearPlaced();
+      reveal.front.value = 2;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2263,6 +2295,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const cruise = cruisePace(trackPace(r.path, r.idx), r.speed, steerIn, r.airborne, r.isDrifting,
       r.stunTimer > 0 || r.slowTimer > 0 || r.burnTimer > 0 || r.touching, alignment);
     let effMax = st.maxSpeed * cruise * r.boostMult * (tier ? r.aiMult * tier.pace : 1);
+    if (rhythmic) effMax *= rhythmRush(((r.total % 1) + 1) % 1);
     if (r.mode === "boat") effMax *= st.boatBonus * 0.94 * craftSpeed(r.vehicle.boat, 1);
     if (r.mode === "sub") effMax *= st.boatBonus * 0.9 * craftSpeed(r.vehicle.sub, 1);
     if (r.mode === "plane") effMax *= st.planeBonus * 1.12 * craftSpeed(r.vehicle.plane, 1);
@@ -2576,6 +2609,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
             r.weapon = rolled;
             r.rollTimer = 0.85;
           } else r.weapon2 = rolled;
+          // a gold box fills both hands and gives a shove forward
+          if (box.gold) {
+            if (!r.weapon2) r.weapon2 = rollWeapon(racers.length > 1 ? ahead / (racers.length - 1) : 0.5);
+            r.boostTimer = Math.max(r.boostTimer, 0.8);
+            r.boostMult = Math.max(r.boostMult, 1.3);
+          }
           box.active = false;
           box.respawn = 4.5 + Math.random() * 2.5;
           emitParticles({ position: box.pos.clone().add(new THREE.Vector3(0, 0.7, 0)), color: WEAPON_META[rolled].color, count: 14, speed: 3.2, spread: 1, size: 0.2, life: 0.5 });
@@ -2599,8 +2638,15 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
           continue;
         }
         coin.active = false;
-        coin.respawn = 7;
+        coin.respawn = coin.note ? 30 : 7;
         r.coins++;
+        if (coin.note) {
+          // on the beat: a link in the chain and a kick of speed that grows with it
+          awardSkill(r, "beat");
+          r.boostTimer = Math.max(r.boostTimer, 0.35);
+          r.boostMult = Math.max(r.boostMult, 1.08 + Math.min(0.24, r.chain.count * 0.03));
+          if (r.isPlayer) addShake(0.06);
+        }
         if (r.isPlayer) {
           sfx.coin();
           emitParticles({ position: coin.pos.clone().add(new THREE.Vector3(0, 0.7, 0)), color: WEAPON_META.orb.color, count: 12, speed: 2.6, spread: 0.6, size: 0.15, life: 0.45, upBias: 1.6 });
@@ -3262,7 +3308,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         if (box.respawn <= 0) box.active = mode.itemsEnabled;
       }
       if (box.group.current) {
-        box.group.current.visible = box.active;
+        box.group.current.visible = box.active && aheadOf(box.t) <= 0;
         box.group.current.rotation.y += dt * 1.8;
         box.group.current.rotation.x += dt * 0.7;
         box.group.current.position.y = box.pos.y + 1 + Math.sin(performance.now() * 0.003 + box.t * 12) * 0.18;
@@ -3274,8 +3320,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         if (coin.respawn <= 0) coin.active = true;
       }
       if (coin.group.current) {
-        coin.group.current.visible = coin.active;
+        coin.group.current.visible = coin.active && (coin.t === undefined || aheadOf(coin.t) <= 0);
         coin.group.current.rotation.y += dt * 2.6;
+        if (coin.note) coin.group.current.scale.setScalar(1 + 0.6 * Math.pow(1 - (songClock()?.beat ?? 0.5), 4));
         coin.group.current.position.y = coin.pos.y + 0.7 + Math.sin(performance.now() * 0.004 + coin.pos.x) * 0.12;
       }
     }
@@ -3379,13 +3426,27 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     }
 
     const player = racers[0];
-    // a song's circuit is built round the driver, a little further on every beat
-    if (getActiveTrack().id === RHYTHM_TRACK_ID) {
-      const beat = songClock()?.beat ?? 0;
-      reveal.center.value.set(player.pos.x, player.y, player.pos.z);
-      // it opens out over the first seconds, then breathes with the beat
-      reveal.radius.value = 65 + 40 * Math.min(1, raceClock.current / 6000) + 16 * Math.pow(1 - beat, 3);
-    } else reveal.radius.value = 1e7;
+    // a song's circuit is built as it is driven: the front runs ahead of the
+    // leader and lays the next stretch in a burst on every beat
+    if (rhythmic) {
+      const L = getPaths()[0].length;
+      reveal.start.value = 1 - 70 / L;
+      reveal.band.value = 50 / L;
+      let lead = 0;
+      for (const r of racers) if (!r.out) lead = Math.max(lead, r.total);
+      const bpm = rhythmState.features?.bpm ?? 120;
+      const beat = songClock()?.beat ?? (((raceClock.current / 1000) * bpm) / 60) % 1;
+      const pulse = Math.pow(1 - beat, 6);
+      // how far ahead it builds: a little further the faster the leader goes
+      const leader = racers.reduce((a, b) => (b.total > a.total ? b : a), player);
+      const target = (started.current ? lead : 0) + (110 + Math.abs(leader.speed) * 2.2) / L;
+      if (buildFront.current < 0) buildFront.current = 30 / L;
+      if (target > buildFront.current) buildFront.current += (target - buildFront.current) * (1 - Math.exp(-dt * (0.8 + 26 * pulse)));
+      // never so far behind that someone drives off the end of what is there
+      buildFront.current = Math.max(buildFront.current, lead + 45 / L);
+      reveal.front.value = buildFront.current;
+    } else reveal.front.value = 2;
+    stepPlaced();
     // the last lap plays harder, and a finished race calms down
     setMusicIntensity(player.finished ? 0.2 : !battle && mode.laps > 1 && player.lap >= mode.laps ? 1 : 0.4);
     // a race is ordered by distance; a battle by who is still in it and with how many lives
@@ -3654,7 +3715,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     const cam = camera as THREE.PerspectiveCamera;
     // the Options "speed blur" slider widens the lens as well, so the streaks
     // in the HUD and the camera pull together at high speed
-    const targetFov = chaseLens(player.speed, motion.boost, settings.motionBlur, profile.dynamicFov, covered);
+    let targetFov = chaseLens(player.speed, motion.boost, settings.motionBlur, profile.dynamicFov, covered);
+    // on a song's circuit the lens kicks on every beat
+    if (rhythmic && !idle) {
+      const beat = songClock()?.beat;
+      if (beat !== undefined) targetFov += 5 * Math.pow(1 - beat, 5) * settings.shake;
+    }
     if (Math.abs(cam.fov - targetFov) > 0.05) {
       cam.fov = THREE.MathUtils.lerp(cam.fov, targetFov, ease(7.7));
       cam.updateProjectionMatrix();
@@ -3671,12 +3737,12 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       <primitive object={skids.mesh} />
       {itemBoxes.map((box, i) => (
         <group key={`b${i}`} ref={box.group} position={box.pos.toArray()}>
-          {/* gift-crystal item box */}
-          <mesh castShadow>
+          {/* gift-crystal item box; the gold one gives two */}
+          <mesh castShadow scale={box.gold ? 1.25 : 1}>
             <octahedronGeometry args={[0.85, 0]} />
             <meshStandardMaterial
-              color={theme.barrierA}
-              emissive={i % 2 === 0 ? theme.glow : theme.barrierB}
+              color={box.gold ? "#ffd166" : theme.barrierA}
+              emissive={box.gold ? "#ffb703" : i % 2 === 0 ? theme.glow : theme.barrierB}
               emissiveIntensity={1.4}
               roughness={0.08}
               metalness={0.5}
@@ -3697,10 +3763,28 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       ))}
       {coinSpots.map((coin, i) => (
         <group key={`c${i}`} ref={coin.group} position={coin.pos.toArray()}>
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.5, 0.5, 0.13, 18]} />
-            <meshStandardMaterial color={WEAPON_META.orb.color} emissive={WEAPON_META.orb.glow} emissiveIntensity={1.5} metalness={0.7} roughness={0.15} toneMapped={false} />
-          </mesh>
+          {coin.note ? (
+            // a note: a head and a stem in the light of the circuit
+            <>
+              <mesh position={[0, -0.25, 0]} scale={[1, 0.75, 0.5]}>
+                <sphereGeometry args={[0.42, 12, 10]} />
+                <meshBasicMaterial color={theme.glow} toneMapped={false} />
+              </mesh>
+              <mesh position={[0.36, 0.35, 0]}>
+                <boxGeometry args={[0.1, 1.2, 0.1]} />
+                <meshBasicMaterial color={theme.glow} toneMapped={false} />
+              </mesh>
+              <mesh position={[0.56, 0.82, 0]} rotation={[0, 0, -0.6]}>
+                <boxGeometry args={[0.45, 0.12, 0.1]} />
+                <meshBasicMaterial color={theme.glow} toneMapped={false} />
+              </mesh>
+            </>
+          ) : (
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.5, 0.5, 0.13, 18]} />
+              <meshStandardMaterial color={WEAPON_META.orb.color} emissive={WEAPON_META.orb.glow} emissiveIntensity={1.5} metalness={0.7} roughness={0.15} toneMapped={false} />
+            </mesh>
+          )}
         </group>
       ))}
       {projRefs.map((ref, i) => (

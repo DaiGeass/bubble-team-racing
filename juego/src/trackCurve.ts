@@ -468,6 +468,8 @@ export function safeSpot(pathId: number, idx: number): { path: number; idx: numb
 export interface PadRT {
   pos: THREE.Vector3;
   heading: number;
+  /** lap progress on the main loop */
+  t: number;
   kind: "boost" | "jump" | "cannon";
   power?: number;
   /** cannon: sample of the main loop it fires you to, and the height of the arc */
@@ -501,6 +503,7 @@ export function getPads(): PadRT[] {
     return {
       pos: pathPoint(p.id, i, pad.lat ?? 0, new THREE.Vector3()),
       heading: Math.atan2(p.tx[i], p.tz[i]),
+      t: pad.t,
       kind: pad.kind,
       power: pad.power,
       toIdx: pad.kind === "cannon" ? cannonLandingIndex(mainIndexAt(pad.toT ?? pad.t)) : mainIndexAt(pad.toT ?? pad.t),

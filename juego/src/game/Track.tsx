@@ -1,6 +1,6 @@
 import SurfaceChanges from "./SurfaceChanges";
 import {replacedDeck} from "../surfaceEvents";
-import { revealShader } from "./reveal";
+import { placeOnFront, revealShader, aheadOf } from "./reveal";
 import { RHYTHM_TRACK_ID } from "../rhythm";
 import TrackChallenges from "./TrackChallenges";
 import { ambientHazardCount } from "../environment";
@@ -82,6 +82,9 @@ function buildRibbonGeometry(path: PathRT) {
   const bySector: number[][] = (getActiveTrack().sectors ?? [0]).map(() => []);
   const slabPos: number[] = [];
   const slabIdx: number[] = [];
+  // lap progress of every vertex, for a circuit that is built as it is driven
+  const prog: number[] = [];
+  const slabProg: number[] = [];
   const count = path.closed ? path.n + 1 : path.n;
   const lift = path.main ? 0.02 : 0.05;
   const THICK = 0.9;
@@ -105,6 +108,9 @@ function buildRibbonGeometry(path: PathRT) {
     const rx = path.px[i] + path.tz[i] * half;
     const rz = path.pz[i] - path.tx[i] * half;
     positions.push(lx, y, lz, rx, y, rz);
+    const pt = k === path.n && path.main ? 1 : path.prog[i];
+    prog.push(pt, pt);
+    slabProg.push(pt, pt, pt, pt);
     const v = (k * path.ds) / TRACK_WIDTH;
     uvs.push(0, v, 1, v);
     slabPos.push(lx, y - 0.04, lz, lx, y - THICK, lz, rx, y - 0.04, rz, rx, y - THICK, rz);
@@ -121,6 +127,7 @@ function buildRibbonGeometry(path: PathRT) {
   const deck = new THREE.BufferGeometry();
   deck.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   deck.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  deck.setAttribute("aProg", new THREE.Float32BufferAttribute(prog, 1));
   const indices: number[] = [];
   bySector.forEach((list, s) => {
     deck.addGroup(indices.length, list.length, s);
@@ -130,6 +137,7 @@ function buildRibbonGeometry(path: PathRT) {
   deck.computeVertexNormals();
   const slab = new THREE.BufferGeometry();
   slab.setAttribute("position", new THREE.Float32BufferAttribute(slabPos, 3));
+  slab.setAttribute("aProg", new THREE.Float32BufferAttribute(slabProg, 1));
   slab.setIndex(slabIdx);
   slab.computeVertexNormals();
   return { deck, slab };
@@ -157,11 +165,15 @@ function railless(path: PathRT, i: number) {
 function buildRails(themes: ThemeDef[]) {
   const pos: number[] = [];
   const col: number[] = [];
+  const prog: number[] = [];
   const HEIGHT = 1.05;
   const colA = themes.map((t) => new THREE.Color(t.barrierA));
   const colB = themes.map((t) => new THREE.Color(t.barrierB));
+  let ta = 0;
+  let tb = 0;
   const quad = (a: number[], b: number[], c: number[], d: number[], colour: THREE.Color) => {
     pos.push(...a, ...b, ...c, ...b, ...d, ...c);
+    prog.push(ta, tb, ta, tb, tb, ta);
     for (let n = 0; n < 6; n++) col.push(colour.r, colour.g, colour.b);
   };
   for (const path of getPaths()) {
@@ -171,6 +183,8 @@ function buildRails(themes: ThemeDef[]) {
       if (!(path.flags[i] & F_SOLID) || !(path.flags[j] & F_SOLID)) continue;
       if (railless(path, i) || railless(path, j) || replacedDeck(path.id,i)) continue;
       const sector = sectorIndexAt(path.prog[i]);
+      ta = path.prog[i];
+      tb = j === 0 && path.main ? 1 : path.prog[j];
       // stripes five units long
       const colour = (Math.floor((i * path.ds) / 5) % 2 ? colB : colA)[sector] ?? colA[0];
       for (const side of [1, -1]) {
@@ -190,6 +204,7 @@ function buildRails(themes: ThemeDef[]) {
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute("aProg", new THREE.Float32BufferAttribute(prog, 1));
   g.computeVertexNormals();
   return g;
 }
@@ -320,6 +335,7 @@ function buildTerrain(themes: ThemeDef[], base: ThemeDef) {
 function buildBarriers() {
   const mats: THREE.Matrix4[] = [];
   const sector: number[] = [];
+  const prog: number[] = [];
   const dummy = new THREE.Object3D();
   for (const path of getPaths()) {
     const every = Math.max(1, Math.round(7.5 / path.ds));
@@ -337,10 +353,11 @@ function buildBarriers() {
         dummy.updateMatrix();
         mats.push(dummy.matrix.clone());
         sector.push(sectorIndexAt(t));
+        prog.push(t);
       }
     }
   }
-  return { mats, sector };
+  return { mats, sector, prog };
 }
 
 /** Columns under every stretch that stands clear of the floor, unless another road is in the way. */
@@ -515,13 +532,14 @@ function makeFloorTexture(theme: ThemeDef) {
 /** Boost and jump pads painted on the tarmac, where the physics fires them. */
 function Pads({ theme }: { theme: ThemeDef }) {
   const pads = useMemo(() => getPads(), []);
+  const rhythmic = getActiveTrack().id === RHYTHM_TRACK_ID;
   const tex = useMemo(() => padTexture(), []);
   useEffect(() => () => tex.dispose(), [tex]);
   if (!pads.length) return null;
   return (
     <group>
       {pads.map((pad, i) => (
-        <group key={i} position={[pad.pos.x, pad.pos.y + 0.12, pad.pos.z]} rotation={[0, pad.heading, 0]}>
+        <group key={i} ref={(g) => rhythmic && placeOnFront(g, pad.t)} position={[pad.pos.x, pad.pos.y + 0.12, pad.pos.z]} rotation={[0, pad.heading, 0]}>
           <mesh rotation={[Math.PI / 2, 0, 0]}>
             <planeGeometry args={[6, 6]} />
             <meshBasicMaterial map={tex} color={pad.kind === "boost" ? theme.glow : theme.barrierA} transparent toneMapped={false} depthWrite={false} side={THREE.DoubleSide} />
@@ -658,7 +676,7 @@ function MovingHazards({ theme }: { theme: ThemeDef }) {
   );
 }
 
-function BarrierRing({ matrices, sector, themes, theme }: { matrices: THREE.Matrix4[]; sector: number[]; themes: ThemeDef[]; theme: ThemeDef }) {
+function BarrierRing({ matrices, sector, prog, themes, theme }: { matrices: THREE.Matrix4[]; sector: number[]; prog: number[]; themes: ThemeDef[]; theme: ThemeDef }) {
   return (
     <instancedMesh
       key={themes.map((t) => t.barrierA).join()}
@@ -674,6 +692,7 @@ function BarrierRing({ matrices, sector, themes, theme }: { matrices: THREE.Matr
         });
         m.instanceMatrix.needsUpdate = true;
         if (m.instanceColor) m.instanceColor.needsUpdate = true;
+        if (!m.geometry.getAttribute("aProg")) m.geometry.setAttribute("aProg", new THREE.InstancedBufferAttribute(new Float32Array(prog), 1));
       }}
     >
       <capsuleGeometry args={[0.24, 0.7, 4, 8]} />
@@ -1539,6 +1558,7 @@ function MovingTraps({ theme }: { theme: ThemeDef }) {
       const g = refs.current[i];
       if (!g) return;
       const { p, ground, heading, span } = trapTransform(tr, now);
+      g.visible = aheadOf(tr.t) <= 0;
       g.position.set(p.x, ground, p.z);
       g.rotation.set(0, heading, 0);
       const k = trapScale(tr.kind, span);
@@ -2409,15 +2429,20 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
         </group>
       ))}
       <Pads theme={theme} />
-      <RouteSigns />
-      <BendChevrons theme={theme} />
-      <JumpMarks theme={theme} />
-      <FlightLine theme={theme} />
-      <SectorGates themes={themes} />
-      <Leapers theme={theme} />
-      <SkyBlocks theme={theme} />
-      <TunnelArches theme={theme} />
-      {barriers.mats.length > 0 && <BarrierRing matrices={barriers.mats} sector={barriers.sector} themes={themes} theme={theme} />}
+      {/* road furniture would hang in the void ahead of a song's circuit before its road is built */}
+      {!rhythmic && (
+        <>
+          <RouteSigns />
+          <BendChevrons theme={theme} />
+          <JumpMarks theme={theme} />
+          <FlightLine theme={theme} />
+          <SectorGates themes={themes} />
+          <Leapers theme={theme} />
+          <SkyBlocks theme={theme} />
+          <TunnelArches theme={theme} />
+        </>
+      )}
+      {barriers.mats.length > 0 && <BarrierRing matrices={barriers.mats} sector={barriers.sector} prog={barriers.prog} themes={themes} theme={theme} />}
       <mesh geometry={rails} castShadow>
         <meshStandardMaterial vertexColors roughness={0.3} metalness={0.25} emissive={theme.glow} emissiveIntensity={0.12} side={THREE.DoubleSide} onBeforeCompile={rhythmic ? revealShader : undefined} customProgramCacheKey={rhythmic ? () => "reveal" : undefined} />
       </mesh>
@@ -2428,9 +2453,9 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
       )}
       <StartArch theme={theme} />
       <SkyRings theme={theme} />
-      <ForkIslands theme={theme} />
+      {!rhythmic && <ForkIslands theme={theme} />}
       <SubZone theme={theme} />
-      <MagZone theme={theme} />
+      {!rhythmic && <MagZone theme={theme} />}
 
       <EnvironmentTraps theme={theme} />
       <TrackChallenges theme={theme} />
@@ -2438,7 +2463,7 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
       <MovingTraps theme={theme} />
       <Portals theme={theme} />
       <MovingHazards theme={theme} />
-      <RoadMarks theme={theme} />
+      {!rhythmic && <RoadMarks theme={theme} />}
       <BiomeSky theme={theme} lap={lap} />
       {def.indoor ? (
         <Corridor themes={themes} />

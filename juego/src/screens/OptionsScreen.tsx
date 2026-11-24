@@ -109,7 +109,7 @@ export default function OptionsScreen() {
   }, [grabbing, settings.keybinds, setSettings]);
 
   return (
-    <div className="relative min-h-screen overflow-y-auto px-4 py-8 text-sky-900">
+    <div className="relative h-full w-full overflow-y-auto px-4 py-8 text-sky-900">
       <Bubbles count={10} />
       <div className="relative mx-auto max-w-3xl">
         <div className="glass-panel mb-5 flex flex-wrap items-center justify-between gap-3 rounded-3xl px-5 py-4">

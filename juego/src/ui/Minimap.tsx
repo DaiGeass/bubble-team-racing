@@ -1,5 +1,6 @@
 import { mapSegments } from "../mapSegments";
 import { useEffect, useRef } from "react";
+import { aheadOf, reveal } from "../game/reveal";
 import * as THREE from "three";
 import { getActiveTrack, trackFrameAt, halfWidthAt, getPaths, getPads, ROUTE_COLOURS } from "../trackCurve";
 import { THEMES } from "../data";
@@ -28,6 +29,8 @@ interface Seg {
   route: boolean;
   /** colour of the route, by what kind of road it is */
   tint: string | null;
+  /** lap progress, so a circuit still being built shows only what is there */
+  t: number;
 }
 
 export default function Minimap() {
@@ -57,7 +60,7 @@ export default function Minimap() {
         const t = path.prog[i];
         const zone = path.main ? ZONES.find((z) => t >= z.t0 && t <= z.t1) : undefined;
         const h = (path.py[i] + path.py[j]) / 2;
-        segs.push({ ax: path.px[i], az: path.pz[i], bx: path.px[j], bz: path.pz[j], h, zone: zone?.type ?? null, route: !path.main, tint: path.main ? null : ROUTE_COLOURS[path.def?.kind ?? "side"] });
+        segs.push({ ax: path.px[i], az: path.pz[i], bx: path.px[j], bz: path.pz[j], h, zone: zone?.type ?? null, route: !path.main, tint: path.main ? null : ROUTE_COLOURS[path.def?.kind ?? "side"], t: path.main ? path.prog[i] : -1 });
         minX = Math.min(minX, path.px[i], path.px[j]);
         maxX = Math.max(maxX, path.px[i], path.px[j]);
         minZ = Math.min(minZ, path.pz[i], path.pz[j]);
@@ -114,7 +117,8 @@ export default function Minimap() {
       const toY = (z: number) => z * scale + oy;
       const { hMin, hSpan } = rangeRef.current;
 
-      const key = `${pixels}|${theme.road}|${theme.water}|${theme.glow}|${theme.barrierA}`;
+      const building = reveal.front.value < 2;
+      const key = `${pixels}|${theme.road}|${theme.water}|${theme.glow}|${theme.barrierA}|${building ? Math.floor(reveal.front.value * 400) : ""}`;
       if (!layerRef.current || layerRef.current.key !== key) {
         const layer = document.createElement("canvas");
         layer.width = pixels;
@@ -133,7 +137,7 @@ export default function Minimap() {
 
         g.lineCap = "round";
         g.lineJoin = "round";
-        const segments = segsRef.current;
+        const segments = building ? segsRef.current.filter((s) => s.t < 0 || aheadOf(s.t) <= 0) : segsRef.current;
         // Paint outlines before fills at similar heights. This joins the road
         // cleanly, while higher ribbons still cover lower ones at bridges.
         for (let first = 0; first < segments.length;) {

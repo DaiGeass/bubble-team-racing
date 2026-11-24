@@ -206,7 +206,7 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         <div className="absolute right-3 top-[42%] w-40 rounded-2xl border border-amber-200/70 bg-sky-950/85 px-3 py-2 text-white shadow-lg" aria-label={t("skillChain")}>
           <div className="text-[10px] font-bold uppercase tracking-wide text-amber-200">{t("skillChain")}</div>
           <div className="flex items-baseline justify-between font-black"><span className="text-2xl">×{telemetry.comboMultiplier.toFixed(2)}</span><span className="text-[10px]">{telemetry.comboCount} {t("chainMoves")}</span></div>
-          <div className="text-xs text-cyan-100">{t(telemetry.comboKind==="maneuver"?"cleanManeuver":telemetry.comboKind==="landing"?"cleanLanding":telemetry.comboKind==="near"?"nearMiss":telemetry.comboKind==="pass"?"cleanPass":telemetry.comboKind==="route"?"riskRoute":telemetry.comboKind==="sling"?"slingShot":"driftRelease")}</div>
+          <div className="text-xs text-cyan-100">{t(telemetry.comboKind==="maneuver"?"cleanManeuver":telemetry.comboKind==="landing"?"cleanLanding":telemetry.comboKind==="near"?"nearMiss":telemetry.comboKind==="pass"?"cleanPass":telemetry.comboKind==="route"?"riskRoute":telemetry.comboKind==="sling"?"slingShot":telemetry.comboKind==="beat"?"onBeat":"driftRelease")}</div>
           <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/20"><div className="h-full bg-amber-200" style={{width:`${Math.max(0,Math.min(1,telemetry.comboLeft))*100}%`}} /></div>
         </div>
       )}

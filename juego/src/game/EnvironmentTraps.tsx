@@ -3,6 +3,8 @@ import {useFrame} from "@react-three/fiber";
 import * as THREE from "three";
 import {environmentEvents,eventPose,type EventPose} from "../environment";
 import {raceSnapshot,type ThemeDef} from "../data";
+import {getPaths} from "../trackCurve";
+import {aheadOf} from "./reveal";
 /** Shared meshes/materials, a small number of sudden hazards per circuit. */
 export default function EnvironmentTraps({theme}:{theme:ThemeDef}) {
   const events=useMemo(()=>environmentEvents(),[]);const roots=useRef<(THREE.Group|null)[]>([]);
@@ -17,6 +19,8 @@ export default function EnvironmentTraps({theme}:{theme:ThemeDef}) {
   useFrame(()=>events.forEach((event,i)=>{
     const root=roots.current[i],part=parts.current[i],light=lights.current[i];if(!root||!part||!light)return;
     eventPose(event,raceSnapshot.clockMs,pose);root.position.set(pose.x,pose.y,pose.z);root.rotation.y=pose.heading;
+    // on a song's circuit a trap is only there once its road is
+    root.visible=aheadOf(getPaths()[event.path]?.prog[event.idx]??0)<=0;
     const height=pose.lift*(event.kind==="piston"?2.2:event.kind==="sprout"?1.8:3.0);
     if(event.kind==="roller"){
       // a ball that grows out of the road and rolls with its own motion

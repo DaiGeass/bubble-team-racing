@@ -1,5 +1,5 @@
-import { TRACKS, type ThemeId, type TrackDef, type PadDef } from "./data";
-import { design, BYPASS, type RouteSpec, type Turtle } from "./trackDesign";
+import { TRACKS, type ThemeId, type TrackDef, type PadDef, type ZoneKind } from "./data";
+import { design, DESIGN_REPORT, type Turtle } from "./trackDesign";
 import { setSong } from "./music";
 import { audioContext } from "./sound";
 
@@ -13,6 +13,18 @@ import { audioContext } from "./sound";
 // time with it.
 // ---------------------------------------------------------------------------
 
+/** One bar of four beats, every measure on a 0..1 scale against the rest of the song. */
+export interface BarFeatures {
+  /** loudness */
+  energy: number;
+  /** share of the sound below about 150 Hz */
+  bass: number;
+  /** how many hits it has */
+  busy: number;
+  /** share of the sound above about 2 kHz: hats, cymbals, bright synths */
+  high?: number;
+}
+
 /** What is kept of a song: small enough to send to the other players in a network race. */
 export interface SongFeatures {
   name: string;
@@ -20,17 +32,61 @@ export interface SongFeatures {
   bpm: number;
   /** seconds into the song of the first beat */
   offset: number;
-  /** one entry per bar of four beats: loudness, share of bass, and how busy it is, all 0..1 */
-  bars: { energy: number; bass: number; busy: number }[];
+  bars: BarFeatures[];
+  /** how hard each beat hits, 0..9 */
+  beats?: number[];
 }
 
 export const RHYTHM_TRACK_ID = "ritmo";
-/** Units per second a kart covers at race pace, to size the lap to the song. */
-const PACE = 32;
+/** Units per second a kart covers at race pace on an ordinary circuit. */
+const BASE_PACE = 31;
+/** How much faster than usual everything runs on a song's circuit: faster songs, faster race. */
+export const rushFor = (bpm: number) => Math.max(1.15, Math.min(1.45, 0.85 + bpm / 300));
+
+/** The circuit last built from a song, for the race to read the song back off the road. */
+let live: { length: number; lead: number; barLen: number; beatLen: number; bars: BarFeatures[]; beats: number[]; rush: number } | null = null;
 
 /**
- * Listen to a decoded song: frame loudness, bass, onsets, tempo by
- * autocorrelation of the onsets, and a summary per bar.
+ * Speed multiplier at lap progress t on the song's circuit: the tempo sets it,
+ * and the loud bars push it up a little more, so a chorus is felt in the feet.
+ */
+export function rhythmRush(t: number): number {
+  if (!live) return 1;
+  const bar = live.bars[Math.floor((t * live.length - live.lead) / live.barLen)];
+  return live.rush * (1 + 0.12 * ((bar?.energy ?? 0.5) - 0.4));
+}
+
+/**
+ * Where the notes go: on the strongest beats, at least two beats apart,
+ * swapping sides of the road, as lap progress and metres off the centre line.
+ */
+export function rhythmNotes(max = 140): { t: number; lat: number; beat: number }[] {
+  if (!live) return [];
+  const out: { t: number; lat: number; beat: number }[] = [];
+  const { beats, beatLen, lead, length } = live;
+  const fallback = (k: number) => (k % 4 === 0 ? 8 : k % 2 === 0 ? 5 : 2);
+  let last = -9;
+  for (let k = 8; k < (beats.length || Math.floor((length - lead) / beatLen)); k++) {
+    const s = beats.length ? beats[k] : fallback(k);
+    if (s < 5 || k - last < 2) continue;
+    const d = lead + k * beatLen;
+    if (d > length - 80) break;
+    last = k;
+    out.push({ t: d / length, lat: ((k >> 1) % 3) - 1, beat: k });
+  }
+  // too many: keep an even spread of them
+  if (out.length <= max) return out;
+  const step = out.length / max;
+  return Array.from({ length: max }, (_, i) => out[Math.floor(i * step)]);
+}
+
+/**
+ * Listen to a decoded song. The sound is split in three bands (bass, middle,
+ * bright); a hit is a jump in any of them, measured on a log scale so quiet
+ * passages count as much as loud ones. The tempo is where the hits look most
+ * like themselves a beat later (and two beats later, which settles whether a
+ * song is at 70 or at 140), the phase is where they line up, and then every
+ * beat gets a strength and every bar a summary.
  */
 export function analyseSong(buffer: AudioBuffer, name: string): SongFeatures {
   const rate = buffer.sampleRate;
@@ -38,246 +94,424 @@ export function analyseSong(buffer: AudioBuffer, name: string): SongFeatures {
   const chans = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
   const hop = 1024;
   const frames = Math.floor(n / hop);
+  const frameSec = hop / rate;
   const energy = new Float32Array(frames);
-  const bass = new Float32Array(frames);
-  let low = 0;
-  // a one-pole low-pass at about 150 Hz separates the bass from the rest
-  const k = 1 - Math.exp((-2 * Math.PI * 150) / rate);
+  const bands = [new Float32Array(frames), new Float32Array(frames), new Float32Array(frames)];
+  let lp1 = 0;
+  let lp2 = 0;
+  const k1 = 1 - Math.exp((-2 * Math.PI * 150) / rate);
+  const k2 = 1 - Math.exp((-2 * Math.PI * 2000) / rate);
   for (let f = 0; f < frames; f++) {
     let e = 0;
-    let b = 0;
+    let lo = 0;
+    let mid = 0;
+    let hi = 0;
     for (let i = f * hop; i < (f + 1) * hop; i++) {
       let s = 0;
       for (const ch of chans) s += ch[i];
       s /= chans.length;
-      low += (s - low) * k;
+      lp1 += (s - lp1) * k1;
+      lp2 += (s - lp2) * k2;
       e += s * s;
-      b += low * low;
+      lo += lp1 * lp1;
+      mid += (lp2 - lp1) * (lp2 - lp1);
+      hi += (s - lp2) * (s - lp2);
     }
     energy[f] = Math.sqrt(e / hop);
-    bass[f] = Math.sqrt(b / hop);
+    bands[0][f] = Math.sqrt(lo / hop);
+    bands[1][f] = Math.sqrt(mid / hop);
+    bands[2][f] = Math.sqrt(hi / hop);
   }
-  // onset strength: how much louder each frame is than the one before
+  // hits: rises of the log energy in each band, the bright band counting a little more
+  const raw = new Float32Array(frames);
+  const weight = [1, 1, 1.4];
+  for (let f = 1; f < frames; f++) {
+    let v = 0;
+    for (let b = 0; b < 3; b++) v += weight[b] * Math.max(0, Math.log1p(1000 * bands[b][f]) - Math.log1p(1000 * bands[b][f - 1]));
+    raw[f] = v;
+  }
+  // less the local average, so a loud passage is not all hits
   const onset = new Float32Array(frames);
-  for (let f = 1; f < frames; f++) onset[f] = Math.max(0, energy[f] - energy[f - 1]);
-  const frameSec = hop / rate;
+  let run = 0;
+  const W = 16;
+  for (let f = 0; f < frames; f++) {
+    run += raw[f] - (f >= W ? raw[f - W] : 0);
+    onset[f] = Math.max(0, raw[f] - run / Math.min(W, f + 1));
+  }
 
-  // tempo: the lag at which the onsets look most like themselves, between 70 and 180 beats a minute
-  let bestLag = Math.round(0.5 / frameSec);
-  let bestScore = -1;
-  const minLag = Math.round(60 / 180 / frameSec);
-  const maxLag = Math.round(60 / 70 / frameSec);
-  const span = Math.min(frames, Math.round(90 / frameSec));
-  for (let lag = minLag; lag <= maxLag; lag++) {
+  const span = Math.min(frames, Math.round(150 / frameSec));
+  const ac = (lag: number) => {
     let s = 0;
     for (let f = lag; f < span; f++) s += onset[f] * onset[f - lag];
-    // a gentle preference for the middle of the range, where most songs live
+    return s;
+  };
+  const minLag = Math.max(2, Math.floor(60 / 190 / frameSec));
+  const maxLag = Math.ceil(60 / 70 / frameSec);
+  const acs: number[] = [];
+  for (let lag = 0; lag <= maxLag * 2 + 2; lag++) acs.push(lag >= minLag / 2 ? ac(lag) : 0);
+  let bestLag = Math.round(0.5 / frameSec);
+  let bestScore = -1;
+  for (let lag = minLag; lag <= maxLag; lag++) {
     const bpm = 60 / (lag * frameSec);
-    s *= 1 - Math.min(0.3, Math.abs(bpm - 120) / 300);
-    if (s > bestScore) {
-      bestScore = s;
+    // most songs are felt between 95 and 170
+    const pref = Math.exp(-0.5 * (Math.log2(bpm / 128) / 0.7) ** 2);
+    const score = (acs[lag] + 0.5 * acs[lag * 2] + 0.25 * acs[Math.round(lag / 2)]) * (0.4 + 0.6 * pref);
+    if (score > bestScore) {
+      bestScore = score;
       bestLag = lag;
     }
   }
-  const beat = bestLag * frameSec;
+  // between frames: the top of a parabola through the best lag and its neighbours
+  const a = acs[bestLag - 1] ?? 0;
+  const b = acs[bestLag];
+  const c = acs[bestLag + 1] ?? 0;
+  const lagF = bestLag + (a - 2 * b + c !== 0 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / (a - 2 * b + c))) : 0);
+  const beat = lagF * frameSec;
   const bpm = Math.round((60 / beat) * 10) / 10;
-  // phase: where in the first beat the onsets line up best
   let offset = 0;
   let bestPhase = -1;
   for (let p = 0; p < bestLag; p++) {
     let s = 0;
-    for (let f = p; f < frames; f += bestLag) s += onset[f];
+    for (let k = 0; p + k * lagF < frames; k++) s += onset[Math.round(p + k * lagF)];
     if (s > bestPhase) {
       bestPhase = s;
       offset = p * frameSec;
     }
   }
 
-  // bars of four beats
+  // every beat: the strongest hit within a frame or two of it
+  const beatCount = Math.max(16, Math.floor((buffer.duration - offset) / beat));
+  const hit: number[] = [];
+  for (let k = 0; k < beatCount; k++) {
+    const f = Math.round((offset + k * beat) / frameSec);
+    let m = 0;
+    for (let g = f - 2; g <= f + 2; g++) if (g >= 0 && g < frames) m = Math.max(m, onset[g]);
+    hit.push(m);
+  }
+  const hitTop = [...hit].sort((x, y) => x - y)[Math.floor(hit.length * 0.95)] || 1;
+  const beats = hit.map((h) => Math.max(0, Math.min(9, Math.round((h / hitTop) * 9))));
+
   const barSec = beat * 4;
   const count = Math.max(4, Math.floor((buffer.duration - offset) / barSec));
-  const raw: { energy: number; bass: number; busy: number }[] = [];
-  for (let b = 0; b < count; b++) {
-    const f0 = Math.floor((offset + b * barSec) / frameSec);
-    const f1 = Math.min(frames, Math.floor((offset + (b + 1) * barSec) / frameSec));
+  const sums: { energy: number; bass: number; busy: number; high: number }[] = [];
+  for (let bar = 0; bar < count; bar++) {
+    const f0 = Math.floor((offset + bar * barSec) / frameSec);
+    const f1 = Math.min(frames, Math.floor((offset + (bar + 1) * barSec) / frameSec));
     let e = 0;
     let lo = 0;
+    let hi = 0;
+    let all = 0;
     let on = 0;
     for (let f = f0; f < f1; f++) {
       e += energy[f];
-      lo += bass[f];
+      lo += bands[0][f];
+      hi += bands[2][f];
+      all += bands[0][f] + bands[1][f] + bands[2][f];
       on += onset[f];
     }
     const m = Math.max(1, f1 - f0);
-    raw.push({ energy: e / m, bass: lo / Math.max(1e-6, e), busy: on / m });
+    sums.push({ energy: e / m, bass: lo / Math.max(1e-6, all), busy: on / m, high: hi / Math.max(1e-6, all) });
   }
-  // put each measure on a 0..1 scale against the song itself, ignoring the loudest and quietest few
   const scale = (vals: number[]) => {
-    const sorted = [...vals].sort((a, b) => a - b);
+    const sorted = [...vals].sort((x, y) => x - y);
     const lo = sorted[Math.floor(sorted.length * 0.05)];
     const hi = sorted[Math.floor(sorted.length * 0.95)] || lo + 1e-6;
     return vals.map((v) => Math.max(0, Math.min(1, (v - lo) / Math.max(1e-6, hi - lo))));
   };
-  const e = scale(raw.map((r) => r.energy));
-  const bs = scale(raw.map((r) => r.bass));
-  const bu = scale(raw.map((r) => r.busy));
-  return { name, duration: buffer.duration, bpm, offset, bars: raw.map((_, i) => ({ energy: e[i], bass: bs[i], busy: bu[i] })) };
+  const e = scale(sums.map((r) => r.energy));
+  const bs = scale(sums.map((r) => r.bass));
+  const bu = scale(sums.map((r) => r.busy));
+  const hs = scale(sums.map((r) => r.high));
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  return {
+    name,
+    duration: buffer.duration,
+    bpm,
+    offset: Math.round(offset * 1000) / 1000,
+    bars: sums.map((_, i) => ({ energy: r2(e[i]), bass: r2(bs[i]), busy: r2(bu[i]), high: r2(hs[i]) })),
+    beats,
+  };
 }
 
-/** The aesthetic of a stretch, from how loud it is. */
-function themeFor(energy: number, base: ThemeId): ThemeId {
-  if (energy < 0.25) return "liminal";
-  if (energy < 0.5) return base;
-  if (energy < 0.75) return "vapor";
-  return "cyberpunk";
-}
+/** What a stretch of the song is driven as. */
+export type Section = "land" | "water" | "sub" | "sky" | "mag";
 
 /**
- * Draw the circuit of a song. The lap is a long oval sized so that race pace
- * gets round it in the time the song lasts; the song is written onto it bar
- * by bar as bends to one side and the other (busier and louder, further out),
- * as hills (the bass), as floating stretches (the choruses), as jumps (the
- * drops) and as second roads beside the quiet passages that fall on a
- * straight. Deterministic: the same features always give the same circuit,
- * which lets every machine in a network race build it for itself.
+ * Cut the song in phrases of four bars and give each a way to be driven: the
+ * loudest bright ones fly, the loudest heavy ones float on magnets, the quiet
+ * ones dive under the sea, the busy middle ones go by boat, and the rest is
+ * road. A song long enough always gets every one of them at least once.
  */
-export function rhythmTrack(song: SongFeatures, base: ThemeId = "frutiger"): TrackDef {
+export function songSections(bars: BarFeatures[]): Section[] {
+  const n = bars.length;
+  const out: Section[] = new Array(n).fill("land");
+  const phrases: { from: number; to: number; e: number; busy: number; high: number; bass: number }[] = [];
+  for (let p = 2; p + 2 < n - 1; p += 4) {
+    const to = Math.min(n - 1, p + 4);
+    const slice = bars.slice(p, to);
+    const avg = (f: (b: BarFeatures) => number) => slice.reduce((s, b) => s + f(b), 0) / slice.length;
+    phrases.push({ from: p, to, e: avg((b) => b.energy), busy: avg((b) => b.busy), high: avg((b) => b.high ?? b.busy), bass: avg((b) => b.bass) });
+  }
+  const kind = phrases.map((ph): Section => {
+    if (ph.e > 0.72) return ph.bass > ph.high ? "mag" : "sky";
+    if (ph.e < 0.3) return "sub";
+    if (ph.high > 0.55 || ph.busy > 0.6) return "water";
+    return "land";
+  });
+  // how sure each phrase is of its way: the weakest give way to road first
+  const sure = (ph: (typeof phrases)[0], k: Section) =>
+    k === "sky" || k === "mag" ? ph.e - 0.72 : k === "sub" ? 0.3 - ph.e : k === "water" ? Math.max(ph.high - 0.55, ph.busy - 0.6) : 0;
+  // never two different ways in a row without road between them, and never three phrases off the road
+  for (let i = 1; i < kind.length; i++) {
+    if (kind[i] === "land" || kind[i - 1] === "land") continue;
+    if (kind[i] !== kind[i - 1] || (i > 1 && kind[i - 2] === kind[i])) {
+      if (sure(phrases[i], kind[i]) < sure(phrases[i - 1], kind[i - 1]) || kind[i] === kind[i - 1]) kind[i] = "land";
+      else kind[i - 1] = "land";
+    }
+  }
+  // at least half the lap on the road, where the items, the traps and the jumps are
+  const off = () => kind.filter((k) => k !== "land").length;
+  while (off() > Math.floor(kind.length * 0.5)) {
+    let weakest = -1;
+    for (let i = 0; i < kind.length; i++) if (kind[i] !== "land" && (weakest < 0 || sure(phrases[i], kind[i]) < sure(phrases[weakest], kind[weakest]))) weakest = i;
+    kind[weakest] = "land";
+  }
+  // every way of driving, when there is room for it: the closest phrase still on the road takes the one missing
+  const want: [Section, (ph: (typeof phrases)[0]) => number][] = [
+    ["sky", (ph) => ph.e + ph.high],
+    ["water", (ph) => ph.busy + ph.high - Math.abs(ph.e - 0.5)],
+    ["sub", (ph) => -ph.e],
+    ["mag", (ph) => ph.e + ph.bass],
+  ];
+  for (const [sec, score] of want) {
+    if (kind.includes(sec)) continue;
+    const lone = (i: number) => kind[i] === "land" && (kind[i - 1] ?? "land") === "land" && (kind[i + 1] ?? "land") === "land";
+    const free = phrases.map((ph, i) => ({ i, s: score(ph) })).filter(({ i }) => lone(i) && off() < kind.length * 0.62);
+    if (!free.length) continue;
+    free.sort((x, y) => y.s - x.s);
+    kind[free[0].i] = sec;
+  }
+  phrases.forEach((ph, i) => {
+    for (let b = ph.from; b < ph.to; b++) out[b] = kind[i];
+  });
+  return out;
+}
+
+/** The aesthetic of a stretch, from the way it is driven and how loud it is. */
+function themeFor(energy: number, base: ThemeId, section: Section = "land"): ThemeId {
+  if (section === "sub") return "liquid";
+  if (section === "water") return "aqua";
+  if (section === "sky") return energy > 0.85 ? "vapor" : "dreamcore";
+  if (section === "mag") return "cyberpunk";
+  if (energy < 0.25) return "liminal";
+  if (energy < 0.5) return base;
+  if (energy < 0.75) return "sunset";
+  return "techno";
+}
+
+const smoothstep = (x: number) => {
+  const c = Math.max(0, Math.min(1, x));
+  return c * c * (3 - 2 * c);
+};
+
+/**
+ * Draw the circuit of a song. Its shape is the song itself: the line runs
+ * round once in the time the song lasts, out wide where it is loud and tucked
+ * in where it is quiet, like the outline of the music drawn in a circle, and
+ * however strange that comes out is how the circuit is. On that, every bar
+ * is a swing to one side or the other and the busy bars are a chicane on the
+ * half bar; the bass lifts the ground; each phrase is driven its own way
+ * (road, boat, submarine, plane or magnets: see songSections); the drops are
+ * jumps; and the strong beats put boosts down. Deterministic: the same
+ * features always give the same circuit, which lets every machine in a
+ * network race build it for itself.
+ */
+export function rhythmTrack(song: SongFeatures, base: ThemeId = "frutiger", stretch = 1): TrackDef {
   const bars = song.bars;
   const n = bars.length;
   const barSec = (60 / song.bpm) * 4;
-  const barLen = barSec * PACE;
-  const L = Math.max(1600, 60 + n * barLen);
-  // stadium: two straights and two half circles
-  const R = Math.max(150, L * 0.1);
-  const S = (L - 2 * Math.PI * R) / 2;
-  const at = (d: number): [number, number, number, number] => {
-    // position and the unit normal pointing out of the oval at distance d along it
-    const u = ((d % L) + L) % L;
-    if (u < S) return [0, u, 1, 0];
-    if (u < S + Math.PI * R) {
-      const a = (u - S) / R;
-      return [-R + R * Math.cos(a), S + R * Math.sin(a), Math.cos(a), Math.sin(a)];
-    }
-    if (u < 2 * S + Math.PI * R) return [-2 * R, S - (u - S - Math.PI * R), -1, 0];
-    const a = (u - 2 * S - Math.PI * R) / R;
-    return [-R - R * Math.cos(a), -R * Math.sin(a), -Math.cos(a), -Math.sin(a)];
+  const rush = rushFor(song.bpm);
+  // a little over race pace times the rush: a clean lap ends with the song
+  const barLen = barSec * BASE_PACE * rush * stretch;
+  const lead = 60;
+  const L = Math.max(1600, lead + n * barLen + barLen);
+  const R0 = L / (2 * Math.PI);
+  const sections = songSections(bars);
+
+  // features smoothed over a bar or so either side, and read at any distance along the lap
+  const smooth = (vals: number[], sigma: number) =>
+    vals.map((_, i) => {
+      let s = 0;
+      let w = 0;
+      for (let k = Math.max(0, i - 4); k <= Math.min(vals.length - 1, i + 4); k++) {
+        const g = Math.exp(-0.5 * ((k - i) / sigma) ** 2);
+        s += vals[k] * g;
+        w += g;
+      }
+      return s / w;
+    });
+  const env = smooth(bars.map((b) => b.energy), 2.5);
+  const bassS = smooth(bars.map((b) => b.bass), 1);
+  const meanEnv = env.reduce((x, y) => x + y, 0) / n;
+  const barAt = (d: number) => (d - lead) / barLen;
+  const read = (vals: number[], d: number) => {
+    const u = Math.max(0, Math.min(n - 1, barAt(d) - 0.5));
+    const i = Math.floor(u);
+    const f = u - i;
+    return vals[i] * (1 - f) + vals[Math.min(n - 1, i + 1)] * f;
   };
-  const onStraight = (d0: number, d1: number) => (d0 >= 0 && d1 <= S) || (d0 >= S + Math.PI * R && d1 <= 2 * S + Math.PI * R);
+  // one big lobe per phrase of four bars: out for the loud and bright ones, in for the quiet and heavy ones
+  const phraseVal: number[] = [];
+  for (let p = 0; p < n; p += 4) {
+    const slice = bars.slice(p, p + 4);
+    const e = slice.reduce((a, b) => a + b.energy, 0) / slice.length;
+    const tone = slice.reduce((a, b) => a + (b.high ?? b.busy) - b.bass, 0) / slice.length;
+    phraseVal.push(Math.max(-1, Math.min(1, (e - meanEnv) * 2.2 + tone * 0.6)));
+  }
+  const lobe = (d: number) => {
+    const u = Math.max(0, Math.min(phraseVal.length - 1, barAt(d) / 4 - 0.5));
+    const i = Math.floor(u);
+    const f = u - i;
+    const w = (1 - Math.cos(Math.PI * f)) / 2;
+    return phraseVal[i] * (1 - w) + phraseVal[Math.min(phraseVal.length - 1, i + 1)] * w;
+  };
+  // the start and the end of the lap are calm, so the grid sits on a gentle line
+  const calmLen = Math.max(2.5 * barLen, 0.1 * L);
+  const calm = (d: number) => smoothstep((d - lead) / calmLen) * smoothstep((L - d) / calmLen);
 
-  // how far out each bar bends: never tighter than a radius of about 70
-  const reach = Math.min(70, (2 * barLen) ** 2 / (8 * 70));
-  const bend = bars.map((b, i) => {
+  // swings: never tighter than a radius of about 36
+  const RMIN = 36;
+  const swing = (d: number) => {
+    const u = barAt(d);
+    const i = Math.floor(u);
     if (i < 2 || i >= n - 1) return 0;
-    const calm = b.energy < 0.3 && b.busy < 0.4;
-    return calm ? 0 : (i % 2 ? 1 : -1) * reach * (0.35 + 0.65 * (b.busy * 0.6 + b.energy * 0.4));
-  });
-  // the ground follows the bass, smoothed over three bars
-  const lift = bars.map((_, i) => {
-    let s = 0;
-    let c = 0;
-    for (let k = i - 1; k <= i + 1; k++) if (k >= 0 && k < n) (s += bars[k].bass), c++;
-    return i < 2 ? 0 : (s / c) * 18;
-  });
+    const b = bars[i];
+    if (sections[i] === "sky") return 0;
+    const double = b.busy > 0.6;
+    const l = double ? barLen / 2 : barLen;
+    const f = double ? (u - i) * 2 : u - i;
+    const side = (double ? Math.floor(f) + i : i) % 2 ? 1 : -1;
+    // sin² starts and ends level, so one swing runs into the next without a corner
+    const reach = (l * l) / (2 * Math.PI * Math.PI * RMIN);
+    const amp = Math.min(reach, 18) * (0.4 + 0.6 * Math.max(b.busy, b.energy));
+    return side * amp * Math.sin(Math.PI * (f - Math.floor(f))) ** 2;
+  };
 
-  const routes: RouteSpec[] = [];
+  const steps = Math.round(L / 12);
+  const STEP = L / steps;
+  const shape = (k: number) => {
+    const pts: [number, number][] = [];
+    for (let i = 0; i <= steps; i++) {
+      const d = i * STEP;
+      const th = (2 * Math.PI * d) / L;
+      const r = R0 * (1 + k * calm(d) * (0.42 * lobe(d) + (read(env, d) - meanEnv) * 0.8)) + swing(d);
+      pts.push([-R0 + r * Math.cos(th), r * Math.sin(th)]);
+    }
+    return pts;
+  };
+  // the tightest bend of a line, from the turn between successive steps
+  const tightest = (pts: [number, number][]) => {
+    let min = Infinity;
+    for (let i = 1; i + 1 < pts.length; i++) {
+      const h1 = Math.atan2(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      const h2 = Math.atan2(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+      let dh = Math.abs(h2 - h1);
+      if (dh > Math.PI) dh = 2 * Math.PI - dh;
+      const len = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+      if (dh > 1e-6) min = Math.min(min, len / dh);
+    }
+    return min;
+  };
+  let k = 1;
+  let pts = shape(k);
+  for (let tries = 0; tries < 12 && tightest(pts) < RMIN * 0.8; tries++) pts = shape((k *= 0.85));
+  // the bends make the road longer than the lap it was planned on: plan again, shorter, so the lap still lasts the song
+  let drawn = 0;
+  for (let i = 1; i < pts.length; i++) drawn += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  if (stretch === 1 && drawn / L > 1.02) return rhythmTrack(song, base, L / drawn);
+
+  // height: the ground rides the bass; each section pulls it to its own level inside it
+  const runs: { from: number; to: number; sec: Section }[] = [];
+  for (let i = 0; i < n; i++) {
+    if (sections[i] === "land") continue;
+    const last = runs[runs.length - 1];
+    if (last && last.to === i && last.sec === sections[i]) last.to = i + 1;
+    else runs.push({ from: i, to: i + 1, sec: sections[i] });
+  }
+  const landY = (d: number) => 9 + 16 * read(bassS, d);
+  const heightAt = (d: number) => {
+    const edge = landY(d);
+    const u = barAt(d);
+    const run = runs.find((r) => u >= r.from && u < r.to);
+    if (!run) return edge;
+    const d0 = lead + run.from * barLen;
+    const d1 = lead + run.to * barLen;
+    const deep = run.sec === "sky" ? 50 + 12 * read(env, d) : run.sec === "sub" ? -20 : run.sec === "water" ? 0.6 : edge + 10;
+    const ramp = Math.min(run.sec === "sky" ? 190 : run.sec === "sub" ? 140 : 80, (d1 - d0) / 2.2);
+    return edge + (deep - edge) * smoothstep(Math.min(d - d0, d1 - d) / ramp);
+  };
+  const ys = pts.map((_, i) => heightAt(i * STEP));
+  ys[ys.length - 1] = ys[0];
+  // no climb steeper than about one in three, either way round
+  const MAXS = 0.3 * STEP;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 1; i < ys.length; i++) ys[i] = Math.max(ys[i - 1] - MAXS, Math.min(ys[i - 1] + MAXS, ys[i]));
+    for (let i = ys.length - 2; i >= 0; i--) ys[i] = Math.max(ys[i + 1] - MAXS, Math.min(ys[i + 1] + MAXS, ys[i]));
+  }
+
+  const zones: [string, string, ZoneKind][] = runs.map((r) => [`b${r.from}`, `b${r.to}`, r.sec as ZoneKind]);
   const pads: [string, PadDef["kind"], number?, number?][] = [["go", "boost"]];
-  const zones: [string, string, "mag"][] = [];
   const sectors: [string, ThemeId][] = [];
   let lastTheme: ThemeId = base;
+  const beats = song.beats ?? [];
   bars.forEach((b, i) => {
-    const theme = themeFor(b.energy, base);
+    const theme = themeFor(b.energy, base, sections[i]);
     if (theme !== lastTheme && i > 1) sectors.push([`b${i}`, theme]);
     lastTheme = theme;
-    const prev = i > 0 ? bars[i - 1].energy : 0;
-    if (i > 2 && b.energy - prev > 0.35) pads.push([`b${i}`, "jump", 11]);
-    else if (i > 1 && b.busy > 0.7) pads.push([`b${i}`, "boost", 1.3]);
-  });
-  // a long chorus floats: four loud bars or more in a row
-  let run = 0;
-  for (let i = 0; i <= n; i++) {
-    if (i < n && bars[i].energy > 0.72 && i > 2) run++;
+    if (i < 2 || i >= n - 1 || sections[i] === "sky") return;
+    const prev = bars[i - 1].energy;
+    if (sections[i] === "land" && sections[i - 1] === "land" && b.energy - prev > 0.3) pads.push([`b${i}`, "jump", 10 + 4 * b.energy]);
     else {
-      if (run >= 4) zones.push([`b${i - run}`, `b${i - 1}e`, "mag"]);
-      run = 0;
+      // boosts on the hardest beats of a loud bar
+      const strong = [0, 1, 2, 3].filter((q) => (beats[i * 4 + q] ?? (q === 0 ? 9 : q === 2 ? 6 : 0)) >= 6);
+      if (b.energy > 0.4 || b.busy > 0.6) for (const q of strong.slice(0, b.energy > 0.7 ? 2 : 1)) pads.push([`b${i}`, "boost", 1.2 + 0.2 * b.energy, (q + 0.5) * (barLen / 4)]);
+      // a quiet bar on the road between loud ones is a ramp
+      else if (sections[i] === "land" && i % 3 === 0 && (bars[i + 1]?.energy ?? 0) > 0.5) pads.push([`b${i}`, "jump", 9, barLen * 0.6]);
     }
-  }
-  // quiet passages on a straight get a road beside them, alternately over and under
-  let calmFrom = -1;
-  let side = 0;
-  const calmEnds: number[][] = [];
-  for (let i = 2; i <= n - 1; i++) {
-    const calm = i < n - 1 && bend[i] === 0;
-    if (calm && calmFrom < 0) calmFrom = i;
-    if (!calm && calmFrom >= 0) {
-      calmEnds.push([calmFrom, i]);
-      calmFrom = -1;
-    }
-  }
-  const routeMarks = new Map<number, string>();
-  for (const [a, e] of calmEnds) {
-    const d0 = 60 + a * barLen;
-    const d1 = 60 + e * barLen;
-    if (d1 - d0 < BYPASS + 140 || !onStraight(d0, d1)) continue;
-    const high = side++ % 2 === 0;
-    const runLen = d1 - d0 - BYPASS;
-    routeMarks.set(a, `q${a}a`);
-    routeMarks.set(e, `q${a}b`);
-    routes.push({ from: `q${a}a`, to: `q${a}b`, draw: (rt) => rt.bypass(high ? "L" : "R", runLen, high ? 9 : -5, lift[e] - lift[a]), kind: high ? "high" : "low", tunnel: !high, pads: [["mid", "boost", 1.4]] });
-  }
+  });
 
   const draw = (t: Turtle) => {
-    t.go(40).mark("go").go(20);
-    let d = 60;
-    const step = 18;
-    let y = 10;
-    for (let i = 0; i < n; i++) {
-      t.mark(`b${i}`);
-      const qa = routeMarks.get(i);
-      if (qa) t.mark(qa);
-      const end = 60 + (i + 1) * barLen;
-      const b0 = bend[i];
-      // each bar is one swell: out to its side and back to the line by the end of it
-      while (d < end - 1e-6) {
-        const nd = Math.min(end, d + step);
-        const f = (nd - (60 + i * barLen)) / barLen;
-        const off = b0 * Math.sin(Math.PI * f);
-        const [x, z, nx, nz] = at(nd);
-        const tx = x + nx * off;
-        const tz = z + nz * off;
-        const ty = 10 + lift[i] * (1 - f) + (lift[Math.min(n - 1, i + 1)]) * f;
-        t.h = Math.atan2(tx - t.x, tz - t.z);
-        t.go(Math.hypot(tx - t.x, tz - t.z), ty - y);
-        y = ty;
-        d = nd;
+    // the first point is the start line itself
+    for (let i = 1; i < pts.length; i++) {
+      const d = i * STEP;
+      if (d >= 40 && d - STEP < 40) t.mark("go");
+      const tx = pts[i][0];
+      const tz = pts[i][1];
+      t.h = Math.atan2(tx - t.x, tz - t.z);
+      t.go(Math.max(0.01, Math.hypot(tx - t.x, tz - t.z)), ys[i] - ys[i - 1]);
+      for (let b = 0; b <= n; b++) {
+        const db = lead + b * barLen;
+        if (db <= d && db > d - STEP) t.mark(`b${b}`);
       }
-      t.mark(`b${i}e`);
-    }
-    // home along the oval to the line
-    while (d < L - 1e-6) {
-      const nd = Math.min(L, d + step);
-      const [x, z] = at(nd);
-      const ty = y + (10 - y) * ((nd - d) / Math.max(1, L - d));
-      t.h = Math.atan2(x - t.x, z - t.z);
-      t.go(Math.hypot(x - t.x, z - t.z), ty - y);
-      y = ty;
-      d = nd;
     }
   };
 
-  return design({
+  const def = design({
     id: RHYTHM_TRACK_ID,
     theme: base,
     difficulty: 2,
-    start: [0, 10, 0, 0],
-    hazards: 2,
+    start: [0, ys[0], 0, 0],
+    hazards: 3,
+    sea: 0,
     warp: false,
     draw,
-    routes,
     zones,
     sectors: dedupe(sectors),
     pads,
     traffic: 2,
   });
+  live = { length: DESIGN_REPORT[RHYTHM_TRACK_ID]?.length ?? L, lead, barLen, beatLen: barLen / 4, bars, beats, rush };
+  return def;
 }
 
 function dedupe(list: [string, ThemeId][]) {
@@ -293,7 +527,7 @@ export function registerTrack(def: TrackDef) {
 }
 
 /** Seconds a race on this song lasts if the kart keeps race pace: the length of the song. */
-export const songLapLength = (song: SongFeatures) => song.duration * PACE;
+export const songLapLength = (song: SongFeatures) => song.duration * BASE_PACE * rushFor(song.bpm);
 
 /** The song loaded for rhythm mode, if any, and the circuit made from it. */
 export const rhythmState: { features: SongFeatures | null; buffer: AudioBuffer | null; bytes: ArrayBuffer | null; theme: ThemeId } = { features: null, buffer: null, bytes: null, theme: "frutiger" };

@@ -44,7 +44,17 @@ No muestra todos los tipos de colisión ni todas las obstrucciones posibles. Usa
 
 ## Modo ritmo
 
-`src/rhythm.ts` escucha una canción (`analyseSong`: energía, bajo, ataques, tempo por autocorrelación y fase del primer pulso, todo resumido por compás) y construye su circuito (`rhythmTrack`): un óvalo cuyo largo hace que una vuelta a ritmo de carrera dure lo que la canción, con cada compás como una curva hacia un lado u otro (más fuerte cuanto más cargado), colinas que siguen el bajo, tramos magnéticos en estribillos largos, saltos en los subidones y una segunda carretera junto a los pasajes tranquilos que caen en recta. Es determinista: en red el anfitrión manda los datos del compás y cada máquina construye el mismo circuito; el audio va aparte en trozos de 600 KB (hasta 24 MB). En carrera `music.ts` reproduce la canción en lugar de la música generada y `game/reveal.ts` hace que la carretera aparezca alrededor del piloto latiendo con el pulso.
+`src/rhythm.ts`:
+
+- `analyseSong`: tres bandas (graves < 150 Hz, medios, agudos > 2 kHz), golpes como subidas de energía logarítmica en cualquier banda, tempo por autocorrelación de los golpes (con el doble y la mitad de la pulsación para no confundir 70 con 140), fase del primer pulso, fuerza de cada pulso (0–9) y resumen por compás (energía, graves, agudos, densidad).
+- `songSections`: cada frase de cuatro compases se conduce a su manera: avión (estribillo brillante), imanes (estribillo grave), submarino (pasaje tranquilo), barco (pasaje movido) o carretera. Al menos la mitad de la vuelta es carretera, nunca dos zonas distintas seguidas sin carretera entre ellas, y si cabe aparecen los cinco modos.
+- `rhythmTrack`: la forma es el contorno de la canción dibujado en círculo (frases fuertes hacia fuera, suaves hacia dentro) con un vaivén por compás o media (en los compases densos), sin curvas de radio menor de ~36. La altura sigue los graves y cada sección baja al mar, se sumerge o sube al cielo dentro de su tramo. Saltos en los subidones y acelerones en los pulsos fuertes. La longitud se recalcula para que una vuelta dure la canción.
+- En carrera: velocidad × `rushFor(bpm)` (1,15–1,45) y un poco más en los compases fuertes (`rhythmRush`); notas en los pulsos fuertes (`rhythmNotes`) que encadenan combo «¡Al ritmo!» y turbo; la cámara late con el pulso. El circuito se construye mientras se conduce (`game/reveal.ts`): un frente de construcción, medido en progreso de vuelta, va por delante del líder (más lejos cuanto más rápido va) y avanza a golpes en cada pulso; detrás del frente las piezas suben desde abajo brillando y más allá no hay nada: ni carretera, barreras, impulsores, trampas, cajas ni notas, y el minimapa solo dibuja lo construido. El trazado se calcula al cargar la canción (lo necesitan la física, los bots y la red), pero no se muestra en ningún sitio antes de construirse.
+- En red el anfitrión manda los datos y cada máquina construye el mismo circuito; el audio va aparte en trozos de 600 KB (hasta 24 MB).
+
+## Cajas de objetos
+
+En todos los circuitos hay cajas también en agua, submarino e imanes (no en vuelo). La caja central de cada tercera fila es dorada: llena las dos manos y da un empujón.
 
 ## Mods
 

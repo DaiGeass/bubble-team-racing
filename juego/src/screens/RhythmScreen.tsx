@@ -3,7 +3,7 @@ import { useI18n } from "../i18n";
 import { useGame } from "../store";
 import { THEMES, TRACKS, type ThemeId } from "../data";
 import { setActiveTrack } from "../trackCurve";
-import { loadSong, rhythmState, useSong, RHYTHM_TRACK_ID, type SongFeatures } from "../rhythm";
+import { loadSong, rhythmState, rushFor, songSections, useSong, RHYTHM_TRACK_ID, type Section, type SongFeatures } from "../rhythm";
 import { resumeAudio } from "../sound";
 import { Bubbles, GlassButton, Panel, PrimaryButton } from "../ui/common";
 import { RaceTerms } from "./SelectScreen";
@@ -11,30 +11,35 @@ import { setConfig } from "../net";
 
 const LOOKS: ThemeId[] = ["frutiger", "aero", "vapor", "y2k", "cyberpunk", "dreamcore", "eden", "slime", "techno", "sunset"];
 
-/** A top-down outline of the circuit made from the song, and its other roads. */
-function Outline({ version }: { version: number }) {
-  const shape = useMemo(() => {
-    const def = TRACKS.find((t) => t.id === RHYTHM_TRACK_ID);
-    if (!def) return null;
-    const all = [...def.points, ...(def.routes ?? []).flatMap((r) => r.points)];
-    const xs = all.map((p) => p[0]);
-    const zs = all.map((p) => p[2]);
-    const x0 = Math.min(...xs);
-    const z0 = Math.min(...zs);
-    const s = 92 / Math.max(Math.max(...xs) - x0, Math.max(...zs) - z0, 1);
-    const line = (pts: [number, number, number][], close: boolean) => pts.map((p) => `${4 + (p[0] - x0) * s},${4 + (p[2] - z0) * s}`).join(" ") + (close ? ` ${4 + (pts[0][0] - x0) * s},${4 + (pts[0][2] - z0) * s}` : "");
-    return { main: line(def.points, true), routes: (def.routes ?? []).map((r) => line(r.points, false)), zones: def.zones.length };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [version]);
-  if (!shape) return null;
+const SECTION_COLOUR: Record<Section, string> = { land: "#38bdf8", water: "#14b8a6", sub: "#4f46e5", sky: "#f472b6", mag: "#f59e0b" };
+const SECTION_WORD: Record<Section, string> = { land: "secLand", water: "secWater", sub: "secSub", sky: "secSky", mag: "secMag" };
+
+/** The song from start to end: a bar per bar of music, as tall as it is loud, in the colour of how it is driven. */
+function Timeline({ song }: { song: SongFeatures }) {
+  const { t } = useI18n();
+  const sections = useMemo(() => songSections(song.bars), [song]);
+  const used = [...new Set(sections)];
   return (
-    <svg viewBox="0 0 100 100" className="h-56 w-56">
-      {shape.routes.map((r, i) => (
-        <polyline key={i} points={r} fill="none" stroke="#ff9f1c" strokeWidth="1.6" strokeLinejoin="round" />
-      ))}
-      <polyline points={shape.main} fill="none" stroke="rgba(10,50,80,0.35)" strokeWidth="4" strokeLinejoin="round" />
-      <polyline points={shape.main} fill="none" stroke="#38bdf8" strokeWidth="2.2" strokeLinejoin="round" />
-    </svg>
+    <div>
+      <div className="flex h-20 items-end gap-px overflow-hidden rounded-xl bg-white/50 p-1.5">
+        {song.bars.map((b, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-t-sm"
+            title={`${i + 1}`}
+            style={{ height: `${12 + b.energy * 88}%`, background: SECTION_COLOUR[sections[i]], opacity: 0.55 + b.busy * 0.45 }}
+          />
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold text-sky-900">
+        {used.map((s) => (
+          <span key={s} className="flex items-center gap-1 rounded-full bg-white/70 px-2 py-0.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: SECTION_COLOUR[s] }} />
+            {t(SECTION_WORD[s])}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -51,7 +56,6 @@ export default function RhythmScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [look, setLook] = useState<ThemeId>(rhythmState.theme);
-  const [version, setVersion] = useState(0);
 
   async function pick(file: File | undefined) {
     if (!file) return;
@@ -61,7 +65,6 @@ export default function RhythmScreen() {
     try {
       const features = await loadSong(await file.arrayBuffer(), file.name, look);
       setSongState(features);
-      setVersion((v) => v + 1);
     } catch (e) {
       setError((e as Error).message === "short" ? t("rhythmShort") : t("rhythmBad"));
     }
@@ -72,7 +75,6 @@ export default function RhythmScreen() {
     setLook(theme);
     if (rhythmState.features) {
       useSong(rhythmState.features, rhythmState.buffer, rhythmState.bytes, theme);
-      setVersion((v) => v + 1);
     }
   }
 
@@ -110,19 +112,28 @@ export default function RhythmScreen() {
         {song && def && (
           <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
             <Panel className="flex flex-col items-center gap-2 p-4">
-              <Outline version={version} />
+              {/* the circuit is not shown: it is built while you drive it */}
+              <div className="grid h-40 w-56 place-items-center rounded-2xl border-2 border-dashed border-sky-400/60 bg-white/40 text-center">
+                <div>
+                  <div className="text-4xl text-sky-500">♫ ⋯</div>
+                  <div className="mt-1 px-3 text-xs font-bold text-sky-900/80">{t("rhythmBuilt")}</div>
+                </div>
+              </div>
               <div className="text-center">
                 <div className="font-display text-xl font-extrabold text-sky-900">{song.name}</div>
                 <div className="mt-1 flex flex-wrap justify-center gap-1.5 text-[11px] font-bold text-sky-800">
                   <span className="rounded-full bg-white/70 px-2 py-0.5">{Math.round(song.bpm)} BPM</span>
                   <span className="rounded-full bg-white/70 px-2 py-0.5">{minutes(song.duration)}</span>
                   <span className="rounded-full bg-white/70 px-2 py-0.5">{song.bars.length} {t("rhythmBars")}</span>
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">⑂ {def.routes?.length ?? 0}</span>
-                  {def.zones.length > 0 && <span className="rounded-full bg-fuchsia-100 px-2 py-0.5 text-fuchsia-700">◈ {def.zones.length}</span>}
+                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-rose-700">×{rushFor(song.bpm).toFixed(2)} {t("rhythmSpeed")}</span>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">⇧ {def.pads?.length ?? 0}</span>
                 </div>
               </div>
             </Panel>
             <div className="flex flex-col gap-3">
+              <Panel className="p-4">
+                <Timeline song={song} />
+              </Panel>
               <Panel className="p-4">
                 <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-sky-900/70">{t("aesthetics")}</div>
                 <div className="flex flex-wrap gap-2">

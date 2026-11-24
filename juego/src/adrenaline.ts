@@ -1,6 +1,6 @@
 import type { VehicleMode } from "./data";
 
-export type SkillKind = "drift" | "landing" | "near" | "pass" | "sling" | "route" | "maneuver";
+export type SkillKind = "drift" | "landing" | "near" | "pass" | "sling" | "route" | "maneuver" | "beat";
 export const CHAIN_WINDOW = 6;
 /** Race time and furthest forward distance prevent farming in place or in reverse. */
 export class SkillChain {

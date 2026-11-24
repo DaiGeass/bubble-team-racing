@@ -4,7 +4,7 @@ import { TRACKS, CHARACTERS, THEMES, FUSION_SHOTS } from "../src/data";
 import { setActiveTrack } from "../src/trackCurve";
 import { DESIGN_REPORT } from "../src/trackDesign";
 import { inspectMap } from "../src/mapInspection";
-import { analyseSong, rhythmTrack, registerTrack, RHYTHM_TRACK_ID, type SongFeatures } from "../src/rhythm";
+import { analyseSong, rhythmTrack, registerTrack, rhythmNotes, rhythmRush, songSections, RHYTHM_TRACK_ID, type SongFeatures } from "../src/rhythm";
 import { applyMods, checkMod, EXAMPLE_MOD, modReport, saveInstalled } from "../src/mods";
 import { PadReader, deadzone } from "../src/gamepad";
 
@@ -106,4 +106,32 @@ test("pad buttons can be moved, and the dead zone and steering curve shape the s
   assert.equal(out.item, true);
   assert.equal(out.ability, false);
   assert.equal(r.snapshot?.buttons[3], 1);
+});
+
+test("a varied song is driven every way, has notes on its beats and runs faster than an ordinary race", () => {
+  const prev = TRACKS.find((t) => t.id === RHYTHM_TRACK_ID);
+  // intro, verse, chorus, breakdown, over and over
+  const bars = Array.from({ length: 96 }, (_, i) => {
+    const part = Math.floor(i / 8) % 4;
+    return { energy: [0.15, 0.5, 0.92, 0.35][part], bass: [0.2, 0.4, i % 16 < 8 ? 0.9 : 0.2, 0.3][part], busy: [0.2, 0.75, 0.8, 0.3][part], high: [0.2, 0.7, i % 16 < 8 ? 0.2 : 0.9, 0.3][part] };
+  });
+  const beats = Array.from({ length: 96 * 4 }, (_, k) => (k % 4 === 0 ? 9 : k % 2 === 0 ? 6 : 2));
+  const song: SongFeatures = { name: "variada", duration: 96 * 2, bpm: 120, offset: 0, bars, beats };
+  const kinds = new Set(songSections(bars));
+  for (const k of ["land", "water", "sub", "sky", "mag"]) assert.ok(kinds.has(k as never), k);
+  const off = songSections(bars).filter((k) => k !== "land").length;
+  assert.ok(off <= 96 * 0.65);
+  const def = rhythmTrack(song);
+  registerTrack(def);
+  setActiveTrack(RHYTHM_TRACK_ID);
+  assert.ok(DESIGN_REPORT[RHYTHM_TRACK_ID].closeError < 1);
+  assert.deepEqual(inspectMap().flatMap((p) => p.issues), []);
+  assert.ok(new Set(def.zones.map((z) => z.type)).size >= 3);
+  const notes = rhythmNotes();
+  assert.ok(notes.length > 40 && notes.length <= 140);
+  for (let i = 1; i < notes.length; i++) assert.ok(notes[i].t > notes[i - 1].t);
+  assert.ok(rhythmRush(0.5) > 1.1);
+  const i = TRACKS.findIndex((t) => t.id === RHYTHM_TRACK_ID);
+  if (prev) TRACKS.splice(i, 1, prev);
+  else TRACKS.splice(i, 1);
 });
