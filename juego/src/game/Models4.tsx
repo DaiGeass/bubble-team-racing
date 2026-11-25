@@ -31,6 +31,7 @@ export default function Craft4({kind,body,decal,glow,finish,stateRef}: {kind: Ne
       const mesh=meshes.current[i]; if(!mesh||!part.motion)return;
       if(part.motion==="prop")mesh.rotation.z=part.rotation[2]+time*18;
       if(part.motion==="field")mesh.rotation.y=part.rotation[1]+time*(kind==="vtol"?28:2.2);
+      if(part.motion==="wheel")mesh.rotation.x=part.rotation[0]+time*5;
       if(part.motion==="fin")mesh.rotation.x=part.rotation[0]+(stateRef?.current.steer??0)*0.18;
     });
   });

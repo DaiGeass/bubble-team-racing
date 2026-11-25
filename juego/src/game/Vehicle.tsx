@@ -131,13 +131,14 @@ function Face({ char, glow, eyes, z = 0.3, y = 0 }: { char: CharacterDef; glow?:
   );
 }
 
-/** Frutiger Aero life-form pilot: droplet, bubble, leaf, crystal, holo, cloud, star or flame. */
+/** Frutiger Aero life-form pilot: droplet, bubble, leaf, crystal, holo, cloud, star, flame, jellyfish, planet or gear. */
 function Pilot({ char, glow, gunner, stateRef }: { char: CharacterDef; glow?: string; gunner?: boolean; stateRef?: React.MutableRefObject<KartVisualState> }) {
   const personality = useMemo(() => characterPhase(char.id), [char.id]);
   const bob = useRef(personality * 6);
   const eyes = useRef<THREE.Group>(null);
   const root = useRef<THREE.Group>(null);
   const aura = useRef<THREE.Mesh>(null);
+  const spin = useRef<THREE.Group>(null);
   useFrame((_, dt) => {
     if (!root.current?.parent?.visible || !root.current.parent.parent?.visible) return;
     bob.current += Math.min(dt, 0.1);
@@ -149,6 +150,11 @@ function Pilot({ char, glow, gunner, stateRef }: { char: CharacterDef; glow?: st
       root.current.position.y = 0.78 + Math.sin(bob.current * 3.4) * 0.05;
       root.current.rotation.z = Math.sin(bob.current * 2.1) * 0.06;
       if (char.form === "holo") root.current.rotation.y = Math.sin(bob.current * 1.4) * 0.22;
+    }
+    // the planet's ring turns, the gear's teeth turn, the jellyfish's tentacles sway
+    if (spin.current) {
+      if (char.form === "jelly") spin.current.rotation.y = Math.sin(bob.current * 2.6) * 0.35;
+      else spin.current.rotation.y += Math.min(dt, 0.1) * (char.form === "gear" ? 1.6 : 0.9);
     }
     if (aura.current) {
       const s = 1 + Math.sin(bob.current * 5) * 0.07;
@@ -362,6 +368,82 @@ function Pilot({ char, glow, gunner, stateRef }: { char: CharacterDef; glow?: st
               {glassy(char.secondary, 0.9, char.primary, 0.9)}
             </mesh>
             <Face char={char} glow={glow} eyes={eyes} z={0.33} />
+          </group>
+        )}
+        {char.form === "jelly" && (
+          <group>
+            {/* a glass bell with a bright rim, and tentacles that trail behind */}
+            <mesh castShadow position={[0, 0.08, 0]} scale={[1, 0.82, 1]}>
+              <sphereGeometry args={[0.46, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.58]} />
+              {glassy(char.primary, 0.7)}
+            </mesh>
+            <mesh position={[0, -0.06, 0]} rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[0.4, 0.045, 8, 24]} />
+              {glassy(char.secondary, 1, char.primary, 0.9)}
+            </mesh>
+            <group ref={spin}>
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <mesh key={i} position={[Math.sin((i / 6) * Math.PI * 2) * 0.26, -0.34, Math.cos((i / 6) * Math.PI * 2) * 0.26]} rotation={[0, 0, (i % 2 ? 0.25 : -0.25)]}>
+                  <cylinderGeometry args={[0.035, 0.012, 0.5, 6]} />
+                  {glassy(i % 2 ? char.secondary : char.primary, 0.85)}
+                </mesh>
+              ))}
+            </group>
+            <Face char={char} glow={glow} eyes={eyes} z={0.34} y={0.1} />
+          </group>
+        )}
+        {char.form === "planet" && (
+          <group>
+            {/* a little world with a ring round it and a moon going round that */}
+            <mesh castShadow>
+              <sphereGeometry args={[0.4, 20, 20]} />
+              {glassy(char.primary, 1, char.primary, 0.35)}
+            </mesh>
+            <mesh position={[0, 0.12, 0]} scale={[1.01, 0.18, 1.01]}>
+              <sphereGeometry args={[0.4, 18, 8]} />
+              {glassy(char.secondary, 0.6)}
+            </mesh>
+            <group ref={spin} rotation={[0.35, 0, 0.2]}>
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.6, 0.035, 6, 36]} />
+                <meshBasicMaterial color={char.accent} toneMapped={false} transparent opacity={0.85} />
+              </mesh>
+              <mesh position={[0.6, 0, 0]}>
+                <sphereGeometry args={[0.08, 10, 10]} />
+                {glassy(char.secondary, 1, char.secondary, 0.8)}
+              </mesh>
+            </group>
+            <Face char={char} glow={glow} eyes={eyes} z={0.36} />
+          </group>
+        )}
+        {char.form === "gear" && (
+          <group>
+            {/* a round metal body with a toothed rim turning behind the face */}
+            <mesh castShadow>
+              <sphereGeometry args={[0.38, 18, 18]} />
+              <meshPhysicalMaterial color={char.primary} roughness={0.18} metalness={0.7} clearcoat={1} emissive={char.accent} emissiveIntensity={0.2} />
+            </mesh>
+            <group ref={spin} position={[0, 0, -0.06]}>
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.46, 0.46, 0.12, 20]} />
+                <meshStandardMaterial color={char.accent} roughness={0.3} metalness={0.8} />
+              </mesh>
+              {Array.from({ length: 10 }, (_, i) => (
+                <mesh key={i} position={[Math.sin((i / 10) * Math.PI * 2) * 0.52, Math.cos((i / 10) * Math.PI * 2) * 0.52, 0]} rotation={[0, 0, -(i / 10) * Math.PI * 2]}>
+                  <boxGeometry args={[0.12, 0.13, 0.12]} />
+                  <meshStandardMaterial color={char.accent} roughness={0.3} metalness={0.8} />
+                </mesh>
+              ))}
+            </group>
+            <mesh position={[0, 0.46, 0]}>
+              <cylinderGeometry args={[0.02, 0.02, 0.2, 6]} />
+              <meshStandardMaterial color={char.secondary} metalness={0.8} roughness={0.2} />
+            </mesh>
+            <mesh position={[0, 0.58, 0]}>
+              <sphereGeometry args={[0.06, 8, 8]} />
+              <meshStandardMaterial color={glow ?? char.secondary} emissive={glow ?? char.secondary} emissiveIntensity={2.5} toneMapped={false} />
+            </mesh>
+            <Face char={char} glow={glow} eyes={eyes} z={0.34} />
           </group>
         )}
       </group>

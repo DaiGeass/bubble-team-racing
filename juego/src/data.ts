@@ -5,7 +5,7 @@ import { DESIGNED_TRACKS } from "./tracks";
 // ---------------------------------------------------------------------------
 
 // Frutiger Aero life-forms instead of animals: glossy droplets, bubbles, crystals...
-export type FormId = "drop" | "bubble" | "leaf" | "crystal" | "holo" | "cloud" | "star" | "flame";
+export type FormId = "drop" | "bubble" | "leaf" | "crystal" | "holo" | "cloud" | "star" | "flame" | "jelly" | "planet" | "gear";
 export type EyeStyle = "sparkle" | "sharp" | "visor" | "sleepy";
 export type RoleId = "speed" | "handler" | "heavy" | "balanced" | "trickster" | "tech";
 export type WeaponId =
@@ -18,15 +18,16 @@ export type ShapeId =
 export type ThemeId =
   | "frutiger" | "aero" | "techno" | "eco" | "aqua" | "sunset"
   | "y2k" | "liquid" | "win98" | "vapor" | "dreamcore" | "cyberpunk" | "noir" | "backrooms" | "liminal" | "eden"
-  | "metro" | "tux" | "debian" | "arch" | "mac" | "slime" | "webcore";
+  | "metro" | "tux" | "debian" | "arch" | "mac" | "slime" | "webcore"
+  | "level1" | "levelfun" | "weirdcore" | "glitchcore" | "kidcore" | "cottagecore" | "traumacore" | "nightcore" | "aurora";
 export type WheelStyle = "classic" | "sporty" | "glow" | "chrome" | "spike";
 export type SpoilerId = "none" | "wing" | "fin";
 export type FinishId = "solid" | "gloss" | "matte" | "chrome" | "glass" | "holo";
 export type BoosterId = "single" | "twin" | "neon";
-export type BoatId = "cat" | "speed" | "ski" | "yacht" | "tug" | "raft" | "hovercraft" | "airboat" | "viking" | "duck" | "hydrofoil" | "outrigger";
-export type PlaneId = "wing" | "bi" | "delta" | "stealth" | "jetliner" | "twinprop" | "nimbus" | "heli" | "blimp" | "saucer" | "canard" | "vtol";
-export type SubId = "classic" | "pod" | "shark" | "diver" | "dredger" | "sleuth" | "leviathan" | "manta" | "squid" | "bathy" | "torpedo" | "nautilus" | "raypod";
-export type HoverId = "maglev" | "disc" | "nacelle" | "magboard" | "gyro" | "triad" | "flux";
+export type BoatId = "cat" | "speed" | "ski" | "yacht" | "tug" | "raft" | "hovercraft" | "airboat" | "viking" | "duck" | "hydrofoil" | "outrigger" | "paddle" | "trimaran" | "swan";
+export type PlaneId = "wing" | "bi" | "delta" | "stealth" | "jetliner" | "twinprop" | "nimbus" | "heli" | "blimp" | "saucer" | "canard" | "vtol" | "glider" | "seaplane" | "starship";
+export type SubId = "classic" | "pod" | "shark" | "diver" | "dredger" | "sleuth" | "leviathan" | "manta" | "squid" | "bathy" | "torpedo" | "nautilus" | "raypod" | "angler" | "bell" | "orca";
+export type HoverId = "maglev" | "disc" | "nacelle" | "magboard" | "gyro" | "triad" | "flux" | "skiff" | "halo" | "shard";
 export type VehicleMode = "land" | "boat" | "plane" | "sub" | "hover";
 
 export interface CharacterDef {
@@ -151,6 +152,14 @@ const RAW_CHARACTERS: RawCharacter[] = [
   { id: "byte", name: "BYTE", form: "holo", eye: "sharp", primary: "#60a5fa", secondary: "#eff6ff", accent: "#1d4ed8", speed: 4, accel: 3, handling: 4, weight: 2, role: "tech", favorite: "popup" },
   { id: "ash", name: "ASH", form: "flame", eye: "sparkle", primary: "#9ca3af", secondary: "#f3f4f6", accent: "#374151", speed: 4, accel: 5, handling: 3, weight: 1, role: "trickster", favorite: "mine" },
   { id: "tuxi", name: "TUXI", form: "drop", eye: "sleepy", primary: "#334155", secondary: "#ffffff", accent: "#fbbf24", speed: 3, accel: 3, handling: 4, weight: 4, role: "balanced", favorite: "freeze" },
+  { id: "medu", name: "MEDU", form: "jelly", eye: "sparkle", primary: "#e9a8ff", secondary: "#fdf4ff", accent: "#a21caf", speed: 3, accel: 4, handling: 5, weight: 1, role: "handler", favorite: "zap" },
+  { id: "ripp", name: "RIPP", form: "jelly", eye: "sharp", primary: "#2dd4bf", secondary: "#f0fdfa", accent: "#0f766e", speed: 4, accel: 3, handling: 4, weight: 2, role: "trickster", favorite: "wave" },
+  { id: "orbi", name: "ORBI", form: "planet", eye: "sparkle", primary: "#fcd34d", secondary: "#fff7d6", accent: "#b45309", speed: 4, accel: 3, handling: 3, weight: 3, role: "balanced", favorite: "orb" },
+  { id: "luna", name: "LUNA", form: "planet", eye: "sleepy", primary: "#c4b5fd", secondary: "#f5f3ff", accent: "#4338ca", speed: 3, accel: 4, handling: 4, weight: 2, role: "tech", favorite: "ghost" },
+  { id: "cog", name: "COG", form: "gear", eye: "visor", primary: "#fb923c", secondary: "#fff1e6", accent: "#7c2d12", speed: 4, accel: 2, handling: 2, weight: 5, role: "heavy", favorite: "quake" },
+  { id: "bolt", name: "BOLT", form: "gear", eye: "sharp", primary: "#facc15", secondary: "#fefce8", accent: "#854d0e", speed: 5, accel: 4, handling: 2, weight: 2, role: "speed", favorite: "missile" },
+  { id: "saya", name: "SAYA", form: "leaf", eye: "sharp", primary: "#fb7185", secondary: "#fff1f2", accent: "#9f1239", speed: 4, accel: 4, handling: 4, weight: 1, role: "trickster", favorite: "steal" },
+  { id: "gale", name: "GALE", form: "cloud", eye: "visor", primary: "#7dd3fc", secondary: "#f0f9ff", accent: "#075985", speed: 5, accel: 3, handling: 3, weight: 2, role: "speed", favorite: "warp" },
 ];
 
 const fixEarColors: Record<string, { primary?: string; secondary?: string; accent?: string }> = {
@@ -419,6 +428,69 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     hemiSky: "#b8f0f0", hemiGround: "#c0c0c0", cloud: "#ffffff", isle: "#a0a0a0", glow: "#ffff00",
     particles: ["#ff00ff", "#ffff00", "#00ff66", "#0000ee"], prop: "win98", bloom: 0.75,
   },
+  level1: {
+    id: "level1", name: "LEVEL 1", skyTop: "#2b2f33", skyBottom: "#4a4f55", fog: "#3a3d40", fogNear: 50, fogFar: 220,
+    water: "#3b5560", ground: "#5a5d60", road: "#6b6e70", roadLine: "#d9c34a", roadEdge: "#9a9da0",
+    barrierA: "#7d8084", barrierB: "#d9c34a", sun: "#e8f0ff", sunIntensity: 1.3, ambient: 1.0, ambientColor: "#c8d4e0",
+    hemiSky: "#5a6068", hemiGround: "#3a3d40", cloud: "#8a8d90", isle: "#4a4d50", glow: "#b8d8ff",
+    particles: ["#d9c34a", "#b8d8ff", "#9a9da0", "#ffffff"], prop: "lamp", bloom: 0.6, dark: true,
+  },
+  levelfun: {
+    id: "levelfun", name: "LEVEL FUN", skyTop: "#ffd84a", skyBottom: "#fff3b0", fog: "#ffe98a", fogNear: 70, fogFar: 260,
+    water: "#ff6fb5", ground: "#f5e08a", road: "#fff6d0", roadLine: "#ff3d7f", roadEdge: "#3dc6ff",
+    barrierA: "#ffe45c", barrierB: "#ff5fa2", sun: "#fff8e0", sunIntensity: 1.6, ambient: 1.1, ambientColor: "#fff4d0",
+    hemiSky: "#fff3b0", hemiGround: "#f5e08a", cloud: "#fff8dd", isle: "#f0cf6a", glow: "#ff5fa2",
+    particles: ["#ff3d7f", "#3dc6ff", "#7be36f", "#ffe45c"], prop: "lamp", bloom: 0.8,
+  },
+  weirdcore: {
+    id: "weirdcore", name: "WEIRDCORE", skyTop: "#7fb8ff", skyBottom: "#f2f7ff", fog: "#dfe9ff", fogNear: 80, fogFar: 300,
+    water: "#5c7cff", ground: "#7fdc6a", road: "#e9e4ff", roadLine: "#ff2ad4", roadEdge: "#ffffff",
+    barrierA: "#9b6bff", barrierB: "#ffef5c", sun: "#ffffff", sunIntensity: 1.8, ambient: 1.15, ambientColor: "#f0eaff",
+    hemiSky: "#bcd6ff", hemiGround: "#7fdc6a", cloud: "#ffffff", isle: "#68c556", glow: "#ff2ad4",
+    particles: ["#ff2ad4", "#ffef5c", "#9b6bff", "#ffffff"], prop: "door", bloom: 0.9,
+  },
+  glitchcore: {
+    id: "glitchcore", name: "GLITCHCORE", skyTop: "#0a0014", skyBottom: "#2a0050", fog: "#1a0030", fogNear: 70, fogFar: 260,
+    water: "#00ffd5", ground: "#14002a", road: "#1d0838", roadLine: "#00ff6a", roadEdge: "#ff00e1",
+    barrierA: "#ff00e1", barrierB: "#00f0ff", sun: "#d0ffff", sunIntensity: 1.5, ambient: 1.25, ambientColor: "#9a6bff",
+    hemiSky: "#3a0070", hemiGround: "#14002a", cloud: "#3a1060", isle: "#2a0050", glow: "#00ffd5",
+    particles: ["#00ffd5", "#ff00e1", "#00ff6a", "#ffffff"], prop: "circuit", bloom: 1.5, dark: true,
+  },
+  kidcore: {
+    id: "kidcore", name: "KIDCORE", skyTop: "#3fb6ff", skyBottom: "#fff9c4", fog: "#d9f2ff", fogNear: 80, fogFar: 310,
+    water: "#2f8cff", ground: "#5ad44a", road: "#ffffff", roadLine: "#ff3b3b", roadEdge: "#ffd400",
+    barrierA: "#ff3b3b", barrierB: "#2f6dff", sun: "#fffbe8", sunIntensity: 1.85, ambient: 1.1, ambientColor: "#ffffff",
+    hemiSky: "#bfe8ff", hemiGround: "#5ad44a", cloud: "#ffffff", isle: "#45b93a", glow: "#ffd400",
+    particles: ["#ff3b3b", "#ffd400", "#2f6dff", "#5ad44a"], prop: "y2k", bloom: 0.75,
+  },
+  cottagecore: {
+    id: "cottagecore", name: "COTTAGECORE", skyTop: "#a8d8ea", skyBottom: "#fff5e1", fog: "#f3ead3", fogNear: 80, fogFar: 300,
+    water: "#7fb7a4", ground: "#9cc56b", road: "#e9d8b4", roadLine: "#ffffff", roadEdge: "#c79a6b",
+    barrierA: "#b07a4f", barrierB: "#f7c6d0", sun: "#fff1d0", sunIntensity: 1.65, ambient: 1.0, ambientColor: "#fff6e0",
+    hemiSky: "#dcefe8", hemiGround: "#9cc56b", cloud: "#ffffff", isle: "#88b45a", glow: "#f7c6d0",
+    particles: ["#f7c6d0", "#ffffff", "#ffe39a", "#c3e6a0"], prop: "tree", bloom: 0.7,
+  },
+  traumacore: {
+    id: "traumacore", name: "TRAUMACORE", skyTop: "#3b1d4a", skyBottom: "#f2b8d8", fog: "#c98fb4", fogNear: 70, fogFar: 270,
+    water: "#8a5c9e", ground: "#d9a6c4", road: "#f7e1ee", roadLine: "#ff8fc7", roadEdge: "#ffffff",
+    barrierA: "#ff9fd0", barrierB: "#bfa3ff", sun: "#ffe0f0", sunIntensity: 1.45, ambient: 1.05, ambientColor: "#ffd6ec",
+    hemiSky: "#c98fb4", hemiGround: "#8a5c9e", cloud: "#ffd6ec", isle: "#b07aa0", glow: "#ff8fc7",
+    particles: ["#ff8fc7", "#ffffff", "#bfa3ff", "#ffd6ec"], prop: "lamp", bloom: 1.0,
+  },
+  nightcore: {
+    id: "nightcore", name: "NIGHTCORE", skyTop: "#12083a", skyBottom: "#6a2ca8", fog: "#3a1a6a", fogNear: 70, fogFar: 270,
+    water: "#2ad4ff", ground: "#24124a", road: "#2c1a5a", roadLine: "#ff6ad5", roadEdge: "#7af0ff",
+    barrierA: "#ff6ad5", barrierB: "#7af0ff", sun: "#e0d0ff", sunIntensity: 1.55, ambient: 1.2, ambientColor: "#b08aff",
+    hemiSky: "#5a2c9a", hemiGround: "#24124a", cloud: "#5a3a9a", isle: "#3a1a6a", glow: "#ff6ad5",
+    particles: ["#ff6ad5", "#7af0ff", "#ffffff", "#ffe066"], prop: "y2k", bloom: 1.4, dark: true,
+  },
+  aurora: {
+    id: "aurora", name: "FRUTIGER AURORA", skyTop: "#06264a", skyBottom: "#2fd6b0", fog: "#1a5a7a", fogNear: 80, fogFar: 300,
+    water: "#1aa6c9", ground: "#cfe9f5", road: "#e6f7ff", roadLine: "#6effd2", roadEdge: "#ffffff",
+    barrierA: "#6effd2", barrierB: "#b38cff", sun: "#d8fff4", sunIntensity: 1.6, ambient: 1.15, ambientColor: "#bfeeff",
+    hemiSky: "#2a8fb0", hemiGround: "#cfe9f5", cloud: "#a8e8ff", isle: "#9fd4e6", glow: "#6effd2",
+    particles: ["#6effd2", "#b38cff", "#ffffff", "#7de1ff"], prop: "crystal", bloom: 1.3, dark: true,
+  },
   cyberpunk: {
     id: "cyberpunk", name: "CYBERPUNK", skyTop: "#141a3c", skyBottom: "#2a2466", fog: "#1c1c4a", fogNear: 80, fogFar: 280,
     water: "#102040", ground: "#22243a", road: "#2a2452", roadLine: "#39ff14", roadEdge: "#7c9cff",
@@ -435,7 +507,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
   },
 };
 
-export const THEME_LIST: ThemeId[] = ["frutiger", "eco", "aero", "liquid", "y2k", "win98", "vapor", "techno", "aqua", "sunset", "dreamcore", "cyberpunk", "noir"];
+export const THEME_LIST: ThemeId[] = ["frutiger", "eco", "aero", "aurora", "liquid", "y2k", "win98", "vapor", "techno", "aqua", "sunset", "dreamcore", "weirdcore", "glitchcore", "kidcore", "cottagecore", "traumacore", "nightcore", "levelfun", "cyberpunk", "noir"];
 
 // ---------------------------------------------------------------------------
 // Vehicle customization: 25 chassis, 5 wheels, 3 spoilers, 3 boosters,
@@ -490,10 +562,10 @@ export const FINISH_META: Record<FinishId, { swatch: string; labelKey: string }>
   holo: { swatch: "#ff9ee0", labelKey: "fin_holo" },
 };
 export const BOOSTERS: BoosterId[] = ["single", "twin", "neon"];
-export const BOATS: BoatId[] = ["cat", "speed", "ski", "yacht", "tug", "raft", "hovercraft", "airboat", "viking", "duck", "hydrofoil", "outrigger"];
-export const PLANES: PlaneId[] = ["wing", "bi", "delta", "stealth", "jetliner", "twinprop", "nimbus", "heli", "blimp", "saucer", "canard", "vtol"];
-export const HOVERS: HoverId[] = ["maglev", "disc", "nacelle", "magboard", "gyro", "triad", "flux"];
-export const SUBS: SubId[] = ["classic", "pod", "shark", "diver", "dredger", "sleuth", "leviathan", "manta", "squid", "bathy", "torpedo", "nautilus", "raypod"];
+export const BOATS: BoatId[] = ["cat", "speed", "ski", "yacht", "tug", "raft", "hovercraft", "airboat", "viking", "duck", "hydrofoil", "outrigger", "paddle", "trimaran", "swan"];
+export const PLANES: PlaneId[] = ["wing", "bi", "delta", "stealth", "jetliner", "twinprop", "nimbus", "heli", "blimp", "saucer", "canard", "vtol", "glider", "seaplane", "starship"];
+export const HOVERS: HoverId[] = ["maglev", "disc", "nacelle", "magboard", "gyro", "triad", "flux", "skiff", "halo", "shard"];
+export const SUBS: SubId[] = ["classic", "pod", "shark", "diver", "dredger", "sleuth", "leviathan", "manta", "squid", "bathy", "torpedo", "nautilus", "raypod", "angler", "bell", "orca"];
 
 /**
  * Per-craft speed and handling, taken from the second lineage and extended to every
@@ -518,6 +590,9 @@ export const BOAT_STATS: CraftStat[] = [
   { id: "duck", speed: 0.9, handling: 1.32 },
   { id: "hydrofoil", speed: 1.18, handling: 1.04 },
   { id: "outrigger", speed: 1.02, handling: 1.23 },
+  { id: "paddle", speed: 0.88, handling: 1.12 },
+  { id: "trimaran", speed: 1.2, handling: 0.95 },
+  { id: "swan", speed: 0.9, handling: 1.35 },
 ];
 
 export const PLANE_STATS: CraftStat[] = [
@@ -533,6 +608,9 @@ export const PLANE_STATS: CraftStat[] = [
   { id: "saucer", speed: 1.08, handling: 1.26 },
   { id: "canard", speed: 1.16, handling: 1.08 },
   { id: "vtol", speed: 0.98, handling: 1.3 },
+  { id: "glider", speed: 1.04, handling: 1.25 },
+  { id: "seaplane", speed: 0.92, handling: 1.18 },
+  { id: "starship", speed: 1.32, handling: 0.86 },
 ];
 
 export const SUB_STATS: CraftStat[] = [
@@ -549,6 +627,9 @@ export const SUB_STATS: CraftStat[] = [
   { id: "torpedo", speed: 1.36, handling: 0.76 },
   { id: "nautilus", speed: 0.98, handling: 1.2 },
   { id: "raypod", speed: 1.16, handling: 1.16 },
+  { id: "angler", speed: 1.02, handling: 1.12 },
+  { id: "bell", speed: 0.86, handling: 1.3 },
+  { id: "orca", speed: 1.24, handling: 0.94 },
 ];
 
 export const HOVER_STATS: CraftStat[] = [
@@ -559,6 +640,9 @@ export const HOVER_STATS: CraftStat[] = [
   { id: "gyro", speed: 0.96, handling: 1.22 },
   { id: "triad", speed: 1.06, handling: 1.2 },
   { id: "flux", speed: 1.17, handling: 0.98 },
+  { id: "skiff", speed: 1.1, handling: 1.05 },
+  { id: "halo", speed: 0.95, handling: 1.32 },
+  { id: "shard", speed: 1.25, handling: 0.88 },
 ];
 
 const CRAFT_SPEEDS: Record<string, number> = {};
@@ -705,6 +789,14 @@ export const FUSION_SHOTS: Record<string, FusionShot> = {
   byte: { name: "PACKET STORM", kind: "fan", effect: "steal", color: "#60a5fa", rate: 1.6, count: 3, power: 1 },
   ash: { name: "CINDERS", kind: "rear", effect: "burn", color: "#9ca3af", rate: 0.8, count: 3, power: 0.8 },
   tuxi: { name: "SNOWBALL", kind: "mortar", effect: "freeze", color: "#e2e8f0", rate: 1.7, count: 1, power: 1 },
+  medu: { name: "STING", kind: "lance", effect: "stun", color: "#e9a8ff", rate: 1.25, count: 1, power: 0.9 },
+  ripp: { name: "UNDERTOW", kind: "rear", effect: "tug", color: "#2dd4bf", rate: 1.1, count: 2, power: 0.9 },
+  orbi: { name: "MOONLET", kind: "homing", effect: "lift", color: "#fcd34d", rate: 1.45, count: 1, power: 1.05 },
+  luna: { name: "ECLIPSE", kind: "nova", effect: "blind", color: "#a78bfa", rate: 2.0, count: 1, power: 1 },
+  cog: { name: "RIVET GUN", kind: "bolt", effect: "shove", color: "#fb923c", rate: 0.8, count: 3, power: 0.75 },
+  bolt: { name: "TESLA FAN", kind: "fan", effect: "drain", color: "#facc15", rate: 1.2, count: 3, power: 0.85 },
+  saya: { name: "PETAL BLADE", kind: "fan", effect: "slow", color: "#fb7185", rate: 0.95, count: 4, power: 0.8 },
+  gale: { name: "CYCLONE", kind: "mortar", effect: "shove", color: "#7dd3fc", rate: 1.35, count: 2, power: 1 },
 };
 
 /**
@@ -1107,6 +1199,15 @@ const THEME_BIOMES: Record<ThemeId, BiomeId[]> = {
   mac: ["cloud", "coast", "city", "cloud"],
   slime: ["meadow", "reef", "coast", "meadow"],
   webcore: ["city", "meadow", "city", "ruins"],
+  level1: ["ruins", "city", "ruins", "city"],
+  levelfun: ["city", "ruins", "city", "city"],
+  weirdcore: ["meadow", "cloud", "meadow", "ruins"],
+  glitchcore: ["city", "volcano", "city", "ruins"],
+  kidcore: ["meadow", "coast", "meadow", "meadow"],
+  cottagecore: ["forest", "meadow", "forest", "meadow"],
+  traumacore: ["cloud", "meadow", "cloud", "ruins"],
+  nightcore: ["city", "cloud", "city", "volcano"],
+  aurora: ["snow", "cloud", "snow", "coast"],
 };
 
 /** Biome of the stretch at t, and how far we are into the next one. */
@@ -1209,7 +1310,12 @@ export const THEME_BIOME: Record<ThemeId, BiomeId> = {
   y2k: "city", liquid: "coast", win98: "city", vapor: "ruins", dreamcore: "cloud", cyberpunk: "volcano", noir: "ruins",
   backrooms: "ruins", liminal: "cloud", eden: "meadow",
   metro: "city", tux: "snow", debian: "cloud", arch: "snow", mac: "cloud", slime: "meadow", webcore: "city",
+  level1: "ruins", levelfun: "city", weirdcore: "meadow", glitchcore: "city", kidcore: "meadow", cottagecore: "forest",
+  traumacore: "cloud", nightcore: "city", aurora: "snow",
 };
+
+/** Aesthetics that are indoors wherever they are: the corridor walls and ceiling go up along their stretches. */
+export const ROOFED_THEMES = new Set<ThemeId>(["backrooms", "level1", "levelfun"]);
 
 const MUTATION_STEPS = 6;
 const MUTATION_PROPS: ThemeDef["prop"][] = ["palm", "crystal", "tree", "cactus", "coral", "y2k", "circuit", "liquid", "vapor"];

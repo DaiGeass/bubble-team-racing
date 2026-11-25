@@ -135,6 +135,17 @@ export function ResultsScreen() {
             ))}
           </div>
 
+          {result.rhythm && (
+            <div className="mt-3 flex items-center gap-3 rounded-2xl px-4 py-3 text-white" style={{ background: "linear-gradient(90deg,#ff5fd2,#7c5cff)" }}>
+              <div className="pop-in grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/25 font-display text-4xl font-black drop-shadow">{result.rhythm.rank}</div>
+              <div className="min-w-0 flex-1 text-xs font-bold">
+                <div className="text-[10px] uppercase tracking-wide text-white/80">{t("beatScore")} · {result.rhythm.score}</div>
+                <div>{t("beatPerfect")} {result.rhythm.perfect} · {t("beatGood")} {result.rhythm.good} · {t("beatOff")} {result.rhythm.off}</div>
+                <div>{t("beatBest")} ×{result.rhythm.best}</div>
+              </div>
+            </div>
+          )}
+
           <div className="mt-3 flex items-center justify-between rounded-2xl px-4 py-3" style={{ background: "linear-gradient(90deg,#ffd166,#ff9f6e)" }}>
             <span className="font-display text-sm font-extrabold uppercase tracking-wide text-white/90">{t("grandTotal")}</span>
             <span className="font-display text-3xl font-extrabold text-white drop-shadow">{result.score}</span>

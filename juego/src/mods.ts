@@ -102,7 +102,7 @@ export function saveInstalled(list: InstalledMod[]) {
 const ID = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const COLOUR = /^#[0-9a-fA-F]{6}$/;
 const num = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
-const FORMS: FormId[] = ["drop", "bubble", "leaf", "crystal", "holo", "cloud", "star", "flame"];
+const FORMS: FormId[] = ["drop", "bubble", "leaf", "crystal", "holo", "cloud", "star", "flame", "jelly", "planet", "gear"];
 const EYES: EyeStyle[] = ["sparkle", "sharp", "visor", "sleepy"];
 const ROLES: RoleId[] = ["speed", "handler", "heavy", "balanced", "trickster", "tech"];
 const WEAPONS: WeaponId[] = ["orb", "missile", "bubble", "slime", "beam", "zap", "mine", "wave", "swap", "magnet", "ghost", "quake", "freeze", "steal", "popup", "giant", "warp"];

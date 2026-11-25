@@ -331,3 +331,110 @@ button, a, [role="button"] {
 @keyframes final-lap-beat {50% {opacity:1;}}
 .final-lap-still {animation:none;}
 @media (prefers-reduced-motion: reduce) {.final-lap-edge {animation:none;}}
+
+/* rhythm mode: a grade pops up and fades as it rises */
+@keyframes beat-pop {
+  0% { transform: translate(-50%, 10px) scale(0.6); opacity: 0; }
+  25% { transform: translate(-50%, 0) scale(1.18); opacity: 1; }
+  100% { transform: translate(-50%, -18px) scale(1); opacity: 0; }
+}
+.beat-pop { animation: beat-pop 0.7s ease-out forwards; }
+
+/* rhythm screen: blobs that breathe with the tempo of the song */
+@keyframes tempo-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.35; }
+  12% { transform: scale(1.12); opacity: 0.6; }
+}
+.tempo-blob { animation: tempo-breathe var(--beat, 0.5s) ease-out infinite; }
+
+/* ---------- UI skins of the internet aesthetics ---------- */
+
+/* kidcore: thick outlines and primary colours, like a lunchbox */
+.theme-kidcore .glass-panel,
+.theme-kidcore .glass-btn {
+  background: rgba(255, 255, 255, 0.86);
+  border: 3px solid #2f6dff;
+  box-shadow: 5px 5px 0 #ff3b3b, 0 10px 30px rgba(47, 109, 255, 0.25);
+}
+.theme-kidcore .glass-btn:hover { box-shadow: 7px 7px 0 #ffd400, 0 12px 34px rgba(47, 109, 255, 0.3); }
+.theme-kidcore .font-display { color: #ff3b3b; text-shadow: 2px 2px 0 #ffd400; }
+.theme-kidcore .aero-gradient { background: linear-gradient(180deg, #3fb6ff 0%, #bfe8ff 50%, #fff9c4 100%); }
+
+/* cottagecore: linen, a little lace, warm and soft */
+.theme-cottagecore { color: #5b3a24; }
+.theme-cottagecore .glass-panel,
+.theme-cottagecore .glass-btn {
+  background: linear-gradient(170deg, rgba(255, 250, 238, 0.9), rgba(247, 230, 214, 0.78));
+  border: 1.5px dashed #c79a6b;
+  box-shadow: 0 10px 30px rgba(176, 122, 79, 0.22), inset 0 1px 0 #fff;
+}
+.theme-cottagecore .font-display { color: #8a5a3a; letter-spacing: 0.03em; }
+.theme-cottagecore .aero-gradient { background: linear-gradient(180deg, #a8d8ea 0%, #fff5e1 55%, #dcefc8 100%); }
+
+/* weirdcore: too bright, slightly wrong, the text says too much */
+.theme-weirdcore .glass-panel,
+.theme-weirdcore .glass-btn {
+  background: rgba(240, 234, 255, 0.78);
+  border: 2px solid #9b6bff;
+  box-shadow: 0 0 0 3px rgba(255, 239, 92, 0.7), 0 14px 40px rgba(155, 107, 255, 0.3);
+}
+.theme-weirdcore .font-display { color: #6b2bd9; text-shadow: 3px 0 0 rgba(255, 42, 212, 0.6), -3px 0 0 rgba(92, 124, 255, 0.6); }
+.theme-weirdcore .aero-gradient { background: linear-gradient(180deg, #7fb8ff 0%, #f2f7ff 60%, #bff0a8 100%); }
+
+/* glitchcore: black glass, colour split, the edges flicker */
+@keyframes glitch-edge {
+  0%, 92%, 100% { transform: none; }
+  93% { transform: translate(2px, -1px); }
+  95% { transform: translate(-2px, 1px); }
+  97% { transform: translate(1px, 0); }
+}
+.theme-glitchcore .glass-panel,
+.theme-glitchcore .glass-btn {
+  background: rgba(232, 255, 251, 0.86);
+  border: 1.5px solid #00ffd5;
+  box-shadow: 3px 0 0 rgba(255, 0, 225, 0.75), -3px 0 0 rgba(0, 240, 255, 0.75), 0 14px 40px rgba(0, 0, 0, 0.5);
+}
+.theme-glitchcore .glass-panel { animation: glitch-edge 4s steps(1) infinite; }
+.theme-glitchcore .font-display { color: #14002a; text-shadow: 2px 0 #ff00e1, -2px 0 #00f0ff; }
+.theme-glitchcore .aero-gradient { background: linear-gradient(180deg, #d9fff8 0%, #b9a3ff 45%, #2a0050 100%); }
+
+/* traumacore: pastel at dusk, soft blur */
+.theme-traumacore { color: #4a1d3e; }
+.theme-traumacore .glass-panel,
+.theme-traumacore .glass-btn {
+  background: linear-gradient(160deg, rgba(255, 236, 246, 0.82), rgba(214, 190, 255, 0.55));
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 50px rgba(201, 143, 180, 0.4), inset 0 2px 0 #fff, 0 0 26px rgba(255, 143, 199, 0.35);
+}
+.theme-traumacore .font-display { color: #b0407e; text-shadow: 0 0 16px rgba(255, 214, 236, 0.95); }
+.theme-traumacore .aero-gradient { background: linear-gradient(180deg, #ffe6f3 0%, #f2b8d8 45%, #8a5c9e 100%); }
+
+/* nightcore: neon on night, fast and shiny */
+.theme-nightcore .glass-panel,
+.theme-nightcore .glass-btn {
+  background: linear-gradient(160deg, rgba(248, 238, 255, 0.86), rgba(226, 200, 255, 0.74));
+  border: 1.5px solid #ff6ad5;
+  box-shadow: 0 0 22px rgba(255, 106, 213, 0.55), inset 0 0 18px rgba(122, 240, 255, 0.35);
+}
+.theme-nightcore .font-display { color: #6a2ca8; text-shadow: 0 0 12px #ff6ad5; letter-spacing: 0.08em; }
+.theme-nightcore .aero-gradient { background: linear-gradient(180deg, #f3e2ff 0%, #c79cff 45%, #3a1a6a 100%); }
+
+/* Level Fun: party colours that are a bit too cheerful */
+.theme-levelfun .glass-panel,
+.theme-levelfun .glass-btn {
+  background: rgba(255, 246, 208, 0.88);
+  border: 2px solid #ff5fa2;
+  box-shadow: 0 10px 30px rgba(255, 95, 162, 0.25), inset 0 -6px 0 rgba(61, 198, 255, 0.25);
+}
+.theme-levelfun .font-display { color: #ff3d7f; }
+.theme-levelfun .aero-gradient { background: linear-gradient(180deg, #ffd84a 0%, #fff3b0 60%, #ffe98a 100%); }
+
+/* Frutiger Aurora: glossy glass over the polar night */
+.theme-aurora .glass-panel,
+.theme-aurora .glass-btn {
+  background: linear-gradient(160deg, rgba(240, 255, 252, 0.86), rgba(200, 255, 236, 0.7) 50%, rgba(226, 214, 255, 0.74));
+  border: 1.5px solid rgba(200, 255, 240, 0.95);
+  box-shadow: 0 16px 50px rgba(0, 20, 40, 0.45), inset 0 2px 0 rgba(255, 255, 255, 0.9), 0 0 30px rgba(110, 255, 210, 0.35);
+}
+.theme-aurora .font-display { color: #0f4a6a; text-shadow: 0 0 18px rgba(110, 255, 210, 0.9); }
+.theme-aurora .aero-gradient { background: linear-gradient(180deg, #d8fff4 0%, #7fe0d0 40%, #0f4a6a 100%); }

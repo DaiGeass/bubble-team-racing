@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { graphicsProfile, ResolutionBudget } from "../src/graphics";
+import { graphicsProfile, ResolutionBudget, tierFromRenderer } from "../src/graphics";
 
 function run(budget: ResolutionBudget, fps: number, seconds: number) {
   const changes: number[] = [];
@@ -70,4 +70,13 @@ test("invalid intervals do not resize or poison later samples", () => {
   const budget = new ResolutionBudget(1.25);
   for (const delta of [NaN, Infinity, 0, -1]) assert.equal(budget.sample(delta), null);
   assert.ok(run(budget, 30, 8).length > 0);
+});
+test("auto quality starts from the graphics card's class", () => {
+  assert.equal(tierFromRenderer("llvmpipe (LLVM 17.0.6, 256 bits)"), "low");
+  assert.equal(tierFromRenderer("ANGLE (Microsoft, Microsoft Basic Render Driver Direct3D11)"), "low");
+  assert.equal(tierFromRenderer("Mesa Intel(R) UHD Graphics 620 (KBL GT2)"), "balanced");
+  assert.equal(tierFromRenderer("AMD Radeon(TM) Graphics (radeonsi, renoir)"), "balanced");
+  assert.equal(tierFromRenderer("ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0)"), "high");
+  assert.equal(tierFromRenderer("AMD Radeon RX 6700 XT (radeonsi, navi22)"), "high");
+  assert.equal(tierFromRenderer("NVIDIA GeForce GTX 1050", 2), "low");
 });

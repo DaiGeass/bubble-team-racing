@@ -407,6 +407,8 @@ export function design(spec: DesignSpec): TrackDef {
     y2k: "city", liquid: "coast", win98: "city", vapor: "ruins", dreamcore: "cloud", cyberpunk: "volcano", noir: "ruins",
     backrooms: "ruins", liminal: "cloud", eden: "meadow",
     metro: "city", tux: "snow", debian: "cloud", arch: "snow", mac: "cloud", slime: "meadow", webcore: "city",
+    level1: "ruins", levelfun: "city", weirdcore: "meadow", glitchcore: "city", kidcore: "meadow", cottagecore: "forest",
+    traumacore: "cloud", nightcore: "city", aurora: "snow",
   };
   const biomes: BiomeDef[] = sectors.map((s, i) => ({ id: biomeOf[s.theme], t0: s.t0, t1: sectors[i + 1]?.t0 ?? 1 }));
 

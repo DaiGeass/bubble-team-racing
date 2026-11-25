@@ -1,6 +1,7 @@
 import { expandTracks } from "./trackExpansion";
 import type { TrackDef } from "./data";
 import { design, BYPASS } from "./trackDesign";
+import { CORE_TRACKS } from "./coreTracks";
 
 // ---------------------------------------------------------------------------
 // The circuits: one per aesthetic, one built around each kind of vehicle, and three big ones. Each is drawn by hand with the turtle
@@ -1162,11 +1163,16 @@ export const DESIGNED_TRACKS: TrackDef[] = expandTracks([
       t.go(40).mark("go").flex("f1", 120)
         .left(180, 230, 6).left(180, 190, 6).mark("m0").left(180, 150, 6).left(180, 110, 6).mark("m1")
         .left(180, 45, 12).mark("br")
-        .go(300, -10).left(90, 90, -10).flex("f2", 220, -8).left(90, 90, -8).go(80),
+        .go(60, -2).mark("bA").go(BYPASS + 63, -8).mark("bB").left(90, 90, -10).flex("f2", 220, -8).left(90, 90, -8).go(80),
     zones: [["m0", "m1", "mag"]],
-    sectors: [["m0", "vapor"], ["br", "dreamcore"]],
+    sectors: [["m0", "vapor"], ["br", "dreamcore"], ["bB", "debian"]],
     traffic: 2,
-    pads: [["go", "boost"], ["m0", "boost", 1.4], ["br", "boost", 1.6, 30]],
+    pads: [["go", "boost"], ["m0", "boost", 1.4], ["br", "boost", 1.6, 30], ["bB", "boost"]],
+    // the bridge splits: over the top with a gap to jump, or out to the side
+    routes: [
+      { from: "bA", to: "bB", draw: (t) => t.bypass("L", 63, 9, -8), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
+      { from: "bA", to: "bB", draw: (t) => t.bypass("R", 63, 0, -8), kind: "side", pads: [["mid", "jump", 10]] },
+    ],
   }),
 
   // HEART — up one side, round two lobes with a dip between them, down the
@@ -1232,4 +1238,5 @@ export const DESIGNED_TRACKS: TrackDef[] = expandTracks([
       { from: "bA", to: "bB", draw: (t) => t.bypass("R", 223, 10, -12), kind: "high", holes: [["mid", 12]], pads: [["mid", "boost", 1.5]] },
     ],
   }),
+  ...CORE_TRACKS,
 ]);

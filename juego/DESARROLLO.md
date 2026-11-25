@@ -35,7 +35,7 @@ No muestra todos los tipos de colisión ni todas las obstrucciones posibles. Usa
 
 ## Música
 
-`src/music.ts` genera la música mientras suena, sin archivos: compases de 16 pasos sobre un bucle de cuatro acordes, con batería, bajo, arpegio y melodía. Cada circuito saca su tonalidad y su progresión de su nombre, y su estilo de la estética (`aero`, `synth`, `drive`, `eerie`). Empieza con el «¡Ya!», sube de intensidad en la última vuelta, se calla en pausa local y se detiene al salir de la carrera. El volumen va en Opciones («Música») sobre el volumen general. Para poner una banda sonora de verdad basta con sustituir `startMusic`, `setMusicIntensity` y `stopMusic`.
+`src/music.ts` genera la música mientras suena, sin archivos: compases de 16 pasos sobre un bucle de cuatro acordes, con batería, bajo, arpegio y melodía. Cada circuito saca su tonalidad y su progresión de su nombre, y su estilo de la estética (`aero`, `synth`, `drive`, `eerie`). Empieza con el «¡Ya!», sube de intensidad en la última vuelta, se calla en pausa local y se detiene al salir de la carrera. El volumen va en Opciones («Música») sobre el volumen general. Para poner una banda sonora de verdad basta con sustituir `startMusic`, `setMusicIntensity` y `stopMusic`. Los menús tienen su propia música (`App.tsx`), con el estilo de la estética elegida; se cambia al cambiar de estética, la sustituye la de la carrera y se calla en el modo ritmo.
 
 ## Trampas
 
@@ -52,10 +52,37 @@ No muestra todos los tipos de colisión ni todas las obstrucciones posibles. Usa
 - En carrera: velocidad × `rushFor(bpm)` (1,15–1,45) y un poco más en los compases fuertes (`rhythmRush`); notas en los pulsos fuertes (`rhythmNotes`) que encadenan combo «¡Al ritmo!» y turbo; la cámara late con el pulso. El circuito se construye mientras se conduce (`game/reveal.ts`): un frente de construcción, medido en progreso de vuelta, va por delante del líder (más lejos cuanto más rápido va) y avanza a golpes en cada pulso; detrás del frente las piezas suben desde abajo brillando y más allá no hay nada: ni carretera, barreras, impulsores, trampas, cajas ni notas, y el minimapa solo dibuja lo construido. El trazado se calcula al cargar la canción (lo necesitan la física, los bots y la red), pero no se muestra en ningún sitio antes de construirse.
 - No se corre hacia la línea de salida: no hay vueltas que contar (el marcador muestra lo que queda de canción) y el arco de salida no se dibuja. Cuando la canción termina (reloj del audio, o el de carrera si no suena), la meta sale del suelo un poco por delante del líder y la carrera acaba al cruzarla. Si la canción dura más que la vuelta, el circuito sigue dando vueltas.
 - En red el anfitrión manda los datos y cada máquina construye el mismo circuito; el audio va aparte en trozos de 600 KB (hasta 24 MB).
+- Canciones del juego (`src/songbook.ts`): seis recetas (tempo, tonalidad, sonidos y forma: intro, estrofa, subida, drop, pausa) que `synthRecipe` toca muestra a muestra en un `Float32Array` (osciladores, bombo, ruido filtrado, limitador suave), en unos 250 ms. Pasan por `analyseSong` con su tempo conocido (no se confunde 150 con 75) y se pueden enviar en red como WAV (`toWav`). No usar `OfflineAudioContext`: con miles de nodos tarda más de un minuto.
+- Puntuación por ritmo (`src/beatJudge.ts`): cada maniobra del jugador que pasa por `awardSkill` se mide contra el pulso: a ≤ 75 ms es «¡Perfecto!» (turbo corto y chispas), a ≤ 160 ms «Bien», si no «Fuera de ritmo» y el combo se rompe. Los puntos suben con el combo, se suman al total y al final dan una nota (S, A, B, C, D) en resultados. `BeatHUD.tsx` hace latir los bordes de la pantalla y un anillo que se cierra en cada pulso; en carrera además una luz sobre el jugador destella con el pulso y los compases fuertes sueltan confeti.
+- Pantalla (`RhythmScreen.tsx`): canciones del juego, tu archivo, escucha previa desde el estribillo con visualizador de frecuencias y cabezal sobre la línea de tiempo, fondo que respira al tempo.
 
 ## Cajas de objetos
 
 En todos los circuitos hay cajas también en agua, submarino e imanes (no en vuelo). La caja central de cada tercera fila es dorada: llena las dos manos y da un empujón.
+
+## Personajes y rasgos
+
+44 personajes. Además de sus estadísticas, su objeto favorito y su disparo (`FUSION_SHOTS` en `data.ts`), cada uno tiene un rasgo en `src/perks.ts`: un efecto pequeño que `statsFor` (Scene) multiplica como una pieza más del garaje, y en algunos un extra de velocidad en el vehículo en el que está en casa (marinero en barco, buzo en submarino, piloto en avión, magnetista en imanes). Un personaje de mod sin entrada recibe uno según su id. Formas nuevas: medusa (`jelly`), planeta (`planet`) y engranaje (`gear`), en `Vehicle.tsx` (3D) y `Portrait.tsx` (retrato).
+
+## Vehículos
+
+Los vehículos hechos con piezas (`craftModels.ts`, `NEW_CRAFT`) incluyen barco de ruedas, trimarán, cisne, velero del cielo, hidroavión, caza estelar, rape, campana de buceo, orca, esquife, halo y esquirla. El movimiento `wheel` gira una pieza sobre el eje X (ruedas de paletas). Los nombres no deben empezar igual que otro vehículo del mismo idioma: el garaje los busca por texto.
+
+## Estéticas de internet
+
+Nueve estéticas más en `data.ts`: `level1` (garaje del Nivel 1), `levelfun` (Nivel Fun), `weirdcore`, `glitchcore`, `kidcore`, `cottagecore`, `traumacore`, `nightcore` y `aurora` (Frutiger Aurora). Cada una tiene paleta, paisaje, estilo de música, partículas y su propia decoración junto a la carretera (`game/CoreDecor.tsx`): ojos, cubos que fallan, bloques de juguete, setas, ositos, pilares de ecualizador que saltan con la música, globos, columnas de hormigón y cortinas de aurora. También tienen piel de menú en `index.css` y se pueden elegir en el inicio y en Opciones.
+
+Las estéticas de `ROOFED_THEMES` (`backrooms`, `level1`, `levelfun`) son interiores donde estén: en un circuito al aire libre, `Corridor` levanta paredes y techo solo en sus tramos (nunca sobre cielo o submarino) y la cámara se queda bajo el techo.
+
+Circuitos (`src/coreTracks.ts`), los cinco con carretera, barco, submarino, avión e imanes en la misma vuelta: Noclip: los Niveles (Nivel 0, una grieta al Nivel 1, Level Fun con imanes, las piscinas, el fondo y el vacío), Ojos del Glitch, La Caja de Juguetes, Peluche de Neón y Gira Frutiger (Eco, Aero, Aero Glass, Aurora y Techno). Las rutas que cruzan agua, submarino o cielo van `afloat` (el test de mundo comprueba que ninguna ruta de tierra pase por una zona).
+
+## Menús
+
+Opciones lleva detrás una escena 3D (`ui/MenuStage.tsx`): el kart del jugador en una plataforma que gira, cambiando de vehículo cada pocos segundos, con burbujas y anillos en la estética del menú. En pantallas anchas el kart se desplaza a un lado del panel. «Fondo del menú» lo apaga para equipos lentos.
+
+## Escritorio
+
+En "auto", la calidad inicial sale del nombre de la tarjeta gráfica (`tierFromRenderer` en `graphics.ts`): software → baja, integrada → media, dedicada → alta; luego la resolución se ajusta sola. En Linux con el controlador de NVIDIA, `lib.rs` desactiva el renderizador DMA-BUF de WebKitGTK (pantalla en blanco). En Windows, WebView2 deja sonar la música sin pulsar antes.
 
 ## Mods
 

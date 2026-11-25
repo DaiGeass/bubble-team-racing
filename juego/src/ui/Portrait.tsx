@@ -238,6 +238,40 @@ export default function Portrait({ char, size = 96, className = "" }: { char: Ch
         </g>
       )}
 
+      {form === "jelly" && (
+        <g>
+          {[22, 34, 46, 58, 70].map((x, i) => (
+            <path key={x} d={`M${x + 4} 62 q${i % 2 ? 5 : -5} 10 0 18 q${i % 2 ? -5 : 5} 6 0 13`} stroke={i % 2 ? secondary : primary} strokeWidth="4.5" fill="none" strokeLinecap="round" opacity="0.85" />
+          ))}
+          <path d="M14 62 C14 28 30 12 50 12 C70 12 86 28 86 62 Q78 68 68 62 Q59 69 50 62 Q41 69 32 62 Q22 68 14 62 Z" fill={`url(#${gid}b)`} stroke="#ffffff" strokeOpacity="0.85" strokeWidth="2.4" opacity="0.92" />
+          <path d="M18 58 Q50 66 82 58" stroke={secondary} strokeWidth="2.6" fill="none" opacity="0.8" />
+          <ellipse cx="36" cy="26" rx="13" ry="7" fill={`url(#${gid}gl)`} transform="rotate(-20 36 26)" />
+          <Fac char={glass} y={-4} />
+        </g>
+      )}
+      {form === "planet" && (
+        <g>
+          <ellipse cx="50" cy="54" rx="44" ry="11" fill="none" stroke={accent} strokeWidth="5" opacity="0.55" transform="rotate(-14 50 54)" />
+          <circle cx="50" cy="50" r="31" fill={`url(#${gid}b)`} stroke="#ffffff" strokeOpacity="0.85" strokeWidth="2.4" />
+          <path d="M21 42 Q50 34 79 42 L79 47 Q50 40 21 47 Z" fill={secondary} opacity="0.5" />
+          <path d="M8 60 Q50 76 92 48" stroke={accent} strokeWidth="5" fill="none" strokeLinecap="round" transform="rotate(-6 50 54)" />
+          <circle cx="86" cy="26" r="6" fill={secondary} stroke="#ffffff" strokeWidth="1.6" />
+          <ellipse cx="38" cy="30" rx="12" ry="6.5" fill={`url(#${gid}gl)`} transform="rotate(-18 38 30)" />
+          <Fac char={glass} y={2} />
+        </g>
+      )}
+      {form === "gear" && (
+        <g>
+          {Array.from({ length: 10 }, (_, i) => (
+            <rect key={i} x="45" y="5" width="10" height="14" rx="2.5" fill={accent} transform={`rotate(${i * 36} 50 50)`} />
+          ))}
+          <circle cx="50" cy="50" r="37" fill={accent} />
+          <circle cx="50" cy="50" r="31" fill={`url(#${gid}b)`} stroke="#ffffff" strokeOpacity="0.8" strokeWidth="2.2" />
+          <circle cx="50" cy="50" r="24" fill="none" stroke={secondary} strokeOpacity="0.45" strokeWidth="1.6" strokeDasharray="4 4" />
+          <ellipse cx="38" cy="32" rx="12" ry="6.5" fill={`url(#${gid}gl)`} transform="rotate(-18 38 32)" />
+          <Fac char={glass} y={3} />
+        </g>
+      )}
       <Sparkles />
       {/* prism rim + gloss dome */}
       <ellipse cx="36" cy="17" rx="23" ry="9.5" fill="#ffffff" opacity="0.42" transform="rotate(-18 36 17)" />

@@ -2,6 +2,8 @@ import SurfaceChanges from "./SurfaceChanges";
 import {replacedDeck} from "../surfaceEvents";
 import { placeOnFront, revealShader, aheadOf } from "./reveal";
 import { RHYTHM_TRACK_ID } from "../rhythm";
+import CoreDecor from "./CoreDecor";
+import { ROOFED_THEMES } from "../data";
 import TrackChallenges from "./TrackChallenges";
 import { ambientHazardCount } from "../environment";
 import { characterPhase } from "../modelDetail";
@@ -2469,6 +2471,7 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
         <Corridor themes={themes} />
       ) : (
         <>
+          {themes.some((x) => ROOFED_THEMES.has(x.id)) && <Corridor themes={themes} only={ROOFED_THEMES} />}
           <Scatter />
           <Props themes={themes} />
           <Clouds theme={theme} />
@@ -2486,6 +2489,7 @@ export default function Track({ theme, lap }: { theme: ThemeDef; lap: number }) 
         </>
       )}
       <TrackLife themes={themes} />
+      <CoreDecor themes={themes} />
       <Motes themes={themes} />
     </group>
   );

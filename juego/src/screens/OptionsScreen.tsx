@@ -7,6 +7,8 @@ import { AI_PROFILES, AI_SKILL_LIST, type AiSkillId } from "../data";
 import { LANGS, useI18n } from "../i18n";
 import { Bubbles, GlassButton } from "../ui/common";
 import PadSettings from "./PadSettings";
+import MenuStage from "../ui/MenuStage";
+import { THEMES, THEME_LIST } from "../data";
 
 const KEY_LABEL: Record<string, string> = {
   Space: "Espacio",
@@ -91,6 +93,8 @@ export default function OptionsScreen() {
   const [tab, setTab] = useState<"game" | "controls" | "pad" | "touch">("game");
   const [grabbing, setGrabbing] = useState<Action | null>(null);
   const [slotFor, setSlotFor] = useState<TouchSlot | null>(null);
+  const theme = useGame((s) => s.theme);
+  const setTheme = useGame((s) => s.setTheme);
 
   // keyboard capture: click a bind, hit a key, done
   useEffect(() => {
@@ -109,8 +113,9 @@ export default function OptionsScreen() {
   }, [grabbing, settings.keybinds, setSettings]);
 
   return (
-    <div className="relative h-full w-full overflow-y-auto px-4 py-8 text-sky-900">
-      <Bubbles count={10} />
+    <div className="relative h-full w-full overflow-hidden text-sky-900">
+      {settings.menuScene ? <MenuStage themeId={theme} /> : <Bubbles count={10} />}
+      <div className="relative h-full w-full overflow-y-auto px-4 py-8">
       <div className="relative mx-auto max-w-3xl">
         <div className="glass-panel mb-5 flex flex-wrap items-center justify-between gap-3 rounded-3xl px-5 py-4">
           <h1 className="font-display text-3xl font-extrabold">Opciones</h1>
@@ -194,6 +199,23 @@ export default function OptionsScreen() {
               </Row>
               <Row label="Telemetría">
                 <Toggle on={settings.telemetry} onClick={() => setSettings({ telemetry: !settings.telemetry })} />
+              </Row>
+              <Row label="Fondo del menú">
+                <Toggle on={settings.menuScene} onClick={() => setSettings({ menuScene: !settings.menuScene })} />
+              </Row>
+              <Row label="Estética del menú">
+                <div className="flex flex-wrap gap-1.5">
+                  {THEME_LIST.map((id) => (
+                    <button
+                      key={id}
+                      onClick={() => setTheme(id)}
+                      title={THEMES[id].name}
+                      aria-pressed={theme === id}
+                      className={`h-8 w-8 rounded-full ring-2 transition hover:scale-110 ${theme === id ? "scale-110 ring-white" : "ring-white/40"}`}
+                      style={{ background: `linear-gradient(140deg, ${THEMES[id].skyTop}, ${THEMES[id].glow}, ${THEMES[id].barrierA})` }}
+                    />
+                  ))}
+                </div>
               </Row>
               <Row label="Idioma">
                 {LANGS.map((l) => (
@@ -319,6 +341,7 @@ export default function OptionsScreen() {
             </>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

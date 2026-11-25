@@ -70,6 +70,11 @@ export interface Telemetry {
   drivingCue: "landing" | "drift" | "near" | "sling" | "pass" | "route" | "maneuver" | "finish" | null;
   drivingValue: number;
   comboCount: number;
+  /** rhythm mode: the last move's grade against the beat, when, the run of them and the points */
+  beatGrade: "perfect" | "good" | "off" | null;
+  beatAt: number;
+  beatCombo: number;
+  beatScore: number;
   comboMultiplier: number;
   comboLeft: number;
   comboKind: SkillKind | null;
@@ -130,7 +135,7 @@ const defaultTelemetry: Telemetry = {
   abilityCharge:0.35, abilityWait:0, abilityName:"", abilityEnabled:false, abilityBlocked:false, abilityNeedsTarget:false, lookingBack:false,
   drivingCue: null,
   drivingValue: 0,
-  comboCount: 0, comboMultiplier: 1, comboLeft: 0, comboKind: null,
+  comboCount: 0, comboMultiplier: 1, comboLeft: 0, comboKind: null, beatGrade: null, beatAt: 0, beatCombo: 0, beatScore: 0,
   lap: 1,
   totalLaps: 3,
   position: 1,
@@ -179,6 +184,8 @@ export interface RaceResult {
   tagSwaps: number;
   rings: number;
   lapsCompleted: number;
+  /** rhythm mode: how much of the race was on the beat */
+  rhythm?: { rank: string; score: number; best: number; perfect: number; good: number; off: number };
 }
 
 export interface VehiclePrefs {
@@ -293,6 +300,8 @@ export interface Settings {
   steerCurve: number;
   /** pad rumble 0..1 */
   vibration: number;
+  /** the 3D scene behind the menus */
+  menuScene: boolean;
 }
 
 interface GameState {
@@ -416,6 +425,7 @@ const defaultSettings: Settings = {
   padDeadzone: 0.18,
   steerCurve: 1,
   vibration: 0.7,
+  menuScene: true,
 };
 
 function loadSettings(): Settings {
@@ -433,6 +443,7 @@ function loadSettings(): Settings {
   settings.padDeadzone = typeof settings.padDeadzone === "number" ? Math.max(0.05, Math.min(0.4, settings.padDeadzone)) : 0.18;
   settings.steerCurve = typeof settings.steerCurve === "number" ? Math.max(1, Math.min(2.5, settings.steerCurve)) : 1;
   settings.vibration = typeof settings.vibration === "number" ? Math.max(0, Math.min(1, settings.vibration)) : 0.7;
+  if (typeof settings.menuScene !== "boolean") settings.menuScene = true;
   for (const field of ["volume", "music", "shake", "motionBlur"] as const) settings[field] = Math.max(0, Math.min(1, settings[field]));
   return settings;
 }

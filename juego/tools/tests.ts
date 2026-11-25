@@ -15,3 +15,4 @@ import "./finale.test";
 import "./evolution.test";
 import "./update.test";
 import "./rhythm.test";
+import "./core.test";

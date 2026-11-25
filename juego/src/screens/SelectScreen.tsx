@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { perkFor } from "../perks";
 import { useI18n } from "../i18n";
 import { useGame } from "../store";
 import {
@@ -251,6 +252,13 @@ export default function SelectScreen() {
                       {fusionShot((tab === "racer" ? mainChar : partnerChar).id).name}
                     </span>
                   </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="w-16 opacity-70">{t("perk")}</span>
+                    <span className="rounded-full bg-amber-100/80 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-amber-800">
+                      {t(`perk_${perkFor((tab === "racer" ? mainChar : partnerChar).id).id}`)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-semibold leading-snug text-sky-900/75">{t(`perkd_${perkFor((tab === "racer" ? mainChar : partnerChar).id).id}`)}</p>
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-xs font-bold text-sky-800">
                   <span style={{ color: WEAPON_META[(tab === "racer" ? mainChar : partnerChar).favorite].color, fontSize: 18 }}>

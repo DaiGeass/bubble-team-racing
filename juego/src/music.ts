@@ -15,7 +15,9 @@ const STYLE_OF: Record<string, MusicStyle> = {
   frutiger: "aero", aero: "aero", eco: "aero", eden: "aero", aqua: "aero", liquid: "aero", mac: "aero", slime: "aero", dreamcore: "aero", liminal: "aero",
   vapor: "synth", sunset: "synth", y2k: "synth", webcore: "synth", win98: "synth",
   techno: "drive", cyberpunk: "drive", metro: "drive", arch: "drive", tux: "drive", debian: "drive", noir: "drive",
-  backrooms: "eerie",
+  backrooms: "eerie", level1: "eerie", traumacore: "eerie",
+  kidcore: "aero", cottagecore: "aero", aurora: "aero", levelfun: "synth", weirdcore: "synth",
+  glitchcore: "drive", nightcore: "drive",
 };
 
 export function styleFor(themeId: string): MusicStyle {

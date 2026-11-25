@@ -8,8 +8,42 @@ const PROFILES = {
   high: { maxDpr: 1.7, shadowSize: 2048, bloom: true, antialias: true, particles: 260 },
 } as const;
 
+export type GpuTier = "low" | "balanced" | "high";
+
+/**
+ * Which profile "auto" starts from, from the name of the graphics card. A
+ * software renderer (no driver, a virtual machine) gets the light one, a card
+ * built into the processor the middle one and a card of its own the full one.
+ * The resolution budget then fine-tunes from there while racing.
+ */
+export function tierFromRenderer(renderer: string, cores = 8): GpuTier {
+  const r = renderer.toLowerCase();
+  if (/llvmpipe|softpipe|lavapipe|swiftshader|software|basic render|microsoft basic/.test(r) || cores <= 2) return "low";
+  if (/nvidia|geforce|quadro|rtx|gtx|radeon rx|radeon pro|arc\s?a\d|\brx\s?\d{3,4}/.test(r)) return "high";
+  return "balanced";
+}
+
+let detected: GpuTier | null = null;
+export function gpuTier(): GpuTier {
+  if (detected) return detected;
+  detected = "balanced";
+  try {
+    if (typeof document === "undefined") return detected;
+    const gl = document.createElement("canvas").getContext("webgl2") ?? document.createElement("canvas").getContext("webgl");
+    if (!gl) return (detected = "low");
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    const name = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER) ?? "");
+    detected = tierFromRenderer(name, typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 8 : 8);
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+  } catch {
+    /* keep the middle profile */
+  }
+  return detected;
+}
+
 export function graphicsProfile(quality: unknown) {
-  return quality === "low" || quality === "high" ? PROFILES[quality] : PROFILES.balanced;
+  if (quality === "low" || quality === "high" || quality === "balanced") return PROFILES[quality];
+  return quality === "auto" || quality === undefined ? PROFILES[gpuTier()] : PROFILES.balanced;
 }
 
 /** Windowed frame budgets with warm-up and hysteresis, independent of display Hz.

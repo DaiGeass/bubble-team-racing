@@ -24,6 +24,9 @@ import type { UseControlsReturn } from "../controls";
 import { useGame } from "../store";
 import { setMusicIntensity, setMusicLevel, setMusicPaused, songClock, startMusic, stopMusic, styleFor } from "../music";
 import { RHYTHM_TRACK_ID, rhythmNotes, rhythmRush, rhythmState } from "../rhythm";
+import { BeatJudge } from "../beatJudge";
+import { ROOFED_THEMES } from "../data";
+import { perkFor, perkModeSpeed } from "../perks";
 import { reveal, clearPlaced, stepPlaced, aheadOf } from "./reveal";
 import { useNet, netSend, onRace, isHost } from "../net";
 import {
@@ -306,7 +309,8 @@ function shapeBonus(shape: VehicleConfig["shape"]) {
 function statsFor(char: CharacterDef, vehicle: VehicleConfig) {
   const b = shapeBonus(vehicle.shape);
   const water = vehicle.shape === "cruiser" || vehicle.shape === "hover";
-  const parts = [WHEEL_EFFECTS[vehicle.wheel] ?? {}, SPOILER_EFFECTS[vehicle.spoiler ?? "none"] ?? {}, BOOSTER_EFFECTS[vehicle.booster ?? "single"] ?? {}];
+  // the character's perk counts as one more part
+  const parts = [WHEEL_EFFECTS[vehicle.wheel] ?? {}, SPOILER_EFFECTS[vehicle.spoiler ?? "none"] ?? {}, BOOSTER_EFFECTS[vehicle.booster ?? "single"] ?? {}, perkFor(char.id).fx];
   const mul = (k: "speed" | "accel" | "turn" | "drift" | "turbo" | "boostTime" | "boostPower" | "grip") => parts.reduce((acc, p) => acc * (p[k] ?? 1), 1);
   const heavy = char.weight - 3; // -2 .. +2
   return {
@@ -722,6 +726,9 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
   const rhythmic = trackDef.id === RHYTHM_TRACK_ID;
   /** lap progress the song's circuit is built to; -1 until the race starts */
   const buildFront = useRef(-1);
+  const beatJudge = useRef(new BeatJudge());
+  const beatLight = useRef<THREE.PointLight | null>(null);
+  const lastBeat = useRef(-1);
   /** a song's race has no line to reach: the finish appears, ahead of the leader, when the song ends */
   const finishAt = useRef(-1);
   const goClock = useRef(-1);
@@ -919,6 +926,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     countdownValue.current = 3;
     started.current = false;
     buildFront.current = -1;
+    beatJudge.current.reset();
     finishAt.current = -1;
     goClock.current = -1;
     archRise.current = 0;
@@ -1853,6 +1861,19 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     r.turboMeter = Math.min(1, r.turboMeter + gain);
     if(rules.abilities)r.ability.reward(kind);
     if (r.isPlayer && r.chain.count >= 2) sfx.combo(r.chain.count);
+    // on a song's circuit the player's moves are judged against the beat too
+    if (r.isPlayer && rhythmic) {
+      const clock = songClock();
+      const bpm = rhythmState.features?.bpm ?? 120;
+      const phase = clock?.beat ?? (((raceClock.current / 1000) * bpm) / 60) % 1;
+      const judged = beatJudge.current.judge(phase, 60 / bpm);
+      if (judged.grade === "perfect") {
+        r.boostTimer = Math.max(r.boostTimer, 0.45);
+        r.boostMult = Math.max(r.boostMult, 1.1);
+        emitParticles({ position: r.pos.clone().setY(r.y + 1.4), color: theme.glow, count: 14, speed: 5, spread: 1.2, size: 0.22, life: 0.6 });
+      }
+      useGame.getState().setTelemetry({ beatGrade: judged.grade, beatAt: Date.now(), beatCombo: beatJudge.current.combo, beatScore: beatJudge.current.score });
+    }
   }
 
   function updateRacer(r: Racer, dt: number, controls: ReturnType<typeof poll> | null) {
@@ -2309,6 +2330,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     if (r.mode === "plane") effMax *= st.planeBonus * 1.12 * craftSpeed(r.vehicle.plane, 1);
     // nothing touches the road: no rolling resistance at all
     if (r.mode === "hover") effMax *= 1.1 * craftSpeed(r.vehicle.hover, 1);
+    effMax *= perkModeSpeed(char.id, r.mode);
     if (r.slowTimer > 0) effMax *= 0.55;
     if (r.burnTimer > 0) {
       effMax *= 0.75;
@@ -3445,6 +3467,33 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       const bpm = rhythmState.features?.bpm ?? 120;
       const beat = songClock()?.beat ?? (((raceClock.current / 1000) * bpm) / 60) % 1;
       const pulse = Math.pow(1 - beat, 6);
+      // the light over the player flashes on the beat, harder in the loud bars,
+      // and every bar of a drop goes off in confetti
+      const clock = songClock();
+      const barLen = 240 / bpm;
+      const barNo = clock && rhythmState.features ? Math.floor((clock.time - rhythmState.features.offset) / barLen) : -1;
+      const loud = rhythmState.features?.bars[barNo]?.energy ?? 0.4;
+      if (beatLight.current) {
+        beatLight.current.position.set(player.pos.x, player.y + 9, player.pos.z);
+        beatLight.current.intensity = (40 + loud * 160) * pulse;
+      }
+      const beatNo = clock && rhythmState.features ? Math.floor((clock.time - rhythmState.features.offset) / (60 / bpm)) : -1;
+      if (beatNo !== lastBeat.current) {
+        lastBeat.current = beatNo;
+        if (beatNo >= 0 && beatNo % 4 === 0 && loud > 0.7 && started.current) {
+          for (let i = 0; i < 3; i++) {
+            emitParticles({
+              position: player.pos.clone().setY(player.y + 6 + i),
+              color: theme.particles[(beatNo / 4 + i) % theme.particles.length],
+              count: 18,
+              speed: 9,
+              spread: 6,
+              size: 0.3,
+              life: 1.1,
+            });
+          }
+        }
+      }
       // how far ahead it builds: a little further the faster the leader goes
       const leader = racers.reduce((a, b) => (b.total > a.total ? b : a), player);
       const target = (started.current ? lead : 0) + (110 + Math.abs(leader.speed) * 2.2) / L;
@@ -3503,7 +3552,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       player.finished = true;
       const timeBonus = battle ? player.lives * 400 : Math.max(0, Math.round((mode.laps * lapTimeBudget() - raceClock.current) / 18));
       const positionBonus = (racers.length - position + 1) * 180;
-      const running = player.coins * 12 + player.boostsUsed * 25 + player.tagSwaps * 40 + player.rings * 120 + player.chain.score + player.risk.score;
+      const running = player.coins * 12 + player.boostsUsed * 25 + player.tagSwaps * 40 + player.rings * 120 + player.chain.score + player.risk.score + beatJudge.current.score;
       const finalScore = Math.round(running + timeBonus + positionBonus);
       state.setTelemetry({ finished: true, score: finalScore });
       state.setRaceResult({
@@ -3514,6 +3563,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
         tagSwaps: player.tagSwaps,
         rings: player.rings,
         lapsCompleted: battle ? Math.max(0, player.lap - 1) : mode.laps,
+        rhythm: rhythmic ? { rank: beatJudge.current.rank(), score: beatJudge.current.score, best: beatJudge.current.best, perfect: beatJudge.current.perfect, good: beatJudge.current.good, off: beatJudge.current.off } : undefined,
       });
       addShake(0.45);
       sfx.finish();
@@ -3539,7 +3589,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     uiClock.current += Math.min(deltaRaw, 0.1);
     if (uiClock.current >= 0.05 && !finishedOnce.current) {
       uiClock.current = 0;
-      const running = player.coins * 12 + player.boostsUsed * 25 + player.tagSwaps * 40 + player.rings * 120 + player.chain.score + player.risk.score;
+      const running = player.coins * 12 + player.boostsUsed * 25 + player.tagSwaps * 40 + player.rings * 120 + player.chain.score + player.risk.score + beatJudge.current.score;
       const signature=signatureShot(activeChar(player),player.mode);
       const needsTarget=signatureNeedsTarget(signature)&&!signatureAim(player,signature,rearHeld.current||signature.kind==="rear");
       state.setTelemetry({
@@ -3657,7 +3707,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
     motion.update(dt, player.speed, player.steerSmooth, preview, player.boostTimer > 0, player.airborne || !!player.launch, player.launch ? player.visual.current.vy ?? 0 : player.vy, followSnap, idle || !!victory.current);
     const dynamic = profile.dynamicFov;
     const camDir = cameraFollow.current.angle + rearView.current.offset + (rearView.current.active?0:motion.curve * dynamic * 0.34);
-    const covered = trackDef.indoor || !!(path?.flags[player.idx] & F_TUNNEL);
+    const covered = trackDef.indoor || !!(path?.flags[player.idx] & F_TUNNEL) || (ROOFED_THEMES.has(sectorMix(player.t).a) && !/sky|sub/.test(zoneAt(player.t)?.type ?? ""));
     const fwd = cameraScratch.forward.set(Math.sin(camDir), 0, Math.cos(camDir));
     const flying = player.mode === "plane";
     const wet = player.mode === "boat" || player.mode === "sub";
@@ -3770,6 +3820,7 @@ export default function Scene({ controls: controlsApi }: { controls: UseControls
       <Track theme={theme} lap={aestheticLap - 1} />
       {TrackDiagnostics&&<Suspense fallback={null}><TrackDiagnostics bodies={racers}/></Suspense>}
       <primitive object={skids.mesh} />
+      {rhythmic && <pointLight ref={beatLight} color={theme.glow} intensity={0} distance={40} decay={1.4} />}
       {rhythmic && (
         // the finish of a song's race: two posts and a chequered banner, scaled to the road
         <group ref={finishArch} visible={false}>

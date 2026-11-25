@@ -1,5 +1,7 @@
 import { MODEL_NAMES } from "./i18n9";
-import { useEffect, useMemo } from "react";
+import { CORE_WORDS } from "./i18n10";
+import { useEffect, useMemo, useRef } from "react";
+import { musicPlaying, setMusicIntensity, setMusicLevel, startMusic, stopMusic, styleFor } from "./music";
 import { DICTS, I18nContext, LANGS, type Lang } from "./i18n";
 import { EXTRA } from "./i18n2";
 import { EXTRA2 as EXTRA_WORDS2 } from "./i18n3";
@@ -34,6 +36,27 @@ export default function App() {
   const controls = useControls();
   const graphicsQuality = useGame((s) => s.settings.graphicsQuality);
   const theme = THEMES[themeId] ?? THEMES.frutiger;
+  const musicLevel = useGame((s) => s.settings.music);
+  // the menus have music of their own, in the manner of the aesthetic picked;
+  // a race brings its own, and rhythm mode has the player's song to listen to
+  const menuTune = useRef<string | null>(null);
+  useEffect(() => {
+    if (screen === "race") {
+      menuTune.current = null;
+      return;
+    }
+    if (screen === "rhythm") {
+      if (menuTune.current) stopMusic();
+      menuTune.current = null;
+      return;
+    }
+    setMusicLevel(musicLevel);
+    if (menuTune.current !== themeId || !musicPlaying()) {
+      startMusic(styleFor(themeId), `menu-${themeId}`);
+      setMusicIntensity(0.2);
+      menuTune.current = themeId;
+    }
+  }, [screen, themeId, musicLevel]);
 
   const isRtl = LANGS.find((l) => l.code === lang)?.rtl;
 
@@ -59,6 +82,7 @@ export default function App() {
       ...EXTRA5.en,
       ...EXTRA6.en,
       ...MODEL_NAMES.en,
+      ...CORE_WORDS.en,
       ...MOD_WORDS.en,
       ...DICTS[lang],
       ...EXTRA[lang],
@@ -69,6 +93,7 @@ export default function App() {
       ...EXTRA5[lang],
       ...EXTRA6[lang],
       ...MODEL_NAMES[lang],
+      ...CORE_WORDS[lang],
       ...MOD_WORDS[lang],
     };
     return {

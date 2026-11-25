@@ -21,7 +21,7 @@ const CEILING = 7.2;
  * barriers, so they open exactly where the barriers do, at every junction, and
  * the ceiling carries strip lights, a few of which are on their way out.
  */
-export function Corridor({ themes }: { themes: ThemeDef[] }) {
+export function Corridor({ themes, only }: { themes: ThemeDef[]; only?: Set<string> }) {
   const built = useMemo(() => {
     const pos: number[] = [];
     const col: number[] = [];
@@ -43,6 +43,12 @@ export function Corridor({ themes }: { themes: ThemeDef[] }) {
         const j = (i + 1) % path.n;
         if (!(path.flags[i] & F_SOLID) || !(path.flags[j] & F_SOLID)) continue;
         const s = sectorIndexAt(path.prog[i]);
+        // on an outdoor circuit, only the stretches in an indoor aesthetic have walls and a roof, and never over the sea or in the sky
+        if (only) {
+          const t = path.prog[i];
+          if (!only.has(themes[s]?.id ?? "")) continue;
+          if (ZONES.some((z) => (z.type === "sky" || z.type === "sub") && t >= z.t0 && t <= z.t1)) continue;
+        }
         const at = (k: number, lat: number, up: number) => [path.px[k] - path.tz[k] * lat, path.py[k] + up, path.pz[k] + path.tx[k] * lat];
         for (const side of [1, -1]) {
           const bit = side === 1 ? F_WALL_POS : F_WALL_NEG;
@@ -119,6 +125,8 @@ const MARK_OF: Record<string, Mark> = {
   sunset: "pyramid", vapor: "pyramid",
   win98: "window", dreamcore: "door", eden: "door", backrooms: "door", liminal: "spot", noir: "spot",
   metro: "spot", tux: "penguin", debian: "swirl", arch: "peak", mac: "gel", slime: "blob", webcore: "construction",
+  level1: "spot", levelfun: "door", weirdcore: "door", glitchcore: "tower", kidcore: "turbine", cottagecore: "turbine",
+  traumacore: "door", nightcore: "tower", aurora: "lighthouse",
 };
 
 /**
@@ -643,6 +651,8 @@ const MOTE_OF: Record<string, MoteKind> = {
   aqua: "bubble", liquid: "bubble",
   noir: "rain",
   metro: "dust", tux: "snow", debian: "petal", arch: "snow", mac: "bubble", slime: "bubble", webcore: "bit",
+  level1: "dust", levelfun: "petal", weirdcore: "bubble", glitchcore: "bit", kidcore: "bubble", cottagecore: "petal",
+  traumacore: "snow", nightcore: "bit", aurora: "snow",
 };
 /** vertical speed, sideways drift, size */
 const MOTE_STYLE: Record<MoteKind, [number, number, number]> = {
@@ -1221,6 +1231,7 @@ const VENT_OF: Record<string, Vent> = {
   sunset: "fire", cyberpunk: "fire", vapor: "fire",
   techno: "spark", y2k: "spark", webcore: "spark", win98: "spark", metro: "spark", arch: "spark",
   slime: "bubble", backrooms: "bubble",
+  glitchcore: "spark", nightcore: "spark", kidcore: "glitter", levelfun: "glitter", traumacore: "glitter", weirdcore: "glitter",
 };
 
 /** Things that go off beside the road every few seconds: a geyser, a jet of flame, a shower of sparks, a burst of glitter. */
@@ -1280,6 +1291,7 @@ type Beast = "whale" | "saucer" | "jelly";
 const BEAST_OF: Record<string, Beast> = {
   aqua: "whale", liquid: "whale", mac: "whale", tux: "whale", frutiger: "whale", slime: "whale",
   techno: "saucer", cyberpunk: "saucer", y2k: "saucer", webcore: "saucer", win98: "saucer", arch: "saucer", noir: "saucer",
+  glitchcore: "saucer", nightcore: "saucer", kidcore: "whale", aurora: "whale",
 };
 
 /** Something very large and in no hurry, going by overhead: a whale, a saucer or a jellyfish, as the place has it. */

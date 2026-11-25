@@ -2,6 +2,7 @@ import { TRACKS, type ThemeId, type TrackDef, type PadDef, type ZoneKind } from 
 import { design, DESIGN_REPORT, type Turtle } from "./trackDesign";
 import { setSong } from "./music";
 import { audioContext } from "./sound";
+import { renderRecipe, toWav, type SongRecipe } from "./songbook";
 
 // ---------------------------------------------------------------------------
 // Rhythm mode. A song the player brings is listened to once, before the race:
@@ -88,7 +89,7 @@ export function rhythmNotes(max = 140): { t: number; lat: number; beat: number }
  * song is at 70 or at 140), the phase is where they line up, and then every
  * beat gets a strength and every bar a summary.
  */
-export function analyseSong(buffer: AudioBuffer, name: string): SongFeatures {
+export function analyseSong(buffer: AudioBuffer, name: string, knownBpm?: number): SongFeatures {
   const rate = buffer.sampleRate;
   const n = buffer.length;
   const chans = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
@@ -165,7 +166,9 @@ export function analyseSong(buffer: AudioBuffer, name: string): SongFeatures {
   const a = acs[bestLag - 1] ?? 0;
   const b = acs[bestLag];
   const c = acs[bestLag + 1] ?? 0;
-  const lagF = bestLag + (a - 2 * b + c !== 0 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / (a - 2 * b + c))) : 0);
+  // a song whose tempo is known (one of the game's own) is not second-guessed
+  const lagF = knownBpm ? 60 / knownBpm / frameSec : bestLag + (a - 2 * b + c !== 0 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / (a - 2 * b + c))) : 0);
+  if (knownBpm) bestLag = Math.max(1, Math.round(lagF));
   const beat = lagF * frameSec;
   const bpm = Math.round((60 / beat) * 10) / 10;
   let offset = 0;
@@ -551,4 +554,12 @@ export function useSong(features: SongFeatures, buffer: AudioBuffer | null, byte
   rhythmState.bytes = bytes;
   rhythmState.theme = theme;
   setSong(buffer, RHYTHM_TRACK_ID, features.bpm, features.offset);
+}
+
+/** Play one of the game's own songs into a recording, listen to it and build its circuit. */
+export async function loadRecipe(recipe: SongRecipe, theme: ThemeId): Promise<SongFeatures> {
+  const buffer = await renderRecipe(recipe);
+  const features = analyseSong(buffer, recipe.name, recipe.bpm);
+  useSong(features, buffer, toWav(buffer), theme);
+  return features;
 }

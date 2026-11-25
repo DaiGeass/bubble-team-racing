@@ -1,12 +1,12 @@
 export const NEW_CRAFT = {
-  land: ["rally", "roadster", "monster", "muscle", "tuktuk", "beetle", "bumper", "hotrod"], boat: ["hydrofoil", "outrigger"], plane: ["canard", "vtol"],
-  sub: ["nautilus", "raypod"], hover: ["triad", "flux"],
+  land: ["rally", "roadster", "monster", "muscle", "tuktuk", "beetle", "bumper", "hotrod"], boat: ["hydrofoil", "outrigger", "paddle", "trimaran", "swan"],
+  plane: ["canard", "vtol", "glider", "seaplane", "starship"], sub: ["nautilus", "raypod", "angler", "bell", "orca"], hover: ["triad", "flux", "skiff", "halo", "shard"],
 } as const;
 export type NewCraftId = typeof NEW_CRAFT[keyof typeof NEW_CRAFT][number];
 export type PartShape = "box" | "orb" | "tube" | "ring" | "cone";
 export type PartFinish = "body" | "trim" | "dark" | "glass" | "glow";
 type V3 = [number, number, number];
-export interface CraftPart { shape: PartShape; finish: PartFinish; at: V3; size: V3; rotation: V3; motion?: "prop" | "field" | "fin" }
+export interface CraftPart { shape: PartShape; finish: PartFinish; at: V3; size: V3; rotation: V3; motion?: "prop" | "field" | "fin" | "wheel" }
 const P = Math.PI;
 /** Unit meshes shared inside the selected craft. All dimensions are in game units. */
 export function craftParts(id: NewCraftId): CraftPart[] {
@@ -151,6 +151,137 @@ export function craftParts(id: NewCraftId): CraftPart[] {
     }
     hull([0,0.65,0.6],[0.55,0.3,0.55],"glass");
     box("glow",[0,0.15,0],[0.7,0.04,1.9]);
+  } else if (id === "paddle") {
+    // a river steamer: a cabin, two funnels and a paddle wheel on each side
+    box("body",[0,0.25,0],[1.4,0.45,3.0]);
+    hull([0,0.2,1.35],[0.7,0.3,0.6]);
+    box("trim",[0,0.75,-0.2],[1.0,0.5,1.4]);
+    box("glass",[0,0.8,0.52],[0.9,0.25,0.05]);
+    for (const x of [-0.25,0.25]) { add("tube","dark",[x,1.35,-0.4],[0.16,0.8,0.16]); hull([x,1.78,-0.4],[0.12,0.06,0.12],"glow"); }
+    for (const side of [-1,1]) {
+      add("ring","trim",[side*0.85,0.4,-0.5],[0.55,0.55,0.9],[0,P/2,0]);
+      box("dark",[side*0.85,0.4,-0.5],[0.12,1.0,0.12],[0,0,0],"wheel");
+      box("dark",[side*0.85,0.4,-0.5],[0.12,1.0,0.12],[P/2,0,0],"wheel");
+    }
+  } else if (id === "trimaran") {
+    // three hulls under one tall sail
+    hull([0,0.2,0],[0.5,0.32,1.9]);
+    for (const side of [-1,1]) {
+      hull([side*1.2,0.08,-0.1],[0.22,0.18,1.5],"trim");
+      for (const z of [0.5,-0.6]) box("dark",[side*0.6,0.3,z],[1.2,0.08,0.12]);
+    }
+    box("trim",[0,1.7,0.1],[0.07,2.8,0.07]);
+    add("cone","body",[0,1.8,-0.35],[0.08,2.2,1.3]);
+    hull([0,0.45,0.6],[0.3,0.2,0.4],"glass");
+    box("glow",[0,0.38,1.85],[0.15,0.06,0.15]);
+  } else if (id === "swan") {
+    // a pedal boat shaped like a swan, with the pedal wheel at the tail
+    hull([0,0.35,0],[0.95,0.5,1.5]);
+    add("tube","body",[0,1.1,1.05],[0.13,1.1,0.13],[-0.2,0,0]);
+    hull([0,1.7,1.25],[0.22,0.2,0.3]);
+    add("cone","trim",[0,1.66,1.55],[0.1,0.3,0.1],[P/2,0,0]);
+    for (const x of [-0.15,0.15]) hull([x,1.75,1.35],[0.04,0.04,0.04],"glow");
+    for (const side of [-1,1]) hull([side*0.75,0.65,-0.2],[0.3,0.32,1.0],"trim");
+    box("dark",[0,0.75,-0.1],[0.7,0.12,0.6]);
+    add("cone","trim",[0,0.75,-1.35],[0.4,0.6,0.15],[-0.6,0,0]);
+    add("ring","dark",[0,0.3,-1.45],[0.35,0.35,0.6],[0,P/2,0]);
+    box("trim",[0,0.3,-1.45],[0.08,0.6,0.08],[0,0,0],"wheel");
+  } else if (id === "glider") {
+    // long thin wings and no engine: it rides the air
+    hull([0,0.45,0.2],[0.32,0.3,1.9]);
+    for (const side of [-1,1]) {
+      box("body",[side*1.9,0.6,0],[3.6,0.06,0.5],[0,0,-side*0.05]);
+      box("trim",[side*3.65,0.75,0],[0.06,0.35,0.4]);
+    }
+    box("trim",[0,0.5,-1.6],[0.12,0.12,1.4]);
+    box("body",[0,0.95,-2.2],[0.07,0.8,0.5],[0,0,0],"fin");
+    box("body",[0,1.3,-2.25],[1.2,0.05,0.35]);
+    hull([0,0.68,0.7],[0.25,0.2,0.65],"glass");
+    hull([0,0.45,2.05],[0.1,0.1,0.06],"glow");
+  } else if (id === "seaplane") {
+    // high wing, a propeller in the nose and two floats on struts
+    hull([0,0.8,0],[0.5,0.45,1.8]);
+    box("body",[0,1.3,0.2],[4.2,0.1,0.75]);
+    for (const side of [-1,1]) {
+      hull([side*0.95,0.1,0.1],[0.2,0.2,1.4],"trim");
+      for (const z of [0.4,-0.3]) box("dark",[side*0.9,0.65,z],[0.06,0.9,0.06]);
+    }
+    prop(0,0.85,1.85,0.6);
+    box("body",[0,1.2,-1.6],[0.08,0.7,0.5],[0,0,0],"fin");
+    box("body",[0,1.05,-1.7],[1.3,0.06,0.35]);
+    hull([0,1.15,0.6],[0.35,0.25,0.5],"glass");
+  } else if (id === "starship") {
+    // a little starfighter: swept wings, twin engines, lit wingtips
+    hull([0,0.55,0.2],[0.5,0.3,2.0]);
+    for (const side of [-1,1]) {
+      box("body",[side*1.1,0.5,-0.6],[1.6,0.08,1.1],[0,side*0.45,0]);
+      add("tube","dark",[side*0.55,0.55,-1.5],[0.25,0.7,0.25],[P/2,0,0]);
+      ring([side*0.55,0.55,-1.9],[0.22,0.22,0.5],[0,0,0]);
+      box("glow",[side*1.95,0.55,-0.9],[0.06,0.06,0.9]);
+    }
+    box("trim",[0,0.95,-0.9],[0.08,0.6,0.9],[0,0,0],"fin");
+    hull([0,0.82,0.6],[0.3,0.2,0.55],"glass");
+    box("dark",[0,0.3,0],[0.6,0.1,1.6]);
+  } else if (id === "angler") {
+    // an anglerfish: big jaw, a row of teeth and a lamp on a stalk
+    hull([0,0.5,0],[0.85,0.7,1.2]);
+    box("dark",[0,0.2,0.9],[1.0,0.2,0.5]);
+    for (const x of [-0.3,-0.1,0.1,0.3]) add("cone","trim",[x,0.35,1.1],[0.08,0.15,0.08],[P,0,0]);
+    add("tube","trim",[0,1.35,0.6],[0.04,0.8,0.04],[0.6,0,0]);
+    hull([0,1.7,1.0],[0.13,0.13,0.13],"glow");
+    for (const x of [-0.5,0.5]) hull([x,0.75,0.6],[0.15,0.15,0.1],"glass");
+    add("cone","body",[0,0.5,-1.3],[0.9,0.6,0.1],[P/2,0,0],"fin");
+    for (const side of [-1,1]) box("body",[side*0.8,0.35,-0.2],[0.5,0.06,0.4],[0,0,0],"fin");
+  } else if (id === "bell") {
+    // a glass diving bell with two little thrusters
+    hull([0,0.65,0],[0.85,0.85,0.85],"glass");
+    add("tube","body",[0,0.15,0],[0.95,0.25,0.95]);
+    add("ring","trim",[0,0.65,0],[0.86,0.86,1],[P/2,0,0]);
+    add("ring","trim",[0,0.65,0],[0.86,0.86,1],[0,0,0]);
+    // thrusters up on the sides of the bell, pushing backwards
+    prop(-0.9,0.7,-0.45,0.22);
+    prop(0.9,0.7,-0.45,0.22);
+    hull([0,0.25,0.95],[0.12,0.1,0.06],"glow");
+  } else if (id === "orca") {
+    // black and white, a tall fin and flukes that steer
+    hull([0,0.5,0],[0.75,0.6,1.9]);
+    hull([0,0.3,0.3],[0.6,0.35,1.3],"trim");
+    box("body",[0,1.25,-0.2],[0.08,0.8,0.5],[-0.3,0,0]);
+    for (const side of [-1,1]) {
+      box("body",[side*0.75,0.25,0.4],[0.6,0.06,0.3],[0,0,-side*0.3],"fin");
+      hull([side*0.45,0.65,1.2],[0.1,0.06,0.18],"trim");
+    }
+    box("body",[0,0.5,-1.95],[1.2,0.06,0.35],[0,0,0],"fin");
+    hull([0,0.75,1.1],[0.35,0.2,0.4],"glass");
+    prop(0,0.5,-1.65,0.3);
+  } else if (id === "skiff") {
+    // a flat deck on four lift pads, pushed by a fan at the back
+    box("body",[0,0.35,0],[1.6,0.12,3.0]);
+    for (const x of [-0.8,0.8]) box("trim",[x,0.55,0],[0.06,0.3,2.8]);
+    box("glass",[0,0.75,0.9],[1.2,0.4,0.05],[-0.4,0,0]);
+    add("ring","trim",[0,0.9,-1.3],[0.6,0.6,1]);
+    box("dark",[0,0.9,-1.3],[1.0,0.1,0.06],[0,0,0],"prop");
+    box("glow",[0,0.18,0],[1.3,0.04,2.6]);
+    for (const x of [-0.65,0.65]) for (const z of [-1.1,1.1]) add("tube","dark",[x,0.2,z],[0.25,0.1,0.25]);
+  } else if (id === "halo") {
+    // a round seat inside a spinning ring of light
+    add("tube","body",[0,0.4,0],[0.7,0.3,0.7]);
+    add("ring","trim",[0,0.35,0],[1.3,1.3,1.6],[P/2,0,0]);
+    ring([0,0.2,0],[1.1,1.1,1],[P/2,0,0],"field");
+    hull([0,0.7,0.1],[0.5,0.35,0.5],"glass");
+    for (const a of [0,P/4,P/2,(3*P)/4]) box("dark",[0,0.35,0],[2.5,0.06,0.1],[0,a,0]);
+    box("glow",[0,0.4,0.75],[0.3,0.06,0.06]);
+  } else if (id === "shard") {
+    // a crystal wedge with two engine pods
+    add("cone","body",[0,0.4,0.2],[1.4,2.6,0.4],[P/2,0,0]);
+    box("glow",[0,0.25,0],[1.3,0.04,2.0]);
+    for (const side of [-1,1]) {
+      add("cone","trim",[side*0.9,0.45,-0.6],[0.4,1.1,0.12],[P/2,0,side*0.3]);
+      add("tube","dark",[side*0.7,0.3,-0.9],[0.2,0.5,0.2],[P/2,0,0]);
+      ring([side*0.7,0.3,-1.18],[0.18,0.18,0.4],[0,0,0]);
+    }
+    hull([0,0.62,0.2],[0.35,0.2,0.6],"glass");
+    ring([0,0.15,0],[0.9,0.9,0.5],[P/2,0,0],"field");
   }
   return parts;
 }

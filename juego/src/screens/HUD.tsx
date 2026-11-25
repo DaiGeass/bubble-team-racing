@@ -1,6 +1,7 @@
 import { isFinalLap } from "../adrenaline";
 import { RHYTHM_TRACK_ID, rhythmState } from "../rhythm";
 import { songClock } from "../music";
+import BeatHUD from "./BeatHUD";
 import { useEffect, useState } from "react";
 import { useI18n, ordinal } from "../i18n";
 import { useGame, DEFAULT_KEYBINDS, DEFAULT_TOUCH, type Action, type TouchSlot } from "../store";
@@ -201,6 +202,7 @@ export default function HUD({ controls }: { controls: UseControlsReturn }) {
         </div>
       )}
 
+      {songLeft !== null && telemetry.countdown < 0 && !telemetry.finished && <BeatHUD />}
       {telemetry.drivingCue && !telemetry.finished && telemetry.countdown < 0 && (
         <div className="absolute left-1/2 top-[20%] -translate-x-1/2 rounded-2xl border border-white/70 bg-sky-950/75 px-5 py-2 text-center font-bold text-white shadow-lg" role="status">
           <div className="text-sm tracking-wide">{t(telemetry.drivingCue === "finish" ? "songOver" : telemetry.drivingCue === "maneuver" ? "cleanManeuver" : telemetry.drivingCue === "landing" ? "cleanLanding" : telemetry.drivingCue === "near" ? "nearMiss" : telemetry.drivingCue === "route" ? "riskRoute" : telemetry.drivingCue === "sling" ? "slingShot" : telemetry.drivingCue === "pass" ? "cleanPass" : "driftRelease")}</div>

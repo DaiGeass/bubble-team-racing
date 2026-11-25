@@ -29,7 +29,7 @@ Nada de un mod se ejecuta como código: cada orden se comprueba contra una lista
   "skyTop": "#7fe3c4", "skyBottom": "#fff1d6", "barrierA": "#2dd4bf", "barrierB": "#fb923c", "glow": "#99f6e4" }
 ```
 
-Se copia la estética `base` (`frutiger`, `aero`, `vapor`, `y2k`, `cyberpunk`, `dreamcore`, `eden`, `slime`, `techno`, `sunset`…) y se cambian los campos dados. Los colores van como `#rrggbb`; los campos numéricos de la base también se pueden cambiar (0 a 2000).
+Se copia la estética `base` (`frutiger`, `aero`, `vapor`, `y2k`, `cyberpunk`, `dreamcore`, `eden`, `slime`, `techno`, `sunset`, `weirdcore`, `glitchcore`, `kidcore`, `cottagecore`, `traumacore`, `nightcore`, `aurora`, `level1`, `levelfun`…) y se cambian los campos dados. Los colores van como `#rrggbb`; los campos numéricos de la base también se pueden cambiar (0 a 2000).
 
 ## Personajes
 
@@ -43,7 +43,7 @@ Se copia la estética `base` (`frutiger`, `aero`, `vapor`, `y2k`, `cyberpunk`, `
 
 | Campo | Valores |
 | --- | --- |
-| `form` | drop, bubble, leaf, crystal, holo, cloud, star, flame |
+| `form` | drop, bubble, leaf, crystal, holo, cloud, star, flame, jelly, planet, gear |
 | `eye` | sparkle, sharp, visor, sleepy |
 | `role` | speed, handler, heavy, balanced, trickster, tech |
 | `favorite` | orb, missile, bubble, slime, beam, zap, mine, wave, swap, magnet, ghost, quake, freeze, steal, popup, giant, warp |
